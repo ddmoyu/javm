@@ -22,14 +22,3 @@
 
 16. 创建 discord 群
 
-18. 迁移的 ddmoyu github
-
-19. github actions 构建包含 ffmpeg，参考  N_m3u8DL-RE 的方式
-
-https://github.com/BtbN/FFmpeg-Builds/releases
-
-20. https://lib.rs/crates/oximedia 使用这个库，代替 ffmpeg
-
-21. 使用 github actions 精简编译 ffmpeg ，跨平台支持。只需要支持 所有视频格式，抽取视频帧，保存图片到本地
-
-

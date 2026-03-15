@@ -33,22 +33,20 @@
 
 ## 界面预览
 
-> 下面是预留的图片位置，你后续可直接替换链接或文件。
+![首页媒体库](/screenshot/1.png)
+首页
 
-### 首页 / 媒体库
-![首页媒体库截图（待补）](./docs/images/placeholder-media-library.png)
+![幻灯片](/screenshot/2.png)
+幻灯片
 
-### 目录管理
-![目录管理截图（待补）](./docs/images/placeholder-directory.png)
+![资源刮削](/screenshot/3.png)
+资源刮削
 
-### 下载管理
-![下载管理截图（待补）](./docs/images/placeholder-download.png)
+![资源搜索](/screenshot/4.png)
+资源搜索
 
-### 资源刮削
-![资源刮削截图（待补）](./docs/images/placeholder-scrape.png)
-
-### 设置页
-![设置页截图（待补）](./docs/images/placeholder-settings.png)
+![下载链接获取](/screenshot/5.png)
+下载链接获取
 
 ## 技术栈
 

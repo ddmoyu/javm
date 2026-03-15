@@ -1,9 +1,67 @@
+use std::ffi::OsString;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use tauri::Emitter;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
+
+/// 缓存已解析的 ffmpeg 可执行文件路径
+static FFMPEG_PATH: OnceLock<OsString> = OnceLock::new();
+
+/// 解析 ffmpeg 可执行文件的完整路径
+///
+/// 搜索顺序：
+/// 1. 系统 PATH（优先使用系统环境中的 ffmpeg）
+/// 2. 当前进程所在目录 / bin 子目录
+/// 3. 开发模式路径（src-tauri/target/debug|release/bin、src-tauri/bin）
+fn resolve_ffmpeg_path() -> OsString {
+    #[cfg(windows)]
+    let binary_name = "ffmpeg.exe";
+    #[cfg(not(windows))]
+    let binary_name = "ffmpeg";
+
+    // 优先从系统 PATH 查找
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(binary_name);
+            if candidate.exists() {
+                return candidate.as_os_str().to_os_string();
+            }
+        }
+    }
+
+    // 系统 PATH 没有，回退到本地 bin 目录
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join(binary_name));
+            candidates.push(dir.join("bin").join(binary_name));
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("src-tauri").join("target").join("debug").join("bin").join(binary_name));
+        candidates.push(cwd.join("src-tauri").join("target").join("release").join("bin").join(binary_name));
+        candidates.push(cwd.join("src-tauri").join("bin").join(binary_name));
+    }
+
+    for candidate in &candidates {
+        if candidate.exists() {
+            return candidate.as_os_str().to_os_string();
+        }
+    }
+
+    // 最终兜底：返回裸名
+    OsString::from("ffmpeg")
+}
+
+/// 获取 ffmpeg 可执行文件路径（带缓存）
+fn ffmpeg_path() -> &'static OsString {
+    FFMPEG_PATH.get_or_init(resolve_ffmpeg_path)
+}
 
 /// 在 Windows 上隐藏子进程的控制台窗口，避免终端闪烁
 #[cfg(windows)]
@@ -31,7 +89,7 @@ pub fn extract_frame(
     timestamp: f64,
     output_path: &str,
 ) -> Result<String, String> {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = Command::new(ffmpeg_path());
     cmd.args(&[
         "-v",
         "error",
@@ -117,7 +175,7 @@ pub fn run_ffmpeg_command(
 /// 尝试在目标时间点附近用 ffmpeg 读取 1 帧到 null 输出，
 /// 通过 stderr 判断该位置是否可读。
 pub fn diagnose_video_at_time(video_path: &str, time: f64) {
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = Command::new(ffmpeg_path());
     hide_console_window(&mut cmd);
     cmd.args(&[
         "-v", "warning",
@@ -171,7 +229,7 @@ pub fn try_capture_single_frame(
     let time_str = format!("{:.3}", time);
 
     // 策略 1: 快速定位 (Input Seeking)
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = Command::new(ffmpeg_path());
     cmd.args(&[
         "-v",
         "warning",
@@ -208,7 +266,7 @@ pub fn try_capture_single_frame(
     // -ss 在 -i 之后，从头解码到目标位置
     // 超时 15 秒 — 不设太长，避免损坏视频卡死
     // ==========================================
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = Command::new(ffmpeg_path());
     cmd.args(&[
         "-v",
         "warning",
@@ -392,30 +450,19 @@ pub async fn capture_random_frames_streaming(
 /// 使用 `ffmpeg -i` 解析 stderr 中的 `Duration: HH:MM:SS.ss` 行，
 /// 无需依赖 ffprobe。
 pub fn get_video_duration(video_path: &str) -> Result<f64, String> {
-    let mut cmd = Command::new("ffmpeg");
-    cmd.args(&["-v", "quiet", "-print_format", "json", "-i", video_path, "-hide_banner"]);
+    let mut cmd = Command::new(ffmpeg_path());
+    cmd.args(&["-i", video_path, "-hide_banner"]);
     hide_console_window(&mut cmd);
 
     // ffmpeg -i 无输出文件会返回非零退出码，这是正常行为
+    // Duration 信息在 stderr 中
     let output = run_ffmpeg_command(&mut cmd, std::time::Duration::from_secs(10))
-        .or_else(|e| {
-            // 超时才真正报错，其他情况（非零退出码）是预期的
-            if e.contains("超时") {
-                Err(e)
-            } else {
-                // 尝试直接用 -i 不带 -v quiet 来获取 Duration
-                let mut cmd2 = Command::new("ffmpeg");
-                cmd2.args(&["-i", video_path, "-hide_banner"]);
-                hide_console_window(&mut cmd2);
-                run_ffmpeg_command(&mut cmd2, std::time::Duration::from_secs(10))
-            }
-        })
         .unwrap_or_else(|_| {
             // 兜底：直接执行不带超时包装
-            let mut cmd3 = Command::new("ffmpeg");
-            cmd3.args(&["-i", video_path, "-hide_banner"]);
-            hide_console_window(&mut cmd3);
-            cmd3.stdout(std::process::Stdio::piped())
+            let mut cmd2 = Command::new(ffmpeg_path());
+            cmd2.args(&["-i", video_path, "-hide_banner"]);
+            hide_console_window(&mut cmd2);
+            cmd2.stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::piped())
                 .output()
                 .unwrap_or_else(|_| std::process::Output {
