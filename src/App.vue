@@ -1,7 +1,16 @@
 ﻿<script setup lang="ts">
 import AppLayout from '@/components/layout/AppLayout.vue'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Toaster } from '@/components/ui/sonner'
-import { useSettingsStore, useDownloadStore } from '@/stores'
+import { useSettingsStore, useDownloadStore, useUpdaterStore } from '@/stores'
 import { onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter, RouterView } from 'vue-router'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -15,6 +24,7 @@ const router = useRouter()
 
 const settingsStore = useSettingsStore()
 const downloadStore = useDownloadStore()
+const updaterStore = useUpdaterStore()
 
 let unlistenResize: (() => void) | null = null
 let unlistenMove: (() => void) | null = null
@@ -117,6 +127,7 @@ onMounted(async () => {
   if (win.label === 'main') {
     unlistenResize = await win.onResized(() => saveMainWindowPosition())
     unlistenMove = await win.onMoved(() => saveMainWindowPosition())
+    await updaterStore.checkForUpdatesOnStartup()
   }
 
   const startupDeepLinkUrls = await getCurrentDeepLinkUrls()
@@ -146,6 +157,76 @@ onUnmounted(() => {
     <AppLayout />
     <Toaster />
   </template>
+
+  <Dialog v-model:open="updaterStore.promptOpen">
+    <DialogContent class="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle>发现新版本</DialogTitle>
+        <DialogDescription>
+          检测到新版本
+          <template v-if="updaterStore.updateInfo?.version">
+            v{{ updaterStore.updateInfo.version }}
+          </template>
+          ，是否现在安装？
+        </DialogDescription>
+      </DialogHeader>
+
+      <div class="space-y-3 rounded-lg border border-border bg-muted/30 p-4 text-sm">
+        <p>当前版本：v{{ updaterStore.updateInfo?.currentVersion }}</p>
+        <p v-if="updaterStore.updatePublishedAt">发布时间：{{ updaterStore.updatePublishedAt }}</p>
+        <p class="line-clamp-4 whitespace-pre-wrap text-muted-foreground">{{ updaterStore.updateNotes }}</p>
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" @click="updaterStore.promptOpen = false">
+          稍后再说
+        </Button>
+        <Button variant="outline" @click="updaterStore.openUpdateDetails()">
+          查看详情
+        </Button>
+        <Button :disabled="updaterStore.installing" @click="updaterStore.installLatestUpdate()">
+          {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+
+  <Dialog v-model:open="updaterStore.detailsOpen">
+    <DialogContent class="sm:max-w-2xl">
+      <DialogHeader>
+        <DialogTitle>
+          更新日志
+          <template v-if="updaterStore.updateInfo?.version">
+            v{{ updaterStore.updateInfo.version }}
+          </template>
+        </DialogTitle>
+        <DialogDescription>
+          <template v-if="updaterStore.updatePublishedAt">
+            发布时间：{{ updaterStore.updatePublishedAt }}
+          </template>
+          <template v-else>
+            查看本次版本说明后决定是否安装。
+          </template>
+        </DialogDescription>
+      </DialogHeader>
+
+      <div class="max-h-[55vh] overflow-y-auto rounded-lg border border-border bg-muted/20 p-4 text-sm leading-6 whitespace-pre-wrap break-words">
+        {{ updaterStore.updateNotes }}
+      </div>
+
+      <DialogFooter>
+        <Button variant="outline" @click="updaterStore.detailsOpen = false">
+          关闭
+        </Button>
+        <Button v-if="updaterStore.hasUpdate" variant="outline" @click="updaterStore.backToPrompt()">
+          返回提示
+        </Button>
+        <Button v-if="updaterStore.hasUpdate" :disabled="updaterStore.installing" @click="updaterStore.installLatestUpdate()">
+          {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
 </template>
 
 <style>

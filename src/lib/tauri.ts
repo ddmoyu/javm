@@ -1,8 +1,8 @@
 ﻿// Tauri IPC 璋冪敤灏佽
 import { invoke } from '@tauri-apps/api/core'
-import type { Video, VideoFilter, DownloadTask, ScrapeTask, AppSettings, Directory } from '@/types'
+import type { Video, VideoFilter, DownloadTask, ScrapeTask, AppSettings, Directory, AppUpdateInfo } from '@/types'
 
-function isTauriRuntime() {
+export function isTauriRuntime() {
     return typeof window !== 'undefined' && Boolean((window as any).__TAURI_INTERNALS__)
 }
 
@@ -279,6 +279,14 @@ export async function getSettings(): Promise<AppSettings> {
 /** 淇濆瓨搴旂敤璁剧疆 */
 export async function saveSettings(settings: AppSettings): Promise<void> {
     return tauriInvoke('save_settings', { settings })
+}
+
+export async function checkAppUpdate(): Promise<AppUpdateInfo> {
+    return tauriInvoke<AppUpdateInfo>('check_app_update')
+}
+
+export async function installAppUpdate(): Promise<string> {
+    return tauriInvoke<string>('install_app_update')
 }
 
 // ============ 缁熻鐩稿叧 ============

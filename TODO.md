@@ -22,3 +22,8 @@
 
 16. 创建 discord 群
 
+17. 爬虫和过 CF 验证
+    * https://github.com/us/crw AI 爬虫，支持 mcp
+    * https://github.com/spider-rs/spider 爬虫，支持 AI 自动化
+    * https://github.com/Ryujin-K/cloudscraper-rs 过 cf 验证
+    * https://github.com/0x676e67/wreq 请求指纹

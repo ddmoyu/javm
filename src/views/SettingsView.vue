@@ -5,7 +5,7 @@ import { Plus, GripVertical, Edit, Trash2, ExternalLink } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import packageInfo from '../../package.json'
 import appLogo from '../../src-tauri/icons/128x128.png'
-import { useSettingsStore } from '@/stores'
+import { useSettingsStore, useUpdaterStore } from '@/stores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
@@ -53,8 +53,27 @@ import type { AIProvider, ViewMode } from '@/types'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
+const updaterStore = useUpdaterStore()
 const isDebugMode = import.meta.env.DEV
 const appVersion = packageInfo.version
+
+const updateStatusText = computed(() => {
+  const info = updaterStore.updateInfo
+
+  if (!info) {
+    return '启动时会自动检查更新，也可以在这里手动触发。'
+  }
+
+  if (!info.configured) {
+    return '当前版本暂不支持应用内更新。'
+  }
+
+  if (info.available && info.version) {
+    return `检测到新版本 v${info.version}`
+  }
+
+  return '当前已是最新版本。'
+})
 
 const openExternalLink = async (url: string) => {
   try {
@@ -736,6 +755,43 @@ watch(() => settingsStore.settings, async (newSettings) => {
                     <p class="text-xl font-semibold">JAVM</p>
                     <p class="text-sm text-muted-foreground">jav manager</p>
                     <p class="text-sm text-muted-foreground">版本号：v{{ appVersion }}</p>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div class="space-y-3">
+                  <div class="space-y-1">
+                    <p class="font-medium">应用更新</p>
+                    <p class="text-sm text-muted-foreground">{{ updateStatusText }}</p>
+                    <p v-if="updaterStore.updatePublishedAt" class="text-sm text-muted-foreground">
+                      最近发现版本发布时间：{{ updaterStore.updatePublishedAt }}
+                    </p>
+                  </div>
+
+                  <div class="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      :disabled="updaterStore.checking || updaterStore.installing"
+                      @click="updaterStore.checkForUpdates()"
+                    >
+                      {{ updaterStore.checking ? '检查中...' : '检查更新' }}
+                    </Button>
+                    <Button
+                      v-if="updaterStore.hasUpdate"
+                      variant="outline"
+                      :disabled="updaterStore.installing"
+                      @click="updaterStore.openUpdateDetails()"
+                    >
+                      查看详情
+                    </Button>
+                    <Button
+                      v-if="updaterStore.hasUpdate"
+                      :disabled="updaterStore.installing || updaterStore.checking"
+                      @click="updaterStore.installLatestUpdate()"
+                    >
+                      {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+                    </Button>
                   </div>
                 </div>
 

@@ -13,14 +13,129 @@ pub mod scanner;
 pub mod utils;
 
 use db::Database;
+use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
+use tauri_plugin_updater::UpdaterExt;
 
 use tokio::sync::Mutex;
+use url::Url;
 use utils::system_commands;
 
 /// 视频截图任务的取消令牌管理
 struct CaptureState {
     cancel_token: Mutex<Option<tokio_util::sync::CancellationToken>>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppUpdateInfo {
+    configured: bool,
+    available: bool,
+    current_version: String,
+    version: Option<String>,
+    body: Option<String>,
+    date: Option<String>,
+    target: Option<String>,
+}
+
+const UPDATER_NOT_CONFIGURED: &str = "UPDATER_NOT_CONFIGURED";
+
+fn updater_endpoint() -> Option<&'static str> {
+    option_env!("JAVM_UPDATER_ENDPOINT").and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
+
+fn updater_pubkey() -> Option<&'static str> {
+    option_env!("JAVM_UPDATER_PUBKEY").and_then(|value| {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    })
+}
+
+fn build_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
+    let endpoint = updater_endpoint().ok_or_else(|| "当前构建未配置更新地址".to_string())?;
+    let pubkey = updater_pubkey().ok_or_else(|| "当前构建未配置更新公钥".to_string())?;
+    let endpoint = Url::parse(endpoint).map_err(|e| format!("解析更新地址失败: {e}"))?;
+
+    app.updater_builder()
+        .pubkey(pubkey)
+        .endpoints(vec![endpoint])
+        .map_err(|e| format!("配置更新地址失败: {e}"))?
+        .timeout(Duration::from_secs(20))
+        .build()
+        .map_err(|e| format!("初始化更新器失败: {e}"))
+}
+
+#[tauri::command]
+async fn check_app_update(app: AppHandle) -> Result<AppUpdateInfo, String> {
+    let current_version = app.package_info().version.to_string();
+
+    if updater_endpoint().is_none() || updater_pubkey().is_none() {
+        return Err(UPDATER_NOT_CONFIGURED.to_string());
+    }
+
+    let updater = build_updater(&app)?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("检查更新失败: {e}"))?;
+
+    if let Some(update) = update {
+        Ok(AppUpdateInfo {
+            configured: true,
+            available: true,
+            current_version: update.current_version,
+            version: Some(update.version),
+            body: update.body,
+            date: update.date.map(|date| date.to_string()),
+            target: Some(update.target),
+        })
+    } else {
+        Ok(AppUpdateInfo {
+            configured: true,
+            available: false,
+            current_version,
+            version: None,
+            body: None,
+            date: None,
+            target: None,
+        })
+    }
+}
+
+#[tauri::command]
+async fn install_app_update(app: AppHandle) -> Result<String, String> {
+    let updater = build_updater(&app)?;
+    let update = updater
+        .check()
+        .await
+        .map_err(|e| format!("检查更新失败: {e}"))?
+        .ok_or_else(|| "当前没有可用更新".to_string())?;
+
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| format!("安装更新失败: {e}"))?;
+
+    #[cfg(target_os = "windows")]
+    {
+        Ok("更新安装程序已启动，应用会自动退出完成安装。".to_string())
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok("更新已安装，请重启应用以完成切换。".to_string())
+    }
 }
 
 #[tauri::command]
@@ -1265,6 +1380,8 @@ pub fn run() {
 
             println!("[单实例] 新实例参数: {argv:?}");
         }));
+
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
     
     builder
@@ -1396,6 +1513,8 @@ pub fn run() {
             settings::test_ai_api,
             settings::recognize_designation_with_ai,
             get_runtime_system_info,
+            check_app_update,
+            install_app_update,
             analytics::analytics_init,
             analytics::analytics_add_active_seconds,
             analytics::analytics_sync_now,

@@ -39,6 +39,10 @@
           "javm"
         ]
       }
+    },
+    "updater": {
+      "pubkey": "dev-placeholder-pubkey",
+      "endpoints": []
     }
   },
   "bundle": {

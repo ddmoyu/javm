@@ -27,7 +27,7 @@ jobs:
             nm3u8_asset_key: win-x64
             nm3u8_asset_ext: .zip
             nm3u8_target: N_m3u8DL-RE.exe
-            bundle_targets: nsis,msi
+            bundle_targets: nsis
           - platform: windows
             arch: arm64
             runner: windows-11-arm
@@ -35,7 +35,7 @@ jobs:
             nm3u8_asset_key: win-arm64
             nm3u8_asset_ext: .zip
             nm3u8_target: N_m3u8DL-RE.exe
-            bundle_targets: nsis,msi
+            bundle_targets: nsis
 
           - platform: macos
             arch: x64
@@ -140,6 +140,17 @@ jobs:
 
       - name: Install frontend dependencies
         run: bun install --frozen-lockfile
+
+      - name: Validate updater config
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace('${{ vars.TAURI_UPDATER_PUBKEY }}')) {
+            throw '缺少仓库变量 TAURI_UPDATER_PUBKEY，无法构建应用内更新。'
+          }
+
+          if ([string]::IsNullOrWhiteSpace('${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}')) {
+            throw '缺少 Secret TAURI_SIGNING_PRIVATE_KEY，无法生成 updater 签名。'
+          }
 
       - name: Download N_m3u8DL-RE
         shell: pwsh
@@ -291,7 +302,12 @@ jobs:
           "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Build bundles
-        run: bunx tauri build --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          JAVM_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+          JAVM_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+        run: bunx tauri build --config src-tauri/tauri.release.conf.json --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
 
       - name: Resolve release notes
         id: release_notes
@@ -324,9 +340,93 @@ jobs:
           prerelease: ${{ steps.bundle_targets.outputs.is_prerelease == 'true' }}
           files: |
             src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.exe
-            src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.msi
+            src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.sig
             src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.dmg
             src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.app.tar.gz
             src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.deb
             src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.AppImage
             src-tauri/target/${{ matrix.rust_target }}/release/bundle/**/*.rpm
+
+  publish-updater-manifest:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-release
+    runs-on: windows-latest
+    steps:
+      - name: Publish latest.json
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $repo = '${{ github.repository }}'
+          $tag = '${{ github.ref_name }}'
+          $release = gh api "repos/$repo/releases/tags/$tag" | ConvertFrom-Json
+          $assets = @($release.assets)
+          $tempDir = Join-Path $env:RUNNER_TEMP 'updater-manifest'
+
+          if (Test-Path $tempDir) {
+            Remove-Item $tempDir -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+          gh release download $tag --repo $repo --pattern '*.sig' --dir $tempDir --clobber
+
+          function New-PlatformEntry {
+            param(
+              [string]$PlatformKey,
+              [string[]]$Patterns
+            )
+
+            foreach ($pattern in $Patterns) {
+              $asset = $assets | Where-Object {
+                $_.name -imatch $pattern -and $_.name -notlike '*.sig'
+              } | Select-Object -First 1
+
+              if (-not $asset) {
+                continue
+              }
+
+              $sigPath = Join-Path $tempDir "$($asset.name).sig"
+              if (-not (Test-Path $sigPath)) {
+                throw "平台 $PlatformKey 缺少签名文件 $($asset.name).sig"
+              }
+
+              return [ordered]@{
+                url = $asset.browser_download_url
+                signature = (Get-Content $sigPath -Raw).Trim()
+              }
+            }
+
+            return $null
+          }
+
+          $platformPatterns = [ordered]@{
+            'windows-x86_64' = @('(?i)^javm(?:[._-].*(?:x64|x86_64).*)?-setup\.exe$')
+            'windows-aarch64' = @('(?i)^javm(?:[._-].*(?:arm64|aarch64).*)?-setup\.exe$')
+            'darwin-x86_64' = @('(?i)^javm(?:[._-].*(?:x64|x86_64).*)?\.app\.tar\.gz$')
+            'darwin-aarch64' = @('(?i)^javm(?:[._-].*(?:arm64|aarch64).*)?\.app\.tar\.gz$')
+            'linux-x86_64' = @('(?i)^javm(?:[._-].*(?:x64|x86_64|amd64).*)?\.AppImage$')
+            'linux-aarch64' = @('(?i)^javm(?:[._-].*(?:arm64|aarch64).*)?\.AppImage$')
+          }
+
+          $platforms = [ordered]@{}
+          foreach ($platformKey in $platformPatterns.Keys) {
+            $entry = New-PlatformEntry -PlatformKey $platformKey -Patterns $platformPatterns[$platformKey]
+            if ($entry) {
+              $platforms[$platformKey] = $entry
+            }
+          }
+
+          if ($platforms.Count -eq 0) {
+            throw '未能从当前 Release 资产中生成任何 updater 平台条目。'
+          }
+
+          $manifest = [ordered]@{
+            version = $release.tag_name.TrimStart('v')
+            notes = $release.body
+            pub_date = $release.published_at
+            platforms = $platforms
+          }
+
+          $manifestPath = Join-Path $tempDir 'latest.json'
+          $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath -Encoding utf8
+          gh release upload $tag $manifestPath --repo $repo --clobber
