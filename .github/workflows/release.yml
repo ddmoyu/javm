@@ -144,9 +144,28 @@ jobs:
       - name: Validate updater config
         shell: pwsh
         run: |
-          if ([string]::IsNullOrWhiteSpace('${{ vars.TAURI_UPDATER_PUBKEY }}')) {
+          $rawPubkey = @'
+${{ vars.TAURI_UPDATER_PUBKEY }}
+'@
+
+          if ([string]::IsNullOrWhiteSpace($rawPubkey)) {
             throw '缺少仓库变量 TAURI_UPDATER_PUBKEY，无法构建应用内更新。'
           }
+
+          $normalizedPubkey = $rawPubkey.Trim()
+          $normalizedPubkey = $normalizedPubkey -replace '-----BEGIN PUBLIC KEY-----', ''
+          $normalizedPubkey = $normalizedPubkey -replace '-----END PUBLIC KEY-----', ''
+          $normalizedPubkey = $normalizedPubkey -replace '\s+', ''
+
+          if ([string]::IsNullOrWhiteSpace($normalizedPubkey)) {
+            throw '仓库变量 TAURI_UPDATER_PUBKEY 为空或格式无效。请填写 Tauri updater 公钥内容。'
+          }
+
+          if ($normalizedPubkey -notmatch '^[A-Za-z0-9+/=]+$') {
+            throw '仓库变量 TAURI_UPDATER_PUBKEY 格式无效。应为单行 base64，或可被清洗为该格式的 PEM 公钥。'
+          }
+
+          "JAVM_UPDATER_PUBKEY=$normalizedPubkey" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
           if ([string]::IsNullOrWhiteSpace('${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}')) {
             throw '缺少 Secret TAURI_SIGNING_PRIVATE_KEY，无法生成 updater 签名。'
@@ -302,14 +321,27 @@ jobs:
           "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Build bundles
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           JAVM_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
-          JAVM_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
-          TAURI_CONFIG: >-
-            {"plugins":{"updater":{"pubkey":"${{ vars.TAURI_UPDATER_PUBKEY }}","endpoints":["https://github.com/${{ github.repository }}/releases/latest/download/latest.json"]}}}
-        run: bunx tauri build --config src-tauri/tauri.release.conf.json --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:JAVM_UPDATER_PUBKEY)) {
+            throw '缺少规范化后的 JAVM_UPDATER_PUBKEY，无法执行打包。'
+          }
+
+          $tauriConfig = @{
+            plugins = @{
+              updater = @{
+                pubkey = $env:JAVM_UPDATER_PUBKEY
+                endpoints = @('https://github.com/${{ github.repository }}/releases/latest/download/latest.json')
+              }
+            }
+          } | ConvertTo-Json -Compress
+
+          $env:TAURI_CONFIG = $tauriConfig
+          bunx tauri build --config src-tauri/tauri.release.conf.json --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
 
       - name: Resolve release notes
         id: release_notes
