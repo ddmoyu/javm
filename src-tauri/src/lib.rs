@@ -1392,6 +1392,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
             let db = Database::new(app.handle());
+            db.check_and_reset_if_needed();
             db.init().expect("数据库初始化失败");
 
             // 注册深度链接处理器

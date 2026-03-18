@@ -2455,7 +2455,7 @@ dependencies = [
 
 [[package]]
 name = "javm"
-version = "0.1.10-beta.1"
+version = "0.1.10-beta.4"
 dependencies = [
  "base64 0.22.1",
  "chrono",

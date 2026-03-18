@@ -110,6 +110,9 @@ pub struct VideoScrapeUpdateData<'a> {
 
 // ==================== 数据库核心 ====================
 
+/// 数据库 schema 版本号，v0.2.0 起设为 1，旧版数据库默认为 0
+const DB_SCHEMA_VERSION: i32 = 1;
+
 #[derive(Clone)]
 pub struct Database {
     path: PathBuf,
@@ -138,6 +141,38 @@ impl Database {
     /// 获取数据库路径
     pub fn get_database_path(&self) -> &PathBuf {
         &self.path
+    }
+
+    /// 检查数据库是否需要重置（从 v0.2.0 以下版本升级时清空重建）
+    pub fn check_and_reset_if_needed(&self) {
+        if !self.path.exists() {
+            return; // 全新安装，无需处理
+        }
+
+        match Connection::open(&self.path) {
+            Ok(conn) => {
+                let version: i32 = conn
+                    .pragma_query_value(None, "user_version", |row| row.get(0))
+                    .unwrap_or(0);
+
+                if version < DB_SCHEMA_VERSION {
+                    println!(
+                        "检测到旧版本数据库 (schema_version={}), 清空重建",
+                        version
+                    );
+                    drop(conn); // 关闭连接后再删除文件
+                    if let Err(e) = fs::remove_file(&self.path) {
+                        eprintln!("删除旧数据库失败: {}", e);
+                    } else {
+                        println!("已删除旧版本数据库，将重新初始化");
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("打开数据库检查版本失败: {}，尝试删除重建", e);
+                let _ = fs::remove_file(&self.path);
+            }
+        }
     }
 
     /// 初始化数据库表结构
@@ -329,6 +364,9 @@ impl Database {
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_downloads_url ON downloads (url)",
             [],
         )?;
+
+        // 标记当前数据库 schema 版本
+        conn.pragma_update(None, "user_version", DB_SCHEMA_VERSION)?;
 
         Ok(())
     }

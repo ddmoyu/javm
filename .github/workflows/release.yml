@@ -331,17 +331,24 @@ jobs:
             throw '缺少规范化后的 JAVM_UPDATER_PUBKEY，无法执行打包。'
           }
 
-          $tauriConfig = @{
-            plugins = @{
-              updater = @{
-                pubkey = $env:JAVM_UPDATER_PUBKEY
-                endpoints = @('https://github.com/${{ github.repository }}/releases/latest/download/latest.json')
-              }
-            }
-          } | ConvertTo-Json -Compress
+            $releaseConfigPath = Join-Path $env:RUNNER_TEMP 'tauri.release.config.json'
+            $releaseConfig = Get-Content 'src-tauri/tauri.release.conf.json' -Raw | ConvertFrom-Json -AsHashtable
 
-          $env:TAURI_CONFIG = $tauriConfig
-          bunx tauri build --config src-tauri/tauri.release.conf.json --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
+            if ($null -eq $releaseConfig) {
+              $releaseConfig = @{}
+            }
+
+            if (-not $releaseConfig.ContainsKey('plugins') -or $null -eq $releaseConfig.plugins) {
+              $releaseConfig.plugins = @{}
+            }
+
+            $releaseConfig.plugins.updater = @{
+              pubkey = $env:JAVM_UPDATER_PUBKEY
+              endpoints = @('https://github.com/${{ github.repository }}/releases/latest/download/latest.json')
+            }
+
+            $releaseConfig | ConvertTo-Json -Depth 10 | Set-Content -Path $releaseConfigPath -Encoding utf8NoBOM
+            bunx tauri build --config $releaseConfigPath --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
 
       - name: Resolve release notes
         id: release_notes
