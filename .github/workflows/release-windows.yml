@@ -307,6 +307,8 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           JAVM_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
           JAVM_UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
+          TAURI_CONFIG: >-
+            {"plugins":{"updater":{"pubkey":"${{ vars.TAURI_UPDATER_PUBKEY }}","endpoints":["https://github.com/${{ github.repository }}/releases/latest/download/latest.json"]}}}
         run: bunx tauri build --config src-tauri/tauri.release.conf.json --target "${{ matrix.rust_target }}" --bundles "${{ steps.bundle_targets.outputs.targets }}"
 
       - name: Resolve release notes

@@ -1397,11 +1397,11 @@ pub fn run() {
             // 注册深度链接处理器
             #[cfg(desktop)]
             {
-                use tauri_plugin_deep_link::DeepLinkExt;
-
                 // Windows 开发态与 Linux 下，运行时注册静态配置的协议，便于本地测试深链。
                 #[cfg(any(target_os = "linux", all(debug_assertions, windows)))]
                 {
+                    use tauri_plugin_deep_link::DeepLinkExt;
+
                     app.deep_link().register_all()?;
                 }
             }

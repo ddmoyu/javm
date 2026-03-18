@@ -766,12 +766,13 @@ fn platform_executable_relative_paths(path: &str) -> Vec<String> {
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or(path);
-    let extension = path_obj.extension().and_then(|value| value.to_str());
 
     let mut candidates = Vec::new();
 
     #[cfg(target_os = "windows")]
     {
+        let extension = path_obj.extension().and_then(|value| value.to_str());
+
         if extension == Some("exe") {
             candidates.push(normalized.clone());
         } else {
