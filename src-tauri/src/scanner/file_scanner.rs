@@ -1,7 +1,8 @@
-use std::path::Path;
-use tokio::fs;
-use std::pin::Pin;
 use std::future::Future;
+use std::path::Path;
+use std::pin::Pin;
+
+use tokio::fs;
 
 const SKIPPED_DIRECTORY_NAMES: &[&str] = &[
     "behind the scenes",
@@ -13,12 +14,37 @@ pub const VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg", "3gp", "ts",
 ];
 
+const CONTENT_PROBED_VIDEO_EXTENSIONS: &[&str] = &["ts"];
+
 /// 判断文件是否为支持的视频格式
 pub fn is_video_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .map(|e| VIDEO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
         .unwrap_or(false)
+}
+
+fn should_probe_video_content(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| CONTENT_PROBED_VIDEO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// 判断文件是否应当作为视频参与扫描。
+///
+/// 对扩展名存在歧义的文件（当前是 .ts）进一步做元数据探测，
+/// 避免将 TypeScript 源文件当成视频扫描入库。
+pub fn should_scan_as_video(path: &Path) -> bool {
+    if !is_video_file(path) {
+        return false;
+    }
+
+    if !should_probe_video_content(path) {
+        return true;
+    }
+
+    crate::metadata::extract_metadata(path).is_ok()
 }
 
 pub fn is_skipped_directory(path: &Path) -> bool {
@@ -63,7 +89,7 @@ pub fn count_video_files_async(
 
             if meta.is_dir() {
                 count += count_video_files_async(&path).await?;
-            } else if is_video_file(&path) {
+            } else if should_scan_as_video(&path) {
                 count += 1;
             }
         }
@@ -155,7 +181,7 @@ pub async fn find_video_files(path: &str, depth: usize) -> Result<Vec<String>, S
                     if current_depth < max_depth {
                         scan(&path, files, current_depth + 1, max_depth).await?;
                     }
-                } else if metadata.is_file() && is_video_file(&path) {
+                } else if metadata.is_file() && should_scan_as_video(&path) {
                     files.push(path.to_string_lossy().to_string());
                 }
             }
@@ -167,4 +193,28 @@ pub async fn find_video_files(path: &str, depth: usize) -> Result<Vec<String>, S
     // 从深度 0 开始扫描，确保 depth=0 时也能扫描根目录下的文件
     scan(root_path, &mut files, 0, depth).await?;
     Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_video_file, should_scan_as_video};
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn keeps_common_video_extensions_fast_path() {
+        assert!(is_video_file(std::path::Path::new("movie.mp4")));
+        assert!(should_scan_as_video(std::path::Path::new("movie.mp4")));
+    }
+
+    #[test]
+    fn skips_typescript_source_with_ts_extension() {
+        let dir = tempdir().expect("创建临时目录失败");
+        let file_path = dir.path().join("index.ts");
+        fs::write(&file_path, "export const answer: number = 42;\n")
+            .expect("写入测试文件失败");
+
+        assert!(is_video_file(&file_path));
+        assert!(!should_scan_as_video(&file_path));
+    }
 }

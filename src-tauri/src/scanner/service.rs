@@ -6,7 +6,9 @@
 use crate::db::Database;
 use crate::metadata;
 use crate::nfo::parser::parse_nfo;
-use crate::scanner::file_scanner::{count_video_files_async, is_skipped_directory, is_video_file};
+use crate::scanner::file_scanner::{
+    count_video_files_async, is_skipped_directory, should_scan_as_video,
+};
 use chrono::Utc;
 use rusqlite::Transaction;
 use std::collections::HashSet;
@@ -217,7 +219,7 @@ impl ScannerService {
         tx: &Transaction,
         existing_paths: &mut HashSet<String>,
     ) -> Result<bool, String> {
-        if !is_video_file(file_path) {
+        if !should_scan_as_video(file_path) {
             return Ok(false);
         }
 
