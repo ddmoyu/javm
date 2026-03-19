@@ -13,9 +13,7 @@ pub mod scanner;
 pub mod utils;
 
 use db::Database;
-use std::time::Duration;
 use tauri::{AppHandle, Manager, State};
-use tauri_plugin_updater::UpdaterExt;
 
 use tokio::sync::Mutex;
 use utils::system_commands;
@@ -23,99 +21,6 @@ use utils::system_commands;
 /// 视频截图任务的取消令牌管理
 struct CaptureState {
     cancel_token: Mutex<Option<tokio_util::sync::CancellationToken>>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AppUpdateInfo {
-    configured: bool,
-    available: bool,
-    current_version: String,
-    version: Option<String>,
-    body: Option<String>,
-    date: Option<String>,
-    target: Option<String>,
-}
-
-const UPDATER_NOT_CONFIGURED: &str = "UPDATER_NOT_CONFIGURED";
-
-fn is_updater_not_configured_error(message: &str) -> bool {
-    let lower = message.to_ascii_lowercase();
-    lower.contains("pubkey")
-        || lower.contains("endpoint")
-        || lower.contains("endpoints")
-        || lower.contains("updater") && lower.contains("config")
-}
-
-fn build_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
-    app.updater_builder()
-        .timeout(Duration::from_secs(20))
-        .build()
-        .map_err(|e| format!("初始化更新器失败: {e}"))
-}
-
-#[tauri::command]
-async fn check_app_update(app: AppHandle) -> Result<AppUpdateInfo, String> {
-    let current_version = app.package_info().version.to_string();
-
-    let updater = match build_updater(&app) {
-        Ok(updater) => updater,
-        Err(error) if is_updater_not_configured_error(&error) => {
-            return Err(UPDATER_NOT_CONFIGURED.to_string());
-        }
-        Err(error) => return Err(error),
-    };
-    let update = updater
-        .check()
-        .await
-        .map_err(|e| format!("检查更新失败: {e}"))?;
-
-    if let Some(update) = update {
-        Ok(AppUpdateInfo {
-            configured: true,
-            available: true,
-            current_version: update.current_version,
-            version: Some(update.version),
-            body: update.body,
-            date: update.date.map(|date| date.to_string()),
-            target: Some(update.target),
-        })
-    } else {
-        Ok(AppUpdateInfo {
-            configured: true,
-            available: false,
-            current_version,
-            version: None,
-            body: None,
-            date: None,
-            target: None,
-        })
-    }
-}
-
-#[tauri::command]
-async fn install_app_update(app: AppHandle) -> Result<String, String> {
-    let updater = build_updater(&app)?;
-    let update = updater
-        .check()
-        .await
-        .map_err(|e| format!("检查更新失败: {e}"))?
-        .ok_or_else(|| "当前没有可用更新".to_string())?;
-
-    update
-        .download_and_install(|_, _| {}, || {})
-        .await
-        .map_err(|e| format!("安装更新失败: {e}"))?;
-
-    #[cfg(target_os = "windows")]
-    {
-        Ok("更新安装程序已启动，应用会自动退出完成安装。".to_string())
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok("更新已安装，请重启应用以完成切换。".to_string())
-    }
 }
 
 #[tauri::command]
@@ -1845,6 +1750,8 @@ pub fn run() {
                 cancel_token: Mutex::new(None),
             });
 
+            app.manage(utils::update::PendingAppUpdateState::new());
+
             // 初始化下载管理器
             let download_manager = download::manager::DownloadManager::new(3); // 最多 3 个并发下载
             app.manage(download_manager);
@@ -1890,8 +1797,9 @@ pub fn run() {
             settings::test_ai_api,
             settings::recognize_designation_with_ai,
             get_runtime_system_info,
-            check_app_update,
-            install_app_update,
+            utils::update::check_app_update,
+            utils::update::download_app_update,
+            utils::update::install_app_update,
             analytics::analytics_init,
             analytics::analytics_add_active_seconds,
             analytics::analytics_sync_now,

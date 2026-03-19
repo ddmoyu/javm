@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Progress } from '@/components/ui/progress'
 import { Toaster } from '@/components/ui/sonner'
 import { useSettingsStore, useDownloadStore, useUpdaterStore } from '@/stores'
 import { onMounted, onUnmounted } from 'vue'
@@ -167,7 +168,7 @@ onUnmounted(() => {
           <template v-if="updaterStore.updateInfo?.version">
             v{{ updaterStore.updateInfo.version }}
           </template>
-          ，是否现在安装？
+          ，是否现在更新？
         </DialogDescription>
       </DialogHeader>
 
@@ -175,6 +176,17 @@ onUnmounted(() => {
         <p>当前版本：v{{ updaterStore.updateInfo?.currentVersion }}</p>
         <p v-if="updaterStore.updatePublishedAt">发布时间：{{ updaterStore.updatePublishedAt }}</p>
         <p class="line-clamp-4 whitespace-pre-wrap text-muted-foreground">{{ updaterStore.updateNotes }}</p>
+        <div v-if="updaterStore.updating || updaterStore.readyToInstall" class="space-y-2 rounded-md border border-border/60 bg-background/70 p-3">
+          <p class="font-medium">{{ updaterStore.installStatusText }}</p>
+          <Progress
+            v-if="typeof updaterStore.downloadProgress?.progress === 'number'"
+            :model-value="updaterStore.downloadProgress.progress"
+            class="h-2"
+          />
+          <p v-if="updaterStore.hasDownloadProgress" class="text-xs text-muted-foreground">
+            {{ updaterStore.downloadProgressText }}
+          </p>
+        </div>
       </div>
 
       <DialogFooter>
@@ -184,8 +196,8 @@ onUnmounted(() => {
         <Button variant="outline" @click="updaterStore.openUpdateDetails()">
           查看详情
         </Button>
-        <Button :disabled="updaterStore.installing" @click="updaterStore.installLatestUpdate()">
-          {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+        <Button :disabled="updaterStore.updating" @click="updaterStore.installLatestUpdate()">
+          {{ updaterStore.installButtonText }}
         </Button>
       </DialogFooter>
     </DialogContent>
@@ -214,6 +226,18 @@ onUnmounted(() => {
         {{ updaterStore.updateNotes }}
       </div>
 
+      <div v-if="updaterStore.updating || updaterStore.readyToInstall" class="space-y-2 rounded-lg border border-border bg-muted/20 p-4 text-sm">
+        <p class="font-medium">{{ updaterStore.installStatusText }}</p>
+        <Progress
+          v-if="typeof updaterStore.downloadProgress?.progress === 'number'"
+          :model-value="updaterStore.downloadProgress.progress"
+          class="h-2"
+        />
+        <p v-if="updaterStore.hasDownloadProgress" class="text-xs text-muted-foreground">
+          {{ updaterStore.downloadProgressText }}
+        </p>
+      </div>
+
       <DialogFooter>
         <Button variant="outline" @click="updaterStore.detailsOpen = false">
           关闭
@@ -221,8 +245,8 @@ onUnmounted(() => {
         <Button v-if="updaterStore.hasUpdate" variant="outline" @click="updaterStore.backToPrompt()">
           返回提示
         </Button>
-        <Button v-if="updaterStore.hasUpdate" :disabled="updaterStore.installing" @click="updaterStore.installLatestUpdate()">
-          {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+        <Button v-if="updaterStore.hasUpdate" :disabled="updaterStore.updating" @click="updaterStore.installLatestUpdate()">
+          {{ updaterStore.installButtonText }}
         </Button>
       </DialogFooter>
     </DialogContent>

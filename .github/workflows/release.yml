@@ -395,3 +395,53 @@ jobs:
             --config src-tauri/tauri.release.conf.json
             --target "${{ matrix.rust_target }}"
             --bundles "${{ steps.bundle_targets.outputs.targets }}"
+
+  finalize_updater_manifest:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs:
+      - prepare_release
+      - build-release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inject release notes into latest.json
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = '${{ github.ref_name }}'
+          $notesPath = Join-Path $PWD "docs/releases/$tag.md"
+          $tempDir = Join-Path $env:RUNNER_TEMP 'updater-manifest'
+          $manifestPath = Join-Path $tempDir 'latest.json'
+
+          if (Test-Path $tempDir) {
+            Remove-Item $tempDir -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Force -Path $tempDir | Out-Null
+
+          gh release download $tag --pattern latest.json --dir $tempDir
+
+          if (-not (Test-Path $manifestPath)) {
+            throw '未能从当前 Release 下载 latest.json。'
+          }
+
+          $notes = if (Test-Path $notesPath) {
+            (Get-Content $notesPath -Raw).Trim()
+          } else {
+            @(
+              "# JAVM $tag"
+              ''
+              '## 说明'
+              '- 当前版本未提交专用发布日志文件。'
+              "- 请优先在仓库中补充 docs/releases/$tag.md，供 Release 页面与 updater 清单共用。"
+            ) -join "`n"
+          }
+
+          $manifest = Get-Content $manifestPath -Raw | ConvertFrom-Json
+          $manifest.notes = $notes
+          $manifest | ConvertTo-Json -Depth 100 | Set-Content -Path $manifestPath -Encoding utf8
+
+          gh release upload $tag $manifestPath --clobber

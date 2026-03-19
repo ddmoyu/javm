@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -59,6 +60,10 @@ const appVersion = packageInfo.version
 
 const updateStatusText = computed(() => {
   const info = updaterStore.updateInfo
+
+  if (updaterStore.readyToInstall && info?.version) {
+    return `更新包已就绪，可安装 v${info.version}`
+  }
 
   if (!info) {
     return '启动时会自动检查更新，也可以在这里手动触发。'
@@ -767,12 +772,23 @@ watch(() => settingsStore.settings, async (newSettings) => {
                     <p v-if="updaterStore.updatePublishedAt" class="text-sm text-muted-foreground">
                       最近发现版本发布时间：{{ updaterStore.updatePublishedAt }}
                     </p>
+                    <div v-if="updaterStore.updating || updaterStore.readyToInstall" class="mt-3 space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+                      <p class="text-sm font-medium">{{ updaterStore.installStatusText }}</p>
+                      <Progress
+                        v-if="typeof updaterStore.downloadProgress?.progress === 'number'"
+                        :model-value="updaterStore.downloadProgress.progress"
+                        class="h-2"
+                      />
+                      <p v-if="updaterStore.hasDownloadProgress" class="text-xs text-muted-foreground">
+                        {{ updaterStore.downloadProgressText }}
+                      </p>
+                    </div>
                   </div>
 
                   <div class="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
-                      :disabled="updaterStore.checking || updaterStore.installing"
+                      :disabled="updaterStore.checking || updaterStore.updating"
                       @click="updaterStore.checkForUpdates()"
                     >
                       {{ updaterStore.checking ? '检查中...' : '检查更新' }}
@@ -780,17 +796,17 @@ watch(() => settingsStore.settings, async (newSettings) => {
                     <Button
                       v-if="updaterStore.hasUpdate"
                       variant="outline"
-                      :disabled="updaterStore.installing"
+                      :disabled="updaterStore.updating"
                       @click="updaterStore.openUpdateDetails()"
                     >
                       查看详情
                     </Button>
                     <Button
                       v-if="updaterStore.hasUpdate"
-                      :disabled="updaterStore.installing || updaterStore.checking"
+                      :disabled="updaterStore.updating || updaterStore.checking"
                       @click="updaterStore.installLatestUpdate()"
                     >
-                      {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+                      {{ updaterStore.installButtonText }}
                     </Button>
                   </div>
                 </div>

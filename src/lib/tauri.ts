@@ -294,6 +294,10 @@ export async function checkAppUpdate(): Promise<AppUpdateInfo> {
     return tauriInvoke<AppUpdateInfo>('check_app_update')
 }
 
+export async function downloadAppUpdate(): Promise<string> {
+    return tauriInvoke<string>('download_app_update')
+}
+
 export async function installAppUpdate(): Promise<string> {
     return tauriInvoke<string>('install_app_update')
 }
