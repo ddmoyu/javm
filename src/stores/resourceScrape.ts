@@ -165,6 +165,7 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
     const searchLoading = ref(false)
     const searched = ref(false)
     const searchError = ref<string | null>(null)
+    const cfChallengeActive = ref(false)
 
     // 当前搜索的取消函数
     let cancelCurrentSearch: (() => void) | null = null
@@ -221,6 +222,7 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
         searchLoading.value = true
         searched.value = true
         searchError.value = null
+        cfChallengeActive.value = false
 
         try {
             const unlisteners: UnlistenFn[] = []
@@ -234,13 +236,30 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
             // 监听搜索完成事件
             const unDone = await listen('search-done', () => {
                 searchLoading.value = false
+                cfChallengeActive.value = false
                 cancelCurrentSearch = null
                 cleanup()
             })
             unlisteners.push(unDone)
 
+            const unCf = await listen<boolean>('resource-scrape-cf-state', (event) => {
+                const nextActive = Boolean(event.payload)
+                if (cfChallengeActive.value === nextActive) {
+                    return
+                }
+
+                cfChallengeActive.value = nextActive
+                if (nextActive) {
+                    toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
+                } else {
+                    toast.success('Cloudflare 验证已通过，继续刮削中')
+                }
+            })
+            unlisteners.push(unCf)
+
             // 清理函数
             const cleanup = () => {
+                cfChallengeActive.value = false
                 unlisteners.forEach((fn) => fn())
             }
 
@@ -250,12 +269,14 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
             invoke('rs_search_resource', { code: trimmed, source: source || null }).catch((err) => {
                 searchError.value = String(err)
                 searchLoading.value = false
+                cfChallengeActive.value = false
                 cancelCurrentSearch = null
                 cleanup()
             })
         } catch (e) {
             searchError.value = (e as Error).message
             searchLoading.value = false
+            cfChallengeActive.value = false
         }
     }
 
@@ -270,6 +291,7 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
         searchLoading.value = false
         searched.value = false
         searchError.value = null
+        cfChallengeActive.value = false
     }
 
     // ============ 刮削保存操作 ============
@@ -687,6 +709,7 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
         searchLoading,
         searched,
         searchError,
+        cfChallengeActive,
         // 刮削任务状态
         tasks,
         logs,

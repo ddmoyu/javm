@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Sparkles, Loader2 } from 'lucide-vue-next'
+import { Sparkles, Loader2, ShieldAlert } from 'lucide-vue-next'
 import {
   Dialog,
   DialogContent,
@@ -299,6 +299,16 @@ defineExpose({
               <Sparkles v-else class="size-4" />
             </Button>
           </div>
+        </div>
+      </div>
+
+      <div
+        v-if="scrapeStore.cfChallengeActive"
+        class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900"
+      >
+        <ShieldAlert class="mt-0.5 size-4 shrink-0" />
+        <div>
+          检测到 Cloudflare 验证，已显示辅助 WebView。请先在弹出的窗口中完成人机验证，当前刮削会自动继续。
         </div>
       </div>
 

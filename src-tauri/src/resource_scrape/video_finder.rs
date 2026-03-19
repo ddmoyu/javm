@@ -8,6 +8,9 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::Listener;
+
+use super::webview_support;
 
 /// 找到的视频链接
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -133,6 +136,9 @@ const VIDEO_FINDER_LABEL: &str = "video_finder_webview";
 
 /// 查找超时（秒）
 const FINDER_TIMEOUT_SECS: u64 = 45;
+
+/// 前端视频链接查找 CF 状态事件
+const VIDEO_FINDER_CF_STATE_EVENT: &str = "video-finder-cf-state";
 
 /// 注入到 WebView 的 JS 脚本
 /// 拦截 XMLHttpRequest、fetch、HLS.js 等，捕获视频链接并通过 Tauri 事件发送
@@ -344,8 +350,8 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
 
-    // 开发阶段可见，Release 阶段隐藏
-    let is_visible = cfg!(debug_assertions);
+    // 开发和 Release 都默认隐藏；仅在遇到 CF 时由共享逻辑自动显示。
+    let is_visible = false;
 
     let window =
         WebviewWindowBuilder::new(app, VIDEO_FINDER_LABEL, WebviewUrl::External(parsed_url))
@@ -355,6 +361,18 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
             .visible(is_visible)
             .build()
             .map_err(|e| format!("创建 WebView 窗口失败: {}", e))?;
+
+    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, false);
+
+    let cf_event_name = webview_support::next_event_name("video-finder-cf-status");
+    let cf_listener_id = webview_support::listen_cf_visibility(
+        app,
+        &window,
+        &cf_event_name,
+        is_visible,
+        Some(VIDEO_FINDER_CF_STATE_EVENT),
+    );
+    let cf_probe_js = webview_support::build_cf_probe_script(&cf_event_name);
 
     // 页面加载后注入拦截脚本
     let window_clone = window.clone();
@@ -375,10 +393,19 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
                 }
             }
 
+            if let Err(e) = window_clone.eval(&cf_probe_js) {
+                if i % 20 == 0 {
+                    println!("[video_finder] CF 探测失败 (第 {} 次): {}", i, e);
+                }
+            }
+
             // 前 10 秒每 250ms 注入一次（更积极），之后每 1 秒
             let delay = if i < 40 { 250 } else { 1000 };
             tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
         }
+
+        app_clone.unlisten(cf_listener_id);
+        webview_support::emit_cf_state(&app_clone, VIDEO_FINDER_CF_STATE_EVENT, false);
     });
 
     Ok(())
@@ -386,6 +413,7 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
 
 /// 关闭视频查找 WebView 窗口
 pub fn close_video_finder_webview(app: &AppHandle) -> Result<(), String> {
+    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, false);
     if let Some(window) = app.get_webview_window(VIDEO_FINDER_LABEL) {
         window.close().map_err(|e| format!("关闭窗口失败: {}", e))?;
     }

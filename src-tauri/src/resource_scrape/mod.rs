@@ -18,3 +18,4 @@ pub mod commands;
 pub mod queue_manager;
 pub mod video_finder;
 pub mod cover_capture;
+pub mod webview_support;

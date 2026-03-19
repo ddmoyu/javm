@@ -9,6 +9,7 @@ use tauri::AppHandle;
 
 use super::client;
 use super::sources::{FetchMode, ResourceSite};
+use super::webview_support;
 
 /// 双模式获取器
 pub struct Fetcher {
@@ -21,6 +22,9 @@ const WEBVIEW_TIMEOUT_SECS: u64 = 60;
 
 /// WebView 窗口标识
 const WEBVIEW_WINDOW_LABEL: &str = "resource_scrape_webview";
+
+/// 前端刮削 CF 状态事件
+const RESOURCE_SCRAPE_CF_STATE_EVENT: &str = "resource-scrape-cf-state";
 
 impl Fetcher {
     /// 创建新的获取器
@@ -42,20 +46,32 @@ impl Fetcher {
     /// 步骤：
     /// 1. 创建或复用隐藏的 WebView 窗口
     /// 2. 导航到目标 URL
-    /// 3. 轮询等待 document.readyState === 'complete'（跳过 CF 验证页）
+    /// 3. 遇到 Cloudflare 验证时自动显示窗口，验证完成后自动隐藏
     /// 4. 通过事件机制获取 document.documentElement.outerHTML
     /// 5. 超时 60 秒
     pub async fn fetch_webview(app: &AppHandle, url: &str) -> Result<String, String> {
         use tauri::Listener;
 
         let window = get_or_create_webview_window(app, url)?;
+        webview_support::sync_window_visibility(&window, false);
+        webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
+
+        let cf_event_name = webview_support::next_event_name("resource-scrape-cf-status");
+        let html_event_name = webview_support::next_event_name("resource-scrape-html-result");
+        let cf_listener_id = webview_support::listen_cf_visibility(
+            app,
+            &window,
+            &cf_event_name,
+            false,
+            Some(RESOURCE_SCRAPE_CF_STATE_EVENT),
+        );
 
         // 使用 oneshot channel 接收 HTML 结果
         let (tx, mut rx) = tokio::sync::oneshot::channel::<String>();
         let tx = std::sync::Mutex::new(Some(tx));
 
         // 监听 webview-html-result 事件（JS 端通过 __TAURI__.event.emit 发送）
-        let listener_id = app.listen("webview-html-result", move |event| {
+        let listener_id = app.listen(html_event_name.clone(), move |event| {
             if let Some(tx) = tx.lock().unwrap().take() {
                 // 事件 payload 是 JSON 字符串，需要反序列化
                 let payload = event.payload().to_string();
@@ -67,33 +83,11 @@ impl Fetcher {
 
         // 轮询等待页面就绪，然后通过 eval 触发事件发送 HTML
         let max_attempts = WEBVIEW_TIMEOUT_SECS * 2; // 每 500ms 检查一次
+        let js = webview_support::build_html_extract_script(&cf_event_name, &html_event_name);
         for attempt in 0..max_attempts {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-            // 注入检测+提取脚本
-            let js = r#"
-                (function() {
-                    try {
-                        if (document.readyState !== 'complete') return;
-                        if (!document.body || document.body.innerHTML.length < 100) return;
-                        // 跳过 Cloudflare 验证页面
-                        var cfForm = document.querySelector('.challenge-form') !== null;
-                        var cfTurnstile = document.querySelector('.cf-turnstile') !== null
-                            || document.querySelector('[id*="turnstile"]') !== null;
-                        var cfMoment = document.title === 'Just a moment...'
-                            || (document.body.innerText.trim().length < 200
-                                && document.body.innerHTML.indexOf('Just a moment') !== -1);
-                        if (cfForm || cfTurnstile || cfMoment) return;
-                        // 页面就绪，发送 HTML
-                        if (window.__TAURI__ && window.__TAURI__.event) {
-                            window.__TAURI__.event.emit('webview-html-result',
-                                document.documentElement.outerHTML);
-                        }
-                    } catch(e) {}
-                })();
-            "#;
-
-            if let Err(e) = window.eval(js) {
+            if let Err(e) = window.eval(&js) {
                 if attempt % 20 == 0 {
                     println!("[WebView 获取] eval 失败 (第 {} 次): {}", attempt, e);
                 }
@@ -104,6 +98,8 @@ impl Fetcher {
             match rx.try_recv() {
                 Ok(html) => {
                     app.unlisten(listener_id);
+                    app.unlisten(cf_listener_id);
+                    webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
                     // 隐藏窗口以便复用
                     let _ = window.hide();
                     return Ok(html);
@@ -113,6 +109,8 @@ impl Fetcher {
                 }
                 Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
                     app.unlisten(listener_id);
+                    app.unlisten(cf_listener_id);
+                    webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
                     let _ = window.hide();
                     return Err("WebView HTML 接收通道已关闭".to_string());
                 }
@@ -121,6 +119,8 @@ impl Fetcher {
 
         // 超时
         app.unlisten(listener_id);
+        app.unlisten(cf_listener_id);
+        webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
         let _ = window.hide();
         Err(format!("WebView 获取超时（{}秒）", WEBVIEW_TIMEOUT_SECS))
     }
@@ -202,9 +202,11 @@ fn get_or_create_webview_window(
 
     // 尝试复用已有窗口
     if let Some(window) = app.get_webview_window(WEBVIEW_WINDOW_LABEL) {
+        let _ = window.hide();
         // 导航到新 URL
+        let url_json = serde_json::to_string(url).map_err(|e| format!("URL 序列化失败: {}", e))?;
         window
-            .eval(&format!("window.location.href = '{}';", url))
+            .eval(&format!("window.location.href = {};", url_json))
             .map_err(|e| format!("WebView 导航失败: {}", e))?;
         return Ok(window);
     }

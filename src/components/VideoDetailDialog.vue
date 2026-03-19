@@ -38,7 +38,8 @@ import {
     Camera,
     MoreHorizontal,
     Trash2,
-    Download
+    Download,
+    ShieldAlert
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import type { Video } from '@/types'
@@ -1026,7 +1027,16 @@ const downloadLongScreenshot = async () => {
                     </ScrollArea>
 
                     <!-- Footer Actions -->
-                    <div class="p-4 border-t bg-muted/20 flex items-center gap-3">
+                    <div class="p-4 border-t bg-muted/20 flex flex-col gap-3">
+                        <div v-if="scrapeStore.cfChallengeActive"
+                            class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900">
+                            <ShieldAlert class="mt-0.5 size-4 shrink-0" />
+                            <div>
+                                当前正在等待 Cloudflare 验证，请在弹出的 WebView 中完成操作，验证通过后会自动继续刮削。
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
                         <!-- 更多按钮（最左侧） -->
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
@@ -1067,6 +1077,7 @@ const downloadLongScreenshot = async () => {
                             <Play class="mr-2 size-4" fill="currentColor" />
                             播放
                         </Button>
+                        </div>
                     </div>
                 </div>
             </div>

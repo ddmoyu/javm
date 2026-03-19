@@ -5,7 +5,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::{Mutex, Semaphore};
 
 #[cfg(windows)]
@@ -28,6 +28,36 @@ pub struct DownloadProgress {
     pub downloaded: u64,
     pub total: u64,
     pub status: i32,
+}
+
+fn strip_ansi_escape_codes(line: &str) -> String {
+    lazy_static::lazy_static! {
+        static ref ANSI_ESCAPE_REGEX: Regex =
+            Regex::new(r"\x1B\[[0-?]*[ -/]*[@-~]").unwrap();
+    }
+
+    ANSI_ESCAPE_REGEX.replace_all(line, "").to_string()
+}
+
+fn collect_output_segments(pending: &mut String) -> Vec<String> {
+    let mut segments = Vec::new();
+    let mut last_index = 0usize;
+
+    for (index, ch) in pending.char_indices() {
+        if ch == '\n' || ch == '\r' {
+            let segment = pending[last_index..index].trim();
+            if !segment.is_empty() {
+                segments.push(segment.to_string());
+            }
+            last_index = index + ch.len_utf8();
+        }
+    }
+
+    if last_index > 0 {
+        pending.drain(..last_index);
+    }
+
+    segments
 }
 
 #[derive(Clone)]
@@ -90,8 +120,7 @@ impl DownloadManager {
         Box::pin(async move {
             let task = {
                 let mut queue = manager.queue.lock().await;
-                let task = queue.pop_front();
-                task
+                queue.pop_front()
             };
 
             if let Some(task) = task {
@@ -108,11 +137,7 @@ impl DownloadManager {
                 let handle = tokio::spawn(async move {
                     let _permit = permit.unwrap();
                     let result = execute_download(app_clone, task).await;
-                    if let Err(_e) = result {
-                        // ignore error
-                    } else {
-                        // ignore success
-                    }
+                    let _ = result;
 
                     if let Some(manager_state) = app_state.try_state::<DownloadManager>() {
                         {
@@ -259,7 +284,10 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
     let http_client = client::create_client()?;
     let fetcher = Fetcher::new(http_client.clone());
 
-    let webview_enabled = false;
+    let webview_enabled = crate::settings::get_settings(app.clone())
+        .await
+        .map(|settings| settings.scrape.webview_enabled)
+        .unwrap_or(false);
     let html = fetcher
         .fetch(app, &url, site, webview_enabled)
         .await
@@ -540,8 +568,7 @@ pub(crate) async fn execute_download(
     app: tauri::AppHandle,
     task: DownloadTask,
 ) -> Result<(), String> {
-    use tauri::{Emitter, Manager};
-    use tokio::io::{AsyncBufReadExt, BufReader};
+    use tokio::io::{AsyncReadExt, BufReader};
     use tokio::process::Command;
 
     let tool_name = "N_m3u8DL-RE";
@@ -585,7 +612,9 @@ pub(crate) async fn execute_download(
     cmd.stderr(Stdio::piped());
     configure_download_process(&mut cmd);
 
-    let child = cmd.spawn().map_err(|e| e.to_string())?;
+    let child = cmd.spawn().map_err(|e| {
+        format!("启动下载器失败: {}", e)
+    })?;
 
     // 将进程句柄存储到 DownloadManager 中，以便可以停止
     let child_arc = Arc::new(Mutex::new(Some(child)));
@@ -617,9 +646,21 @@ pub(crate) async fn execute_download(
     if let Some(stderr) = stderr {
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr);
-            let mut line = String::new();
-            while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
-                line.clear();
+            let mut pending = String::new();
+            let mut buffer = [0u8; 4096];
+
+            loop {
+                let bytes_read = match reader.read(&mut buffer).await {
+                    Ok(bytes_read) => bytes_read,
+                    Err(_) => break,
+                };
+
+                if bytes_read == 0 {
+                    break;
+                }
+
+                pending.push_str(&String::from_utf8_lossy(&buffer[..bytes_read]));
+                let _ = collect_output_segments(&mut pending);
             }
         });
     }
@@ -635,62 +676,95 @@ pub(crate) async fn execute_download(
 
     if let Some(stdout) = stdout {
         let mut reader = BufReader::new(stdout);
-        let mut line = String::new();
+        let mut pending = String::new();
+        let mut buffer = [0u8; 4096];
 
-        while reader.read_line(&mut line).await.unwrap_or(0) > 0 {
+        loop {
+            let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
+                format!("读取 stdout 失败: {}", e)
+            })?;
 
-            // 检测是否进入合并阶段
-            if is_nm3u8dl_merging(&line) {
-                if !is_merging {
-                    is_merging = true;
-
-                    if let Ok(conn) = db.get_connection() {
-                        let _ = conn.execute(
-                            "UPDATE downloads SET status = 3, updated_at = datetime('now') WHERE id = ?",
-                            [&task.id],
-                        );
-                    }
-
-                    let payload = DownloadProgress {
-                        task_id: task.id.clone(),
-                        progress: 99.0,
-                        speed: 0,
-                        downloaded: last_downloaded,
-                        total: last_total,
-                        status: 3,
-                    };
-                    app.emit("download-progress", &payload).ok();
-                    last_progress_update = std::time::Instant::now();
-                }
+            if bytes_read == 0 {
+                break;
             }
 
-            if let Some((progress, downloaded, total, speed)) = parse_nm3u8dl_progress(&line) {
+            pending.push_str(&String::from_utf8_lossy(&buffer[..bytes_read]));
+
+            for raw_line in collect_output_segments(&mut pending) {
+                let line = strip_ansi_escape_codes(&raw_line);
+                if line.is_empty() {
+                    continue;
+                }
+
+                // 检测是否进入合并阶段
+                if is_nm3u8dl_merging(&line) {
+                    if !is_merging {
+                        is_merging = true;
+
+                        if let Ok(conn) = db.get_connection() {
+                            let _ = conn.execute(
+                                "UPDATE downloads SET status = 3, updated_at = datetime('now') WHERE id = ?",
+                                [&task.id],
+                            );
+                        }
+
+                        let payload = DownloadProgress {
+                            task_id: task.id.clone(),
+                            progress: 99.0,
+                            speed: 0,
+                            downloaded: last_downloaded,
+                            total: last_total,
+                            status: 3,
+                        };
+                        app.emit("download-progress", &payload).ok();
+                        last_progress_update = std::time::Instant::now();
+                    }
+                }
+
+                if let Some((progress, downloaded, total, speed)) = parse_nm3u8dl_progress(&line) {
+                    last_total = total;
+                    last_downloaded = downloaded;
+
+                    let now = std::time::Instant::now();
+                    if now.duration_since(last_progress_update) >= progress_update_interval {
+                        let payload = DownloadProgress {
+                            task_id: task.id.clone(),
+                            progress,
+                            speed,
+                            downloaded,
+                            total,
+                            status: 2,
+                        };
+                        app.emit("download-progress", &payload).ok();
+
+                        if let Ok(conn) = db.get_connection() {
+                            let _ = conn.execute(
+                                "UPDATE downloads SET progress = ?, downloaded_bytes = ?, total_bytes = ?, updated_at = datetime('now') WHERE id = ?",
+                                rusqlite::params![progress, downloaded as i64, total as i64, task.id],
+                            );
+                        }
+
+                        last_progress_update = now;
+                    }
+                }
+            }
+        }
+
+        let remaining = strip_ansi_escape_codes(pending.trim());
+        if !remaining.is_empty() {
+            if let Some((progress, downloaded, total, speed)) = parse_nm3u8dl_progress(&remaining) {
                 last_total = total;
                 last_downloaded = downloaded;
-
-                let now = std::time::Instant::now();
-                if now.duration_since(last_progress_update) >= progress_update_interval {
-                    let payload = DownloadProgress {
-                        task_id: task.id.clone(),
-                        progress,
-                        speed,
-                        downloaded,
-                        total,
-                        status: 2,
-                    };
-                    app.emit("download-progress", &payload).ok();
-
-                    if let Ok(conn) = db.get_connection() {
-                        let _ = conn.execute(
-                            "UPDATE downloads SET progress = ?, downloaded_bytes = ?, total_bytes = ?, updated_at = datetime('now') WHERE id = ?",
-                            rusqlite::params![progress, downloaded as i64, total as i64, task.id],
-                        );
-                    }
-
-                    last_progress_update = now;
-                }
+                let payload = DownloadProgress {
+                    task_id: task.id.clone(),
+                    progress,
+                    speed,
+                    downloaded,
+                    total,
+                    status: 2,
+                };
+                app.emit("download-progress", &payload).ok();
             }
-            line.clear();
         }
     }
 
@@ -739,10 +813,20 @@ pub(crate) async fn execute_download(
 
         Ok(())
     } else {
+        let stderr_output = strip_ansi_escape_codes(String::from_utf8_lossy(&status.stderr).trim());
+        let stdout_output = strip_ansi_escape_codes(String::from_utf8_lossy(&status.stdout).trim());
+        let error_message = if !stderr_output.is_empty() {
+            format!("下载器退出失败: {}", stderr_output)
+        } else if !stdout_output.is_empty() {
+            format!("下载器退出失败: {}", stdout_output)
+        } else {
+            format!("下载器退出失败，exit_code={:?}", status.status.code())
+        };
+
         if let Ok(conn) = db.get_connection() {
             let _ = conn.execute(
                 "UPDATE downloads SET status = 7, error_message = ?, updated_at = datetime('now') WHERE id = ?",
-                rusqlite::params!["Process exited with error", task.id],
+                rusqlite::params![error_message, task.id],
             );
         }
         let fail_progress = DownloadProgress {
@@ -754,7 +838,7 @@ pub(crate) async fn execute_download(
             status: 7,
         };
         app.emit("download-progress", &fail_progress).ok();
-        Err("Download failed".to_string())
+        Err(error_message)
     }
 }
 

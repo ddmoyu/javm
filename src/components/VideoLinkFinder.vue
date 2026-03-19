@@ -64,8 +64,10 @@ const savePath = ref('')
 const adding = ref(false)
 const sites = ref<VideoSite[]>([])
 const selectedSiteId = ref('missav')
+const cfChallengeActive = ref(false)
 const seenUrls = new Set<string>()
 let unlisten: UnlistenFn | null = null
+let unlistenCf: UnlistenFn | null = null
 
 // 下载查重状态
 const duplicateCheckOpen = ref(false)
@@ -146,6 +148,18 @@ async function startFinding() {
     unlisten = await listen<string>('video-finder-link', (event) => {
       handleCapturedUrl(event.payload)
     })
+
+    unlistenCf = await listen<boolean>('video-finder-cf-state', (event) => {
+      const nextActive = Boolean(event.payload)
+      if (cfChallengeActive.value === nextActive) return
+
+      cfChallengeActive.value = nextActive
+      if (nextActive) {
+        toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
+      } else {
+        toast.success('Cloudflare 验证已通过，继续监听视频链接')
+      }
+    })
   } catch (e) {
     console.error('监听事件失败:', e)
   }
@@ -156,6 +170,7 @@ async function startFinding() {
   } catch (e: any) {
     toast.error(`打开查找窗口失败: ${e}`)
     scanning.value = false
+    cfChallengeActive.value = false
   }
 }
 
@@ -166,12 +181,14 @@ async function switchSite(siteId: string) {
   links.value = []
   selectedUrls.value = new Set()
   seenUrls.clear()
+  cfChallengeActive.value = false
   scanning.value = true
   try {
     await findVideoLinks(code.value.trim().toUpperCase(), siteId)
   } catch (e: any) {
     toast.error(`打开查找窗口失败: ${e}`)
     scanning.value = false
+    cfChallengeActive.value = false
   }
 }
 
@@ -179,6 +196,8 @@ async function switchSite(siteId: string) {
 async function stopFinding() {
   scanning.value = false
   if (unlisten) { unlisten(); unlisten = null }
+  if (unlistenCf) { unlistenCf(); unlistenCf = null }
+  cfChallengeActive.value = false
   try { await closeVideoFinder() } catch { /* 忽略 */ }
 }
 
@@ -334,6 +353,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (unlisten) { unlisten(); unlisten = null }
+  if (unlistenCf) { unlistenCf(); unlistenCf = null }
+  cfChallengeActive.value = false
+  closeVideoFinder().catch(() => { /* 忽略 */ })
 })
 </script>
 
@@ -373,11 +395,21 @@ onUnmounted(() => {
 
     <!-- 内容区域 -->
     <div class="flex-1 flex flex-col min-h-0 p-4 gap-3">
+      <div
+        v-if="cfChallengeActive"
+        class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900"
+      >
+        <Globe class="mt-0.5 size-4 shrink-0" />
+        <div>
+          当前页面触发了 Cloudflare 验证，辅助 WebView 已显示。请先在弹出的窗口中完成验证，链接捕获会自动继续。
+        </div>
+      </div>
+
       <!-- 扫描中，无结果 -->
       <div v-if="scanning && links.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
         <Loader2 class="size-8 animate-spin text-primary" />
-        <span class="text-sm text-muted-foreground">WebView 已打开，正在监听 HLS 链接...</span>
-        <span class="text-xs text-muted-foreground">正在访问 {{ selectedSiteName }}，请等待页面加载</span>
+        <span class="text-sm text-muted-foreground">{{ cfChallengeActive ? '等待 Cloudflare 验证完成...' : 'WebView 已打开，正在监听 HLS 链接...' }}</span>
+        <span class="text-xs text-muted-foreground">{{ cfChallengeActive ? '请在弹出的窗口中完成验证后返回' : `正在访问 ${selectedSiteName}，请等待页面加载` }}</span>
       </div>
 
       <!-- 未开始 -->
