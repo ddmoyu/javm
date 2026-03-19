@@ -255,17 +255,16 @@ const onInteractOutside = (e: Event) => {
   if (isFancyboxOpen()) e.preventDefault()
 }
 
-const previewThumbs = computed(() => {
-  return (selectedResult.value?.thumbs ?? [])
-    .map((thumb, idx) => {
-      const src = toImageSrc(thumb) ?? thumb
-      if (!src) return null
-      return {
-        src,
-        title: `预览图 ${idx + 1}`,
-      }
-    })
-    .filter((item): item is PreviewImage => item !== null)
+const previewThumbs = computed<PreviewImage[]>(() => {
+  return (selectedResult.value?.thumbs ?? []).flatMap((thumb, idx) => {
+    const src = toImageSrc(thumb) ?? thumb
+    if (!src) return []
+
+    return [{
+      src,
+      title: `预览图 ${idx + 1}`,
+    }]
+  })
 })
 
 const previewStartIndex = computed(() => {
