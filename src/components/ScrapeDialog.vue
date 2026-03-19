@@ -18,6 +18,7 @@ import { useResourceScrapeStore } from '@/stores/resourceScrape'
 import type { ResourceItem } from '@/types'
 import { openImagePreview, isFancyboxOpen } from '@/composables/useImagePreview'
 import { usePreviewGallery } from '@/composables/usePreviewGallery'
+import { toImageSrc } from '@/utils/image'
 
 // 引入 resourceScrape store，使用新架构的搜索方法
 const scrapeStore = useResourceScrapeStore()
