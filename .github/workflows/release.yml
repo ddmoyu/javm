@@ -59,6 +59,7 @@ jobs:
           "body_path=$fallbackPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Create or update GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v2
         with:
           body_path: ${{ steps.release_notes.outputs.body_path }}
@@ -68,15 +69,11 @@ jobs:
       - name: Resolve release id
         id: resolve_release_id
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          $repo = '${{ github.repository }}'
-          $tag = '${{ github.ref_name }}'
-          $releaseId = gh api "repos/$repo/releases/tags/$tag" --jq '.id'
+          $releaseId = '${{ steps.create_release.outputs.id }}'
 
           if ([string]::IsNullOrWhiteSpace($releaseId)) {
-            throw "未能解析 tag=$tag 对应的 release id。"
+            throw "未能从 create_release 步骤获取 release id。"
           }
 
           "release_id=$releaseId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
