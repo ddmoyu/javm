@@ -106,6 +106,8 @@ pub struct ScrapeSettings {
     pub concurrent: u32,
     #[serde(rename = "scraperPriority")]
     pub scraper_priority: Vec<String>,
+    #[serde(rename = "webviewEnabled", default)]
+    pub webview_enabled: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -217,6 +219,7 @@ impl Default for ScrapeSettings {
         Self {
             concurrent: 5,
             scraper_priority: vec!["javbus".to_string(), "javdb".to_string()],
+            webview_enabled: false,
         }
     }
 }

@@ -280,8 +280,10 @@ impl TaskQueueManager {
         let http_client = client::create_client()?;
         let fetcher = Fetcher::new(http_client.clone());
 
-        // 当前默认不启用 WebView（后续可从 settings 读取）
-        let webview_enabled = false;
+        let webview_enabled = crate::settings::get_settings(self.app.clone())
+            .await
+            .map(|settings| settings.scrape.webview_enabled)
+            .unwrap_or(false);
         let html = fetcher
             .fetch(&self.app, &url, &site, webview_enabled)
             .await

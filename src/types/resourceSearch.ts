@@ -10,6 +10,7 @@ export interface ResourceItem {
   source?: string       // 数据来源（数据源名称）
   coverUrl?: string     // 封面图 URL（可能是本地缓存路径）
   remoteCoverUrl?: string // 原始远程封面 URL（代理后保留）
+  remoteThumbs?: string[] // 原始远程预览图 URL（代理后保留）
   director?: string     // 导演
   tags?: string         // 标签/分类（逗号分隔）
   premiered?: string    // 发行日期

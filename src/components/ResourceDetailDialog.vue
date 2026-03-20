@@ -19,7 +19,7 @@ import {
 } from 'lucide-vue-next'
 import { openImagePreview, openLongScreenshot, isFancyboxOpen } from '@/composables/useImagePreview'
 import { toImageSrc } from '@/utils/image'
-import type { PreviewImage } from '@/composables/useImagePreview'
+import { usePreviewGallery } from '@/composables/usePreviewGallery'
 import { toast } from 'vue-sonner'
 
 interface Props {
@@ -48,14 +48,9 @@ const onInteractOutside = (e: Event) => {
 const coverLoading = ref(true)
 const longScreenshotLoading = ref(false)
 
-/** 所有可查看的图片 */
-const allImages = computed<PreviewImage[]>(() => {
-  const images: PreviewImage[] = []
-  if (props.resource?.coverUrl) {
-    const src = toImageSrc(props.resource.coverUrl) ?? props.resource.coverUrl
-    images.push({ src, title: '封面' })
-  }
-  return images
+const { previewThumbs, allImages, previewStartIndex } = usePreviewGallery({
+  getCoverUrl: () => props.resource?.coverUrl,
+  getThumbs: () => props.resource?.thumbs ?? [],
 })
 
 // 关闭对话框时重置加载状态
@@ -76,6 +71,10 @@ function displayValue(value: string | undefined): string {
 function openImageViewer(index: number) {
   if (allImages.value.length === 0) return
   openImagePreview(allImages.value, index)
+}
+
+function openPreviewThumbViewer(index: number) {
+  openImageViewer(previewStartIndex.value + index)
 }
 
 /** 查找视频下载链接 */
@@ -222,6 +221,30 @@ function handleViewScreenshot() {
                       <span class="ml-1 text-sm text-muted-foreground">{{ resource.rating }}</span>
                     </template>
                     <span v-else class="text-sm">-</span>
+                  </div>
+                </div>
+
+                <div class="space-y-2">
+                  <Label class="text-[10px] text-muted-foreground uppercase tracking-wider">预览图</Label>
+                  <div v-if="previewThumbs.length > 0" class="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                    <button
+                      v-for="(thumb, idx) in previewThumbs"
+                      :key="thumb.src + idx"
+                      type="button"
+                      class="group overflow-hidden rounded-md border bg-background/50 shadow-sm transition-all hover:ring-2 hover:ring-primary"
+                      @click="openPreviewThumbViewer(idx)"
+                    >
+                      <img
+                        :src="thumb.src"
+                        :alt="thumb.title ?? `预览图 ${idx + 1}`"
+                        class="aspect-video w-full object-cover transition-transform group-hover:scale-[1.02]"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    </button>
+                  </div>
+                  <div v-else class="rounded-md border border-dashed bg-background/30 px-4 py-6 text-sm text-muted-foreground">
+                    暂无预览图
                   </div>
                 </div>
               </div>

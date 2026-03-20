@@ -13,9 +13,90 @@ use super::sources;
 use super::sources::{ResourceSite, Source};
 use crate::analytics;
 use tauri::{AppHandle, Emitter};
+use url::Url;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+fn normalize_result_image_url(raw: &str, base_url: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    if trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+        || trimmed.starts_with("data:")
+        || trimmed.starts_with("blob:")
+        || trimmed.starts_with("file://")
+        || trimmed.contains(":\\")
+        || trimmed.starts_with("\\\\")
+    {
+        return trimmed.to_string();
+    }
+
+    if trimmed.starts_with("//") {
+        if let Ok(base) = Url::parse(base_url) {
+            return format!("{}:{}", base.scheme(), trimmed);
+        }
+        return format!("https:{}", trimmed);
+    }
+
+    if let Ok(base) = Url::parse(base_url) {
+        if let Ok(resolved) = base.join(trimmed) {
+            return resolved.to_string();
+        }
+    }
+
+    trimmed.to_string()
+}
+
+fn normalize_search_result_urls(result: &mut SearchResult, base_url: &str) {
+    result.cover_url = normalize_result_image_url(&result.cover_url, base_url);
+    result.poster_url = normalize_result_image_url(&result.poster_url, base_url);
+    result.thumbs = result
+        .thumbs
+        .iter()
+        .map(|thumb| normalize_result_image_url(thumb, base_url))
+        .filter(|thumb| !thumb.is_empty())
+        .collect();
+}
+
+async fn proxy_preview_images_to_files(
+    client: &reqwest::Client,
+    thumbs: &[String],
+    referer: &str,
+) -> (Vec<String>, Option<Vec<String>>) {
+    let mut display_urls = Vec::with_capacity(thumbs.len());
+    let mut remote_urls = Vec::with_capacity(thumbs.len());
+    let mut has_remote_urls = false;
+
+    for thumb in thumbs {
+        let trimmed = thumb.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+            has_remote_urls = true;
+            remote_urls.push(trimmed.to_string());
+
+            match proxy_image_to_file(client, trimmed, referer).await {
+                Ok(local_path) => display_urls.push(local_path),
+                Err(e) => {
+                    println!("[搜索] 预览图代理失败: {}", e);
+                    display_urls.push(trimmed.to_string());
+                }
+            }
+        } else {
+            display_urls.push(trimmed.to_string());
+            remote_urls.push(trimmed.to_string());
+        }
+    }
+
+    let remote_urls = if has_remote_urls { Some(remote_urls) } else { None };
+    (display_urls, remote_urls)
+}
 
 /// 搜索资源：并发请求所有数据源，每个结果通过事件流式推送
 ///
@@ -85,30 +166,43 @@ pub async fn rs_search_resource(
                     println!("[搜索] {} 返回 {} 字符", name, html.len());
 
                     // 检查是否需要二次请求详情页
-                    let (parse_html, detail_url) = if let Some(detail) =
+                    let (parse_html, page_url) = if let Some(detail) =
                         source.extract_detail_url(&html, &code)
                     {
                         println!("[搜索] {} 需要二次请求: {}", name, detail);
                         match client::fetch_html(&client, &detail).await {
                             Ok((du, dh)) => {
                                 println!("[搜索] {} 详情页 {} 返回 {} 字符", name, du, dh.len());
-                                (dh, Some(detail))
+                                (dh, du)
                             }
                             Err(e) => {
                                 println!("[搜索] {} 详情页请求失败: {}，回退到搜索页", name, e);
-                                (html, None)
+                                (html, final_url.clone())
                             }
                         }
                     } else {
-                        (html, None)
+                        (html, final_url.clone())
                     };
 
                     if let Some(mut result) = source.parse(&parse_html, &code) {
+                        normalize_search_result_urls(&mut result, &page_url);
+
+                        if !result.thumbs.is_empty() {
+                            let (display_thumbs, remote_thumbs) = proxy_preview_images_to_files(
+                                &client,
+                                &result.thumbs,
+                                page_url.as_str(),
+                            )
+                            .await;
+                            result.thumbs = display_thumbs;
+                            result.remote_thumb_urls = remote_thumbs;
+                        }
+
                         // 对防盗链图片做后端代理（下载到临时文件，返回本地路径）
                         if result.cover_url.starts_with("http://")
                             || result.cover_url.starts_with("https://")
                         {
-                            let referer_url = detail_url.as_deref().unwrap_or(&url);
+                            let referer_url = page_url.as_str();
                             match proxy_image_to_file(&client, &result.cover_url, referer_url).await
                             {
                                 Ok(local_path) => {
@@ -320,7 +414,10 @@ pub fn search_result_to_metadata(sr: &SearchResult) -> ScrapeMetadata {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect(),
-        thumbs: sr.thumbs.clone(),
+        thumbs: sr
+            .remote_thumb_urls
+            .clone()
+            .unwrap_or_else(|| sr.thumbs.clone()),
     }
 }
 

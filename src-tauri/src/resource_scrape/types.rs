@@ -37,6 +37,9 @@ pub struct SearchResult {
     /// 预览图 URL 列表
     #[serde(default)]
     pub thumbs: Vec<String>,
+    /// 原始远程预览图 URL 列表（代理后保留，用于保存时下载）
+    #[serde(default, alias = "remoteThumbs", alias = "remoteThumbUrls", skip_serializing_if = "Option::is_none")]
+    pub remote_thumb_urls: Option<Vec<String>>,
     /// 简介
     #[serde(default)]
     pub plot: String,

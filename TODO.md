@@ -29,4 +29,5 @@ https://v2.tauri.app/plugin/updater/
 https://github.com/tauri-apps/tauri-action
 
 18. 刮削还是有 cf 验证问题，目前好像不正常，导致无法获取视频地址
-19. 刮削，搜索结果弹框，不显示预览图，应该是已经拿到了，但是没有显示
+
+19. 下载结束，刮削结束，如果此时在多媒体页，那这个视频卡片没有刷新，不显示封面

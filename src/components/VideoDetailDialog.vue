@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { toImageSrc } from '@/utils/image'
 import { openImagePreview, isFancyboxOpen } from '@/composables/useImagePreview'
-import type { PreviewImage } from '@/composables/useImagePreview'
+import { usePreviewGallery } from '@/composables/usePreviewGallery'
 import {
     Dialog,
     DialogContent,
@@ -38,7 +38,8 @@ import {
     Camera,
     MoreHorizontal,
     Trash2,
-    Download
+    Download,
+    ShieldAlert
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import type { Video } from '@/types'
@@ -84,41 +85,30 @@ const showDeleteConfirm = ref(false) // 删除确认对话框状态
 const coverCacheBuster = ref(0) // 封面缓存刷新标记
 const resolvedPreviewSources = ref<VideoPreviewSource[]>([])
 const pendingPreviewThumbs = ref<string[]>([])
+const pendingRemotePreviewThumbs = ref<string[]>([])
 const pendingPosterSource = ref<string | undefined>(undefined)
 const pendingRemoteCoverUrl = ref('')
 
 const INVALID_TITLE_CHARS = new Set(['<', '>', ':', '"', '/', '\\', '|', '?', '*'])
 const RESERVED_TITLE_PATTERN = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 
-// Image viewer state - 使用 Fancybox 统一预览
-const allImages = computed(() => {
-    const images: PreviewImage[] = []
-    // 封面
-    if (imageSrc.value) {
-        images.push({
-            src: imageSrc.value,
-            title: '封面',
-            hasLocalVideo: !!props.video?.videoPath,
-        })
+function resetPendingPreviewState() {
+    pendingPreviewThumbs.value = []
+    pendingRemotePreviewThumbs.value = []
+}
+
+function resetPendingCoverState() {
+    pendingPosterSource.value = undefined
+    pendingRemoteCoverUrl.value = ''
+}
+
+function resetScrapePendingState(options: { previews?: boolean } = {}) {
+    const { previews = true } = options
+    resetPendingCoverState()
+    if (previews) {
+        resetPendingPreviewState()
     }
-    // 预览图
-    thumbSources.value.forEach((item, idx) => {
-        const finalSrc = toImageSrc(item.src)
-        if (finalSrc) {
-            images.push({
-                src: finalSrc,
-                title: `预览图 ${idx + 1}`,
-                hasLocalVideo: !!item.localPath,
-                data: {
-                    thumbIndex: idx,
-                    thumbPath: item.localPath ?? item.remoteUrl ?? item.src,
-                    localPath: item.localPath ?? null,
-                },
-            })
-        }
-    })
-    return images
-})
+}
 
 const isOpen = computed({
     get: () => props.open,
@@ -193,9 +183,7 @@ watch(() => props.video, (newVal) => {
         formData.value = { ...newVal }
         isDirty.value = false
         hasScrapedData.value = false // 重置刮削状态
-        pendingPreviewThumbs.value = []
-        pendingPosterSource.value = undefined
-        pendingRemoteCoverUrl.value = ''
+        resetScrapePendingState()
         void loadResolvedPreviewSources(newVal.videoPath)
 
         // 如果有标题但没有番号，自动使用正则识别
@@ -209,9 +197,7 @@ watch(() => props.video, (newVal) => {
 watch(() => props.open, (isOpen) => {
     if (!isOpen) {
         hasScrapedData.value = false // 关闭时重置刮削状态
-        pendingPreviewThumbs.value = []
-        pendingPosterSource.value = undefined
-        pendingRemoteCoverUrl.value = ''
+        resetScrapePendingState()
     } else if (props.video?.videoPath) {
         void loadResolvedPreviewSources(props.video.videoPath)
     }
@@ -236,7 +222,33 @@ const thumbSources = computed<VideoPreviewSource[]>(() => {
     return []
 })
 
-const previewThumbs = computed(() => thumbSources.value.map((item) => item.src))
+const { previewThumbs: previewImages, allImages, previewStartIndex } = usePreviewGallery<VideoPreviewSource>({
+    getCoverImage: () => {
+        if (!imageSrc.value) return null
+
+        return {
+            src: imageSrc.value,
+            title: '封面',
+            hasLocalVideo: !!props.video?.videoPath,
+        }
+    },
+    getThumbs: () => thumbSources.value,
+    createThumbImage: (item, idx) => {
+        const src = toImageSrc(item.src)
+        if (!src) return null
+
+        return {
+            src,
+            title: `预览图 ${idx + 1}`,
+            hasLocalVideo: !!item.localPath,
+            data: {
+                thumbIndex: idx,
+                thumbPath: item.localPath ?? item.remoteUrl ?? item.src,
+                localPath: item.localPath ?? null,
+            },
+        }
+    },
+})
 
 async function loadResolvedPreviewSources(videoPath?: string) {
     if (!videoPath?.trim()) {
@@ -397,6 +409,7 @@ const handleScrape = async () => {
         pendingPosterSource.value = best.coverUrl || formData.value.poster
         pendingRemoteCoverUrl.value = best.remoteCoverUrl || best.coverUrl || ''
         pendingPreviewThumbs.value = best.thumbs || []
+        pendingRemotePreviewThumbs.value = best.remoteThumbs || best.thumbs || []
 
         hasScrapedData.value = true
         isDirty.value = true
@@ -461,6 +474,7 @@ const handleSave = async () => {
                 premiered: formData.value.premiered || '',
                 rating: typeof formData.value.rating === 'number' ? formData.value.rating : undefined,
                 thumbs: pendingPreviewThumbs.value,
+                remoteThumbs: pendingRemotePreviewThumbs.value,
                 originalTitle: formData.value.originalTitle,
                 targetTitle: formData.value.title,
             }
@@ -503,9 +517,7 @@ const handleSave = async () => {
         // 重新获取视频列表以确保状态同步
         await videoStore.fetchVideos()
         await loadResolvedPreviewSources(updatedVideoInfo.videoPath)
-        pendingPreviewThumbs.value = []
-        pendingPosterSource.value = undefined
-        pendingRemoteCoverUrl.value = ''
+        resetScrapePendingState()
 
         isDirty.value = false
         hasScrapedData.value = false // 保存后重置刮削状态
@@ -565,6 +577,10 @@ const openImageViewer = (index: number) => {
             }
         },
     })
+}
+
+const openPreviewThumbViewer = (index: number) => {
+    openImageViewer(previewStartIndex.value + index)
 }
 
 // AI识别番号（直接使用 AI，不使用正则）
@@ -685,8 +701,7 @@ const deleteCover = async () => {
         // 更新表单数据
         formData.value.thumb = undefined
         formData.value.poster = undefined
-        pendingPosterSource.value = undefined
-        pendingRemoteCoverUrl.value = ''
+        resetPendingCoverState()
 
         // 刷新缓存
         coverCacheBuster.value = Date.now()
@@ -744,7 +759,7 @@ const clearThumbs = async () => {
             videoId: props.video.id,
             videoPath: props.video.videoPath,
         })
-        pendingPreviewThumbs.value = []
+        resetPendingPreviewState()
 
         // 重新获取视频列表
         await videoStore.fetchVideos()
@@ -852,13 +867,13 @@ const downloadLongScreenshot = async () => {
                                 <ContextMenuTrigger as-child>
                                     <ScrollArea class="h-full bg-background/50 rounded-md border p-2">
                                         <div class="flex flex-col gap-3">
-                                            <div v-for="(src, idx) in previewThumbs" :key="idx"
+                                            <div v-for="(thumb, idx) in previewImages" :key="thumb.src + idx"
                                                 class="rounded-md overflow-hidden border shadow-sm relative group bg-black/5 cursor-pointer hover:ring-2 hover:ring-primary transition-all"
-                                                @click="openImageViewer(idx + 1)">
-                                                <img :src="toImageSrc(src) ?? ''" class="w-full h-auto object-cover"
+                                                @click="openPreviewThumbViewer(idx)">
+                                                <img :src="thumb.src" class="w-full h-auto object-cover"
                                                     loading="lazy" referrerPolicy="no-referrer" />
                                             </div>
-                                            <div v-if="previewThumbs.length === 0"
+                                            <div v-if="previewImages.length === 0"
                                                 class="flex flex-col items-center justify-center py-8 text-muted-foreground gap-3">
                                                 <span class="text-xs">暂无预览图</span>
                                                 <Button variant="outline" size="sm"
@@ -889,7 +904,7 @@ const downloadLongScreenshot = async () => {
                                         下载长截图
                                     </ContextMenuItem>
                                     <ContextMenuSeparator />
-                                    <ContextMenuItem @click="clearThumbs" :disabled="previewThumbs.length === 0"
+                                    <ContextMenuItem @click="clearThumbs" :disabled="previewImages.length === 0"
                                         class="text-destructive focus:text-destructive">
                                         <Trash2 class="mr-2 size-4" />
                                         清空预览图
@@ -1012,7 +1027,16 @@ const downloadLongScreenshot = async () => {
                     </ScrollArea>
 
                     <!-- Footer Actions -->
-                    <div class="p-4 border-t bg-muted/20 flex items-center gap-3">
+                    <div class="p-4 border-t bg-muted/20 flex flex-col gap-3">
+                        <div v-if="scrapeStore.cfChallengeActive"
+                            class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900">
+                            <ShieldAlert class="mt-0.5 size-4 shrink-0" />
+                            <div>
+                                当前正在等待 Cloudflare 验证，请在弹出的 WebView 中完成操作，验证通过后会自动继续刮削。
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
                         <!-- 更多按钮（最左侧） -->
                         <DropdownMenu>
                             <DropdownMenuTrigger as-child>
@@ -1053,6 +1077,7 @@ const downloadLongScreenshot = async () => {
                             <Play class="mr-2 size-4" fill="currentColor" />
                             播放
                         </Button>
+                        </div>
                     </div>
                 </div>
             </div>

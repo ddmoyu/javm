@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Sparkles, Loader2 } from 'lucide-vue-next'
+import { Sparkles, Loader2, ShieldAlert } from 'lucide-vue-next'
 import {
   Dialog,
   DialogContent,
@@ -16,9 +16,9 @@ import { invoke } from '@tauri-apps/api/core'
 import { toast } from 'vue-sonner'
 import { useResourceScrapeStore } from '@/stores/resourceScrape'
 import type { ResourceItem } from '@/types'
-import { toImageSrc } from '@/utils/image'
 import { openImagePreview, isFancyboxOpen } from '@/composables/useImagePreview'
-import type { PreviewImage } from '@/composables/useImagePreview'
+import { usePreviewGallery } from '@/composables/usePreviewGallery'
+import { toImageSrc } from '@/utils/image'
 
 // 引入 resourceScrape store，使用新架构的搜索方法
 const scrapeStore = useResourceScrapeStore()
@@ -255,31 +255,9 @@ const onInteractOutside = (e: Event) => {
   if (isFancyboxOpen()) e.preventDefault()
 }
 
-const previewThumbs = computed<PreviewImage[]>(() => {
-  return (selectedResult.value?.thumbs ?? []).flatMap((thumb, idx) => {
-    const src = toImageSrc(thumb) ?? thumb
-    if (!src) return []
-
-    return [{
-      src,
-      title: `预览图 ${idx + 1}`,
-    }]
-  })
-})
-
-const previewStartIndex = computed(() => {
-  return selectedResult.value?.coverUrl ? 1 : 0
-})
-
-// 构建可预览的图片列表（封面 + 预览图）
-const allPreviewImages = computed<PreviewImage[]>(() => {
-  const images: PreviewImage[] = []
-  if (selectedResult.value?.coverUrl) {
-    const src = toImageSrc(selectedResult.value.coverUrl) ?? selectedResult.value.coverUrl
-    images.push({ src, title: '封面' })
-  }
-  images.push(...previewThumbs.value)
-  return images
+const { previewThumbs, allImages: allPreviewImages, previewStartIndex } = usePreviewGallery({
+  getCoverUrl: () => selectedResult.value?.coverUrl,
+  getThumbs: () => selectedResult.value?.thumbs ?? [],
 })
 
 // 打开图片预览（Fancybox）
@@ -322,6 +300,16 @@ defineExpose({
               <Sparkles v-else class="size-4" />
             </Button>
           </div>
+        </div>
+      </div>
+
+      <div
+        v-if="scrapeStore.cfChallengeActive"
+        class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900"
+      >
+        <ShieldAlert class="mt-0.5 size-4 shrink-0" />
+        <div>
+          检测到 Cloudflare 验证，已显示辅助 WebView。请先在弹出的窗口中完成人机验证，当前刮削会自动继续。
         </div>
       </div>
 
