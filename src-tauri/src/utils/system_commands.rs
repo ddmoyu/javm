@@ -167,12 +167,15 @@ pub async fn proxy_hls_request(
     url: String,
     referer: Option<String>,
 ) -> Result<(String, String), String> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .use_rustls_tls()
-        .user_agent(DEFAULT_USER_AGENT)
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+    let client = crate::utils::proxy::apply_proxy_auto(
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .use_rustls_tls()
+            .user_agent(DEFAULT_USER_AGENT),
+    )
+    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?
+    .build()
+    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
     let mut req = client.get(&url);
 

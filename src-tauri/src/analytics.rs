@@ -655,10 +655,13 @@ async fn upload_payloads(
         return Ok((0, 0));
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(12))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::utils::proxy::apply_proxy_auto(
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(12)),
+    )
+    .map_err(|e| e.to_string())?
+    .build()
+    .map_err(|e| e.to_string())?;
 
     let endpoint = format!(
         "{}/rest/v1/{}?on_conflict=user_id",

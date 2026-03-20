@@ -9,13 +9,28 @@ const USER_AGENT: &str = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chr
 /// 请求超时（秒）
 const TIMEOUT_SECS: u64 = 30;
 
-/// 创建搜索用 HTTP 客户端（启用 cookie 支持，解决防盗链）
+/// 创建搜索用 HTTP 客户端（启用 cookie 支持，解决防盗链，自动应用代理）
 pub fn create_client() -> Result<Client, String> {
-    Client::builder()
+    crate::utils::proxy::apply_proxy_auto(
+        Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(Duration::from_secs(TIMEOUT_SECS))
+            .connect_timeout(Duration::from_secs(15))
+            .cookie_store(true),
+    )?
+    .build()
+    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+}
+
+/// 创建搜索用 HTTP 客户端（启用 cookie 支持，解决防盗链，指定目录读取代理）
+pub fn create_client_with_proxy(config_dir: &std::path::Path) -> Result<Client, String> {
+    let builder = Client::builder()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_secs(TIMEOUT_SECS))
         .connect_timeout(Duration::from_secs(15))
-        .cookie_store(true)
+        .cookie_store(true);
+
+    crate::utils::proxy::apply_proxy(builder, config_dir)?
         .build()
         .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
 }

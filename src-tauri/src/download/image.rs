@@ -19,13 +19,15 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 /// 默认 User-Agent
 const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-/// 创建默认的 HTTP 客户端
+/// 创建默认的 HTTP 客户端（自动应用代理）
 fn default_client() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-        .user_agent(DEFAULT_USER_AGENT)
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
+    crate::utils::proxy::apply_proxy_auto(
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+            .user_agent(DEFAULT_USER_AGENT),
+    )?
+    .build()
+    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
 }
 
 /// 从 URL 中提取 origin 作为 Referer（防盗链）

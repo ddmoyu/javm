@@ -202,8 +202,10 @@ export const useUpdaterStore = defineStore('updater', () => {
         return updateInfo.value
       }
 
+      const errMsg = error instanceof Error ? error.message : String(error)
+      console.error('检查更新失败:', errMsg)
       if (!options?.silentIfNoUpdate) {
-        toast.error('检查更新失败，请稍后重试')
+        toast.error(`检查更新失败: ${errMsg}`)
       }
       return null
     } finally {

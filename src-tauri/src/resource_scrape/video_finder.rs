@@ -434,10 +434,12 @@ pub struct HlsVerifyResult {
 
 /// 验证单个 URL 是否为 HLS 播放列表，并判断是否为 VOD
 pub async fn verify_hls(url: &str, referer: Option<&str>) -> HlsVerifyResult {
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent("Mozilla/5.0")
-        .build()
+    let client = match crate::utils::proxy::apply_proxy_auto(
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .user_agent("Mozilla/5.0"),
+    )
+    .and_then(|b| b.build().map_err(|e| format!("{e}")))
     {
         Ok(c) => c,
         Err(_) => {

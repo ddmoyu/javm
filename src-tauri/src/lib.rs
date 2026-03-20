@@ -57,8 +57,19 @@ fn is_updater_not_configured_error(message: &str) -> bool {
 }
 
 fn build_updater(app: &AppHandle) -> Result<tauri_plugin_updater::Updater, String> {
-    app.updater_builder()
-        .timeout(Duration::from_secs(20))
+    let mut builder = app
+        .updater_builder()
+        .header("User-Agent", "tauri-updater")
+        .map_err(|e| format!("设置请求头失败: {e}"))?
+        .timeout(Duration::from_secs(60));
+
+    if let Some(config_dir) = app.path().app_config_dir().ok() {
+        if let Some(proxy_url) = utils::proxy::resolve_proxy_url(&config_dir) {
+            builder = builder.proxy(proxy_url);
+        }
+    }
+
+    builder
         .build()
         .map_err(|e| format!("初始化更新器失败: {e}"))
 }
@@ -77,7 +88,7 @@ async fn check_app_update(app: AppHandle) -> Result<AppUpdateInfo, String> {
     let update = updater
         .check()
         .await
-        .map_err(|e| format!("检查更新失败: {e}"))?;
+        .map_err(|e| format!("检查更新失败: {e:?}"))?;
 
     if let Some(update) = update {
         Ok(AppUpdateInfo {
@@ -1810,12 +1821,15 @@ async fn download_remote_image(
 
     let next_index = crate::utils::media_assets::next_extrafanart_index(video_path_obj);
     let save_path = save_dir.join(format!("fanart{}.jpg", next_index));
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
-        .use_rustls_tls()
-        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        .build()
-        .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
+    let client = utils::proxy::apply_proxy_auto(
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .use_rustls_tls()
+            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+    )
+    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?
+    .build()
+    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))?;
 
     let resp = client
         .get(&url)
@@ -1901,6 +1915,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
+            // 初始化全局代理缓存
+            if let Ok(config_dir) = app.path().app_config_dir() {
+                utils::proxy::init(&config_dir);
+            }
+
             let db = Database::new(app.handle());
             db.check_and_reset_if_needed();
             db.init().expect("数据库初始化失败");

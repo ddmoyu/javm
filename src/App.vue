@@ -31,6 +31,11 @@ const downloadStore = useDownloadStore()
 const updaterStore = useUpdaterStore()
 const videoStore = useVideoStore()
 
+async function openReleasePage() {
+  const { openUrl } = await import('@tauri-apps/plugin-opener')
+  await openUrl('https://github.com/ddmoyu/javm/releases/latest')
+}
+
 marked.setOptions({
   gfm: true,
   breaks: true,
@@ -245,13 +250,18 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <DialogFooter>
-        <Button variant="outline" :disabled="updaterStore.installing" @click="updaterStore.setDialogOpen(false)">
-          稍后再说
+      <DialogFooter class="flex-row sm:justify-between">
+        <Button variant="link" class="text-muted-foreground px-0" @click="openReleasePage">
+          手动下载更新
         </Button>
-        <Button v-if="updaterStore.hasUpdate" :disabled="updaterStore.installing || updaterStore.checking" @click="updaterStore.installLatestUpdate()">
-          {{ updaterStore.installing ? '安装中...' : '立即更新' }}
-        </Button>
+        <div class="flex gap-2">
+          <Button variant="outline" :disabled="updaterStore.installing" @click="updaterStore.setDialogOpen(false)">
+            稍后再说
+          </Button>
+          <Button v-if="updaterStore.hasUpdate" :disabled="updaterStore.installing || updaterStore.checking" @click="updaterStore.installLatestUpdate()">
+            {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+          </Button>
+        </div>
       </DialogFooter>
     </DialogContent>
   </Dialog>

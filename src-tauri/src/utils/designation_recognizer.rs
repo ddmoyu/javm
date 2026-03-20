@@ -218,10 +218,13 @@ impl DesignationRecognizer {
         let provider = self.ai_provider.as_ref()
             .ok_or_else(|| "No AI provider configured".to_string())?;
 
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(15))
-            .build()
-            .map_err(|e| e.to_string())?;
+        let client = crate::utils::proxy::apply_proxy_auto(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(15)),
+        )
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
 
         // 构建提示词
         let prompt = format!(

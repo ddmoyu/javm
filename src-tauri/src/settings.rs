@@ -340,7 +340,13 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
     encrypt_settings(&mut settings);
 
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    fs::write(path, content).map_err(|e| e.to_string())?;
+    fs::write(&path, &content).map_err(|e| e.to_string())?;
+
+    // 刷新全局代理缓存
+    if let Ok(config_dir) = app.path().app_config_dir() {
+        crate::utils::proxy::refresh(&config_dir);
+    }
+
     Ok(())
 }
 
@@ -362,10 +368,13 @@ pub struct TestApiResponse {
 /// 测试AI API连接
 #[tauri::command]
 pub async fn test_ai_api(request: TestApiRequest) -> Result<TestApiResponse, String> {
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| e.to_string())?;
+    let client = crate::utils::proxy::apply_proxy_auto(
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(15)),
+    )
+    .map_err(|e| e.to_string())?
+    .build()
+    .map_err(|e| e.to_string())?;
 
     // 构建测试端点URL
     let base_url = request
