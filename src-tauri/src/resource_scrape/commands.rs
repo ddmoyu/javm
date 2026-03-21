@@ -216,7 +216,19 @@ pub async fn rs_search_resource(
                             }
                         }
                         println!("[搜索] {} 解析成功: {}", name, result.title);
-                        let _ = app.emit("search-result", &result);
+
+                        // 如果开启了翻译，先翻译再 emit 给前端
+                        let result_to_emit = match crate::utils::ai_translator::translate_search_result(&app, &result).await {
+                            Ok(translated) => {
+                                println!("[搜索] {} 已应用 AI 翻译", name);
+                                translated
+                            }
+                            Err(e) => {
+                                println!("[搜索] {} AI 翻译跳过: {}", name, e);
+                                result
+                            }
+                        };
+                        let _ = app.emit("search-result", &result_to_emit);
                     } else {
                         println!("[搜索] {} 解析无结果", name);
                     }
@@ -577,7 +589,16 @@ pub async fn rs_scrape_save(
     let video_path = prepared_video.video_path.clone();
     println!("[刮削保存] video_path={}", video_path);
 
-    let scrape_meta = search_result_to_metadata(&metadata);
+    let mut scrape_meta = search_result_to_metadata(&metadata);
+    match crate::utils::ai_translator::translate_scrape_metadata(&app, &scrape_meta).await {
+        Ok(translated) => {
+            scrape_meta = translated;
+            println!("[刮削保存] 已应用 AI 翻译（若命中日语/英语）");
+        }
+        Err(e) => {
+            println!("[刮削保存] AI 翻译跳过: {}", e);
+        }
+    }
 
     let mut result = ScrapeSaveResult {
         cover_saved: false,

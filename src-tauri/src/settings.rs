@@ -73,6 +73,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_false() -> bool {
+    false
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DownloadSettings {
     #[serde(rename = "savePath")]
@@ -119,6 +123,12 @@ pub struct AISettings {
     pub cache_enabled: bool,
     #[serde(rename = "cacheDuration")]
     pub cache_duration: u32,
+    #[serde(
+        default = "default_false",
+        rename = "translateScrapeResult",
+        alias = "translate_scrape_result"
+    )]
+    pub translate_scrape_result: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -231,6 +241,7 @@ impl Default for AISettings {
             enable_vision: false,
             cache_enabled: true,
             cache_duration: 3600,
+            translate_scrape_result: false,
         }
     }
 }

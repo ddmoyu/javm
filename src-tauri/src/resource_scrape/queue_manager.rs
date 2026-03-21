@@ -334,7 +334,16 @@ impl TaskQueueManager {
         );
 
         // 将 SearchResult 转换为 ScrapeMetadata
-        let metadata = super::commands::search_result_to_metadata(&search_result);
+        let mut metadata = super::commands::search_result_to_metadata(&search_result);
+        match crate::utils::ai_translator::translate_scrape_metadata(&self.app, &metadata).await {
+            Ok(translated) => {
+                metadata = translated;
+                println!("=== [任务 {}] 已应用 AI 翻译（若命中日语/英语） ===", task_id);
+            }
+            Err(e) => {
+                println!("=== [任务 {}] AI 翻译跳过: {} ===", task_id, e);
+            }
+        }
         let video_id = self.find_video_id_by_path(&task.path)?;
         let prepared_video = super::commands::prepare_video_for_scrape_save(&self.db, &video_id)?;
         let video_path = prepared_video.video_path.clone();

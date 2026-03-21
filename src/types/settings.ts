@@ -95,6 +95,7 @@ export interface AISettings {
     enableVision: boolean
     cacheEnabled: boolean
     cacheDuration: number
+    translateScrapeResult: boolean
 }
 
 /** 视频播放器设置 */
@@ -181,6 +182,7 @@ export const defaultSettings: AppSettings = {
         enableVision: false,
         cacheEnabled: true,
         cacheDuration: 3600,
+        translateScrapeResult: false,
     },
     videoPlayer: {
         alwaysOnTop: false,

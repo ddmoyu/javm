@@ -674,6 +674,18 @@ watch(() => settingsStore.settings, async (newSettings) => {
 
               <Separator />
 
+              <!-- 刮削结果自动翻译 -->
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium">刮削结果自动翻译</p>
+                  <p class="text-sm text-muted-foreground">保存 NFO 和写入数据库前，将日语/英文翻译为当前界面语言</p>
+                </div>
+                <Switch :model-value="!!localSettings.ai.translateScrapeResult"
+                  @update:model-value="(v: boolean) => { localSettings.ai.translateScrapeResult = v; saveAISettings() }" />
+              </div>
+
+              <Separator />
+
               <!-- AI 提供商表格 -->
               <div class="space-y-4">
                 <div class="flex items-center justify-between">
