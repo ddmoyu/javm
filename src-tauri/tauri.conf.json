@@ -50,6 +50,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "resources": [
       "bin/*"
     ],
