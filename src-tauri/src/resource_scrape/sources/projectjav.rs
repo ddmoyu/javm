@@ -9,6 +9,7 @@
 //! - 演员：a[href*="/actress/"]
 //! - 标签：.badge-info a[href*="/tag/"]
 
+use super::common::{dedup_strings, select_all_attr, select_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{Html, Selector};
 
@@ -243,44 +244,6 @@ fn normalize_date(raw: &str) -> String {
     } else {
         raw.to_string()
     }
-}
-
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    let text: String = el.text().collect::<Vec<_>>().join(" ");
-    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if cleaned.is_empty() {
-        None
-    } else {
-        Some(cleaned)
-    }
-}
-
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    el.value().attr(attr).map(|s| s.to_string())
-}
-
-fn select_all_attr(doc: &Html, selector_str: &str, attr: &str) -> Vec<String> {
-    let sel = match Selector::parse(selector_str) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    doc.select(&sel)
-        .filter_map(|el| el.value().attr(attr).map(|value| value.to_string()))
-        .collect()
-}
-
-fn dedup_strings(values: Vec<String>) -> Vec<String> {
-    let mut deduped = Vec::new();
-    for value in values {
-        if !value.is_empty() && !deduped.contains(&value) {
-            deduped.push(value);
-        }
-    }
-    deduped
 }
 
 /// 在页面图片中查找与番号相关的封面图（fallback）

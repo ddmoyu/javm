@@ -223,6 +223,8 @@ pub fn supports_webview(fetch_mode: &FetchMode) -> bool {
 }
 
 /// 获取或创建隐藏的 WebView 窗口
+///
+/// 若窗口已存在则复用，通过 navigate 导航到新 URL，避免重复创建导致闪烁。
 fn get_or_create_webview_window(
     app: &AppHandle,
     url: &str,
@@ -231,17 +233,19 @@ fn get_or_create_webview_window(
     use tauri::WebviewUrl;
     use tauri::WebviewWindowBuilder;
 
-    // 关闭旧窗口后重建，避免复用外部页面时详情页导航不稳定。
-    if let Some(window) = app.get_webview_window(WEBVIEW_WINDOW_LABEL) {
-        let _ = window.close();
-        std::thread::sleep(std::time::Duration::from_millis(200));
-    }
-
-    // 创建新的隐藏窗口
     let parsed_url: url::Url = url.parse().map_err(|e: url::ParseError| {
         format!("URL 解析失败: {}", e)
     })?;
 
+    // 复用已有窗口：直接导航到新 URL，保留 session/cookies
+    if let Some(window) = app.get_webview_window(WEBVIEW_WINDOW_LABEL) {
+        window
+            .navigate(parsed_url)
+            .map_err(|e| format!("WebView 导航失败: {}", e))?;
+        return Ok(window);
+    }
+
+    // 首次创建隐藏窗口
     let window = WebviewWindowBuilder::new(
         app,
         WEBVIEW_WINDOW_LABEL,

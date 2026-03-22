@@ -81,6 +81,32 @@ fn has_text(value: &str) -> bool {
     !value.trim().is_empty()
 }
 
+/// 检查搜索结果是否有效（过滤 404、空白页、站点通用标题等无意义结果）
+fn is_valid_search_result(result: &SearchResult) -> bool {
+    let title_lower = result.title.to_lowercase();
+
+    // 404 / 页面不存在
+    let is_not_found = title_lower.contains("404")
+        || title_lower.contains("not found")
+        || title_lower.contains("页面不存在")
+        || title_lower.contains("頁面不存在")
+        || title_lower.contains("page not found");
+
+    if is_not_found {
+        return false;
+    }
+
+    // 无封面 + 无演员 + 无日期 → 极高概率是无效页面
+    if result.cover_url.is_empty()
+        && result.actors.is_empty()
+        && result.premiered.is_empty()
+    {
+        return false;
+    }
+
+    true
+}
+
 fn compute_search_result_detail_score(result: &SearchResult) -> i32 {
     let has_previews = !result.thumbs.is_empty();
     let mut score = 0;
@@ -313,6 +339,9 @@ pub async fn rs_search_resource(
                     };
 
                     if let Some(mut result) = source.parse(&parse_html, &code) {
+                        if !is_valid_search_result(&result) {
+                            println!("[搜索] {} 结果无效，已过滤: {}", name, result.title);
+                        } else {
                         result.page_url = page_url.clone();
                         normalize_search_result_urls(&mut result, &page_url);
 
@@ -359,6 +388,7 @@ pub async fn rs_search_resource(
                         };
                         enrich_search_result_detail(&mut result_to_emit);
                         let _ = app.emit("search-result", &result_to_emit);
+                        }
                     } else {
                         println!("[搜索] {} 解析无结果", name);
                     }

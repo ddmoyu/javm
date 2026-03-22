@@ -3,8 +3,10 @@
 //! 定义 Source trait、FetchMode 枚举、ResourceSite 结构体，
 //! 以及数据源注册和默认网站配置函数。
 
+pub mod common;
 pub mod freejavbt;
 pub mod javbus;
+pub mod javguru;
 pub mod javlibrary;
 pub mod javmenu;
 pub mod javplace;
@@ -61,26 +63,22 @@ pub struct ResourceSite {
 }
 
 /// 获取所有已注册的数据源
-///
-/// 注意：新增的 freejavbt 和 javlibrary 解析器将在后续任务中添加。
-/// 当前仅返回已迁移的 5 个数据源（待任务 1.3 迁移完成后填充）。
 pub fn all_sources() -> Vec<Box<dyn Source>> {
     vec![
-        Box::new(javmenu::Javmenu),
         Box::new(javbus::Javbus),
+        Box::new(javmenu::Javmenu),
         Box::new(javsb::JavSb),
         Box::new(javxx::JavXX),
-        Box::new(threexplanet::ThreeXPlanet),
         Box::new(javplace::JavPlace),
         Box::new(projectjav::ProjectJav),
+        Box::new(threexplanet::ThreeXPlanet),
         Box::new(freejavbt::FreeJavBT),
         Box::new(javlibrary::JavLibrary),
+        Box::new(javguru::JavGuru),
     ]
 }
 
-/// 返回默认资源网站配置列表（8 个网站）
-///
-/// 配置参考设计文档中的资源网站默认配置表。
+/// 返回默认资源网站配置列表
 pub fn default_sites() -> Vec<ResourceSite> {
     vec![
         ResourceSite {
@@ -134,6 +132,12 @@ pub fn default_sites() -> Vec<ResourceSite> {
         ResourceSite {
             id: "javlibrary".to_string(),
             name: "JavLibrary".to_string(),
+            fetch_mode: FetchMode::Both,
+            enabled: true,
+        },
+        ResourceSite {
+            id: "javguru".to_string(),
+            name: "JavGuru".to_string(),
             fetch_mode: FetchMode::Both,
             enabled: true,
         },

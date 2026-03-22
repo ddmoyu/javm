@@ -4,6 +4,7 @@
 //! 当前实现直接请求详情页，并优先在包含“详情”和番号的内容容器中提取字段，
 //! 以避免误采集页脚中的全站演员/制作商导航链接。
 
+use super::common::{dedup_strings, select_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{ElementRef, Html, Selector};
 use url::Url;
@@ -25,10 +26,14 @@ impl Source for JavXX {
         let base_url = self.build_url(&code_upper);
         let detail_root = find_detail_root(&doc, &code_upper);
 
-        let raw_title = select_attr(&doc, r#"meta[property="og:title"]"#, "content")
+        let raw_title = select_text(&doc, "#video-info h1.title")
             .or_else(|| detail_root.and_then(|root| select_text_in(&root, "h1")))
             .or_else(|| select_text(&doc, "h1"))
-            .or_else(|| select_text(&doc, "title"))
+            .or_else(|| {
+                select_attr(&doc, r#"meta[property="og:title"]"#, "content")
+                    .map(|t| clean_title(&t))
+            })
+            .or_else(|| select_text(&doc, "title").map(|t| clean_title(&t)))
             .unwrap_or_default();
         let original_title = clean_title(&raw_title);
         let title = strip_code_prefix(&original_title, &code_upper);
@@ -54,7 +59,9 @@ impl Source for JavXX {
             .unwrap_or_else(|| select_text(&doc, "body").unwrap_or_default());
         let detail_text = slice_before_related(&detail_text);
 
-        let plot = extract_plot(&detail_text);
+        let plot = extract_plot(&detail_text)
+            .or_else(|| extract_meta_description(&doc, &code_upper));
+        let plot = plot.unwrap_or_default();
         let outline = plot.clone();
         let original_plot = plot.clone();
         let premiered = extract_field(
@@ -96,6 +103,10 @@ impl Source for JavXX {
 
         let thumbs = Vec::new();
 
+        let page_url = select_attr(&doc, r#"meta[property="og:url"]"#, "content")
+            .or_else(|| select_attr(&doc, r#"link[rel="canonical"]"#, "href"))
+            .unwrap_or_default();
+
         if title.is_empty() && cover_url.is_empty() {
             return None;
         }
@@ -107,6 +118,7 @@ impl Source for JavXX {
             duration,
             studio: studio.clone(),
             source: self.name().to_string(),
+            page_url,
             cover_url,
             poster_url,
             director,
@@ -186,17 +198,6 @@ fn find_detail_root<'a>(doc: &'a Html, code_upper: &str) -> Option<ElementRef<'a
     best.map(|(_, _, element)| element)
 }
 
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let selector = Selector::parse(selector_str).ok()?;
-    let element = doc.select(&selector).next()?;
-    let text = normalize_text(&element.text().collect::<Vec<_>>().join(" "));
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
-}
-
 fn select_text_in(root: &ElementRef<'_>, selector_str: &str) -> Option<String> {
     let selector = Selector::parse(selector_str).ok()?;
     let element = root.select(&selector).next()?;
@@ -206,12 +207,6 @@ fn select_text_in(root: &ElementRef<'_>, selector_str: &str) -> Option<String> {
     } else {
         Some(text)
     }
-}
-
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let selector = Selector::parse(selector_str).ok()?;
-    let element = doc.select(&selector).next()?;
-    element.value().attr(attr).map(|value| value.to_string())
 }
 
 fn select_first_image_in(root: &ElementRef<'_>) -> Option<String> {
@@ -301,7 +296,7 @@ fn slice_before_related(text: &str) -> String {
     text.trim().to_string()
 }
 
-fn extract_plot(text: &str) -> String {
+fn extract_plot(text: &str) -> Option<String> {
     let source = if let Some(index) = text.find("详情") {
         text[index + "详情".len()..].trim()
     } else {
@@ -310,11 +305,45 @@ fn extract_plot(text: &str) -> String {
 
     for marker in ["代码:", "Code:", "发布日期:", "发布日期:"] {
         if let Some(index) = source.find(marker) {
-            return source[..index].trim().to_string();
+            let plot = source[..index].trim().to_string();
+            if !plot.is_empty() {
+                return Some(plot);
+            }
         }
     }
 
-    String::new()
+    None
+}
+
+/// 从 `<meta name="description">` 或 `og:description` 提取简介（去除模板前后缀）
+fn extract_meta_description(doc: &Html, code_upper: &str) -> Option<String> {
+    let raw = select_attr(doc, r#"meta[name="description"]"#, "content")
+        .or_else(|| select_attr(doc, r#"meta[property="og:description"]"#, "content"))?;
+
+    // 格式："免费在线观看DLDSS-479 JAV，{actors}，{title} missav"
+    // 去掉前缀 "免费在线观看{CODE} JAV，" 和后缀 " missav"
+    let mut text = raw.as_str();
+
+    // 去掉前缀：匹配 "免费在线观看{CODE} JAV，" 或 "免费在线观看{CODE} JAV,"
+    if let Some(pos) = text.find("JAV，").or_else(|| text.find("JAV,")) {
+        let skip = if text[pos..].starts_with("JAV，") { "JAV，".len() } else { "JAV,".len() };
+        text = text[pos + skip..].trim();
+    }
+
+    // 去掉后缀 " missav" / " MissAV"（大小写不敏感）
+    let lower = text.to_lowercase();
+    if let Some(pos) = lower.rfind("missav") {
+        text = text[..pos].trim();
+    }
+
+    // 二次清理：如果以逗号开头则去掉
+    let text = text.trim_start_matches(|c: char| c == ',' || c == '，' || c == ' ').trim();
+
+    if text.is_empty() || text.to_uppercase() == *code_upper {
+        return None;
+    }
+
+    Some(text.to_string())
 }
 
 fn extract_field(text: &str, labels: &[&str]) -> Option<String> {
@@ -371,16 +400,6 @@ fn is_image_url(value: &str) -> bool {
         .any(|ext| value.contains(ext))
 }
 
-fn dedup_strings(values: Vec<String>) -> Vec<String> {
-    let mut deduped = Vec::new();
-    for value in values {
-        if !value.is_empty() && !deduped.contains(&value) {
-            deduped.push(value);
-        }
-    }
-    deduped
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -394,9 +413,11 @@ mod tests {
                 <meta property="og:image" content="https://cdn.javxx.to/images/digi-256-cover.jpg">
             </head>
             <body>
+                <div id="video-info">
+                    <h1 class="title">DIGI-256 - Hyper Highleg Queen 28 藤井蕾拉</h1>
+                </div>
                 <main>
                     <section class="video-detail">
-                        <h1>DIGI-256 - Hyper Highleg Queen 28 藤井蕾拉</h1>
                         <div class="detail-card">
                             <h2>详情</h2>
                             <p>
@@ -445,8 +466,10 @@ mod tests {
         let html = r#"
         <html>
             <body>
+                <div id="video-info">
+                    <h1 class="title">ABP-123 - 示例标题</h1>
+                </div>
                 <section class="video-detail">
-                    <h1>ABP-123 - 示例标题</h1>
                     <div>
                         <h2>详情</h2>
                         <p>

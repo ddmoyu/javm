@@ -15,6 +15,7 @@
 //!
 //! 站点受 Cloudflare 保护，因此应配合 WebView 获取。
 
+use super::common::{select_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{Html, Selector};
 
@@ -221,23 +222,6 @@ fn clean_title(raw_title: &str, code: &str) -> String {
         .trim_start_matches(|c: char| c == '-' || c == ' ' || c == '　')
         .trim()
         .to_string()
-}
-
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    let text: String = el.text().collect::<Vec<_>>().join(" ");
-    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    (!text.is_empty()).then_some(text)
-}
-
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    doc.select(&sel)
-        .next()
-        .and_then(|el| el.value().attr(attr))
-        .map(|value| value.to_string())
-        .filter(|text| !text.is_empty())
 }
 
 fn append_csv_value(existing: &str, value: &str) -> String {

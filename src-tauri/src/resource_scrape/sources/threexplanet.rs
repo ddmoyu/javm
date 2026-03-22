@@ -8,6 +8,7 @@
 //! - 预览图：img 含 /screens/
 //! - 下载区在 <h1 class="postdownload"> 之后，需要截断
 
+use super::common::{select_all_attr, select_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{ElementRef, Html, Selector};
 use std::collections::HashMap;
@@ -226,34 +227,6 @@ impl Source for ThreeXPlanet {
 }
 
 // ============ 辅助函数 ============
-
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    let text: String = el.text().collect::<Vec<_>>().join(" ");
-    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if cleaned.is_empty() {
-        None
-    } else {
-        Some(cleaned)
-    }
-}
-
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    el.value().attr(attr).map(|s| s.to_string())
-}
-
-fn select_all_attr(doc: &Html, selector_str: &str, attr: &str) -> Vec<String> {
-    let sel = match Selector::parse(selector_str) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    doc.select(&sel)
-        .filter_map(|el| el.value().attr(attr).map(|s| s.to_string()))
-        .collect()
-}
 
 /// 提取规格表中的 dt/dd 字段映射，支持中英双语标签。
 fn extract_spec_fields(doc: &Html) -> HashMap<String, String> {

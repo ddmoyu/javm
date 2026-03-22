@@ -9,7 +9,8 @@
 //! - 预览图：.sample-box a href
 
 use scraper::{Html, Selector};
-use super::{Source, SearchResult};
+use super::common::{select_all_attr, select_all_text, select_attr, select_text};
+use super::{SearchResult, Source};
 
 pub struct Javbus;
 
@@ -145,28 +146,6 @@ impl Source for Javbus {
 
 // ============ 辅助函数 ============
 
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    let text: String = el.text().collect::<Vec<_>>().join(" ");
-    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if cleaned.is_empty() { None } else { Some(cleaned) }
-}
-
-fn select_all_text(doc: &Html, selector_str: &str) -> Vec<String> {
-    let sel = match Selector::parse(selector_str) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    doc.select(&sel)
-        .filter_map(|el| {
-            let text: String = el.text().collect::<Vec<_>>().join(" ");
-            let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-            if cleaned.is_empty() { None } else { Some(cleaned) }
-        })
-        .collect()
-}
-
 /// 选择所有匹配元素中 href 包含指定路径的文本
 fn select_all_text_by_href(doc: &Html, selector_str: &str, href_contains: &str) -> Vec<String> {
     let sel = match Selector::parse(selector_str) {
@@ -183,22 +162,6 @@ fn select_all_text_by_href(doc: &Html, selector_str: &str, href_contains: &str) 
             let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
             if cleaned.is_empty() { None } else { Some(cleaned) }
         })
-        .collect()
-}
-
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    el.value().attr(attr).map(|s| s.to_string())
-}
-
-fn select_all_attr(doc: &Html, selector_str: &str, attr: &str) -> Vec<String> {
-    let sel = match Selector::parse(selector_str) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    doc.select(&sel)
-        .filter_map(|el| el.value().attr(attr).map(|s| s.to_string()))
         .collect()
 }
 

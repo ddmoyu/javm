@@ -9,7 +9,8 @@
 //! - URL 格式：https://jav.place/video/{CODE}
 
 use scraper::{Html, Selector};
-use super::{Source, SearchResult};
+use super::common::{select_all_attr, select_attr, select_text};
+use super::{SearchResult, Source};
 
 pub struct JavPlace;
 
@@ -190,30 +191,6 @@ fn extract_table_link_texts(doc: &Html, labels: &[&str]) -> Option<Vec<String>> 
         }
     }
     None
-}
-
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    let text: String = el.text().collect::<Vec<_>>().join(" ");
-    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if cleaned.is_empty() { None } else { Some(cleaned) }
-}
-
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    el.value().attr(attr).map(|s| s.to_string())
-}
-
-fn select_all_attr(doc: &Html, selector_str: &str, attr: &str) -> Vec<String> {
-    let sel = match Selector::parse(selector_str) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    doc.select(&sel)
-        .filter_map(|el| el.value().attr(attr).map(|s| s.to_string()))
-        .collect()
 }
 
 /// 选择所有 href 包含指定路径的 a 标签文本

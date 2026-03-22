@@ -15,7 +15,8 @@
 //! - 评分: `#video_review span` 文本中的数字（格式如 "(7.50)"）
 
 use scraper::{Html, Selector};
-use super::{Source, SearchResult};
+use super::common::{select_all_text, select_attr, select_text};
+use super::{SearchResult, Source};
 
 pub struct JavLibrary;
 
@@ -157,37 +158,6 @@ impl Source for JavLibrary {
 }
 
 // ============ HTML 解析辅助函数 ============
-
-/// 选择第一个匹配元素的文本内容（去除多余空白）
-fn select_text(doc: &Html, selector_str: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    let text: String = el.text().collect::<Vec<_>>().join(" ");
-    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    if cleaned.is_empty() { None } else { Some(cleaned) }
-}
-
-/// 选择所有匹配元素的文本内容
-fn select_all_text(doc: &Html, selector_str: &str) -> Vec<String> {
-    let sel = match Selector::parse(selector_str) {
-        Ok(s) => s,
-        Err(_) => return vec![],
-    };
-    doc.select(&sel)
-        .filter_map(|el| {
-            let text: String = el.text().collect::<Vec<_>>().join(" ");
-            let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
-            if cleaned.is_empty() { None } else { Some(cleaned) }
-        })
-        .collect()
-}
-
-/// 选择第一个匹配元素的指定属性值
-fn select_attr(doc: &Html, selector_str: &str, attr: &str) -> Option<String> {
-    let sel = Selector::parse(selector_str).ok()?;
-    let el = doc.select(&sel).next()?;
-    el.value().attr(attr).map(|s| s.to_string())
-}
 
 /// 从 #video_review 区域提取评分数字
 /// 评分格式如 "(7.50)" 或 "7.50"
