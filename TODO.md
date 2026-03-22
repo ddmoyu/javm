@@ -30,6 +30,8 @@ https://github.com/tauri-apps/tauri-action
 
 18. 刮削还是有 cf 验证问题，目前好像不正常，导致无法获取视频地址
 
+19. 刮削时，如果有多个网站需要 cf 验证，但只有一个 webview 窗口。我希望对于同一个网站，只使用一个webview，不同的网站创建不同的webview，对此还需要设置每次最多同时存在的 刮削窗口。默认不超过3个。
+
 
 https://javxx.to/cn
 https://jav.sb/

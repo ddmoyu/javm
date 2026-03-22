@@ -652,34 +652,35 @@ watch(() => settingsStore.settings, async (newSettings) => {
               <CardDescription>配置资源网站和刮削行为</CardDescription>
             </CardHeader>
             <CardContent class="space-y-6">
-              <div class="space-y-3">
-                <div class="flex items-center justify-between">
-                  <div>
-                    <p class="font-medium">刮削网站开关</p>
-                    <p class="text-sm text-muted-foreground">开发时可直接控制参与刮削的网站；关闭后不会再参与搜索、自动刮削和任务队列</p>
-                  </div>
-                  <div class="flex shrink-0 gap-2">
-                    <Button variant="outline" size="sm" @click="toggleAllScrapeSites(true)">全部开启</Button>
-                    <Button variant="outline" size="sm" @click="toggleAllScrapeSites(false)">全部关闭</Button>
-                  </div>
-                </div>
-                <div class="space-y-3 rounded-lg border p-3">
-                  <div v-for="site in localSettings.scrape.sites" :key="site.id"
-                    class="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-3">
-                    <div class="min-w-0">
-                      <div class="flex items-center gap-2">
-                        <p class="font-medium">{{ site.name }}</p>
-                        <Badge variant="outline">{{ site.id }}</Badge>
-                      </div>
-                      <p class="mt-1 text-sm text-muted-foreground">关闭后该网站不会参与当前环境的刮削流程</p>
+              <template v-if="isDeveloperMode">
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="font-medium">刮削网站开关</p>
+                      <p class="text-sm text-muted-foreground">开发时可直接控制参与刮削的网站；关闭后不会再参与搜索、自动刮削和任务队列</p>
                     </div>
-                    <Switch :model-value="!!site.enabled"
-                      @update:model-value="(v: boolean) => toggleScrapeSite(site.id, v)" />
+                    <div class="flex shrink-0 gap-2">
+                      <Button variant="outline" size="sm" @click="toggleAllScrapeSites(true)">全部开启</Button>
+                      <Button variant="outline" size="sm" @click="toggleAllScrapeSites(false)">全部关闭</Button>
+                    </div>
+                  </div>
+                  <div class="space-y-3 rounded-lg border p-3">
+                    <div v-for="site in localSettings.scrape.sites" :key="site.id"
+                      class="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-3">
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                          <p class="font-medium">{{ site.name }}</p>
+                          <Badge variant="outline">{{ site.id }}</Badge>
+                        </div>
+                        <p class="mt-1 text-sm text-muted-foreground">关闭后该网站不会参与当前环境的刮削流程</p>
+                      </div>
+                      <Switch :model-value="!!site.enabled"
+                        @update:model-value="(v: boolean) => toggleScrapeSite(site.id, v)" />
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <Separator />
+                <Separator />
+              </template>
 
               <!-- 默认刮削网站 -->
               <div class="flex items-center justify-between">
