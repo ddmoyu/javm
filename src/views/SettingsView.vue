@@ -49,7 +49,7 @@ import {
 import AIConfigDialog from '@/components/AIConfigDialog.vue'
 import { selectDirectory } from '@/lib/tauri'
 import { THEME_OPTIONS, VIEW_MODE_OPTIONS } from '@/utils/constants'
-import type { AIProvider, ResourceSite, ViewMode } from '@/types'
+import type { AIProvider, ViewMode } from '@/types'
 
 const route = useRoute()
 const settingsStore = useSettingsStore()
@@ -248,18 +248,6 @@ const enabledScrapeSites = computed(() => {
   return (localSettings.value.scrape.sites || []).filter(site => site.enabled)
 })
 
-const getFetchModeText = (mode: ResourceSite['fetchMode']) => {
-  switch (mode) {
-    case 'Both':
-      return 'HTTP / WebView'
-    case 'WebViewOnly':
-      return '仅 WebView'
-    case 'HttpOnly':
-    default:
-      return '仅 HTTP'
-  }
-}
-
 const ensureValidDefaultScrapeSite = () => {
   const enabled = enabledScrapeSites.value
   if (enabled.length === 0) {
@@ -286,6 +274,19 @@ const toggleScrapeSite = (siteId: string, enabled: boolean) => {
   }
 
   site.enabled = enabled
+  ensureValidDefaultScrapeSite()
+  saveScrapeSettings()
+}
+
+const toggleAllScrapeSites = (enabled: boolean) => {
+  const sites = localSettings.value.scrape.sites || []
+  if (!enabled && sites.length > 0) {
+    // 全部关闭时保留第一个，确保至少有一个启用
+    sites.forEach((site, i) => { site.enabled = i === 0 })
+    toast.warning(`已保留 ${sites[0].name} 为唯一启用网站`)
+  } else {
+    sites.forEach(site => { site.enabled = enabled })
+  }
   ensureValidDefaultScrapeSite()
   saveScrapeSettings()
 }
@@ -652,9 +653,15 @@ watch(() => settingsStore.settings, async (newSettings) => {
             </CardHeader>
             <CardContent class="space-y-6">
               <div class="space-y-3">
-                <div>
-                  <p class="font-medium">刮削网站开关</p>
-                  <p class="text-sm text-muted-foreground">开发时可直接控制参与刮削的网站；关闭后不会再参与搜索、自动刮削和任务队列</p>
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">刮削网站开关</p>
+                    <p class="text-sm text-muted-foreground">开发时可直接控制参与刮削的网站；关闭后不会再参与搜索、自动刮削和任务队列</p>
+                  </div>
+                  <div class="flex shrink-0 gap-2">
+                    <Button variant="outline" size="sm" @click="toggleAllScrapeSites(true)">全部开启</Button>
+                    <Button variant="outline" size="sm" @click="toggleAllScrapeSites(false)">全部关闭</Button>
+                  </div>
                 </div>
                 <div class="space-y-3 rounded-lg border p-3">
                   <div v-for="site in localSettings.scrape.sites" :key="site.id"
@@ -663,7 +670,6 @@ watch(() => settingsStore.settings, async (newSettings) => {
                       <div class="flex items-center gap-2">
                         <p class="font-medium">{{ site.name }}</p>
                         <Badge variant="outline">{{ site.id }}</Badge>
-                        <Badge variant="secondary">{{ getFetchModeText(site.fetchMode) }}</Badge>
                       </div>
                       <p class="mt-1 text-sm text-muted-foreground">关闭后该网站不会参与当前环境的刮削流程</p>
                     </div>
@@ -716,7 +722,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
                   <div class="flex items-center justify-between gap-4">
                     <div>
                       <p class="font-medium">HTTP 失败回退 WebView</p>
-                      <p class="text-sm text-muted-foreground">仅在 HTTP 请求失败后，才自动回退到 WebView</p>
+                      <p class="text-sm text-muted-foreground">当 HTTP 失败、命中 Cloudflare 验证或明显返回错页时，自动回退到 WebView</p>
                     </div>
                     <Switch :model-value="!!localSettings.scrape.webviewFallbackEnabled"
                       @update:model-value="(v: boolean) => { localSettings.scrape.webviewFallbackEnabled = v; saveScrapeSettings() }" />

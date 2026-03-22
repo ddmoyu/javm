@@ -9,7 +9,7 @@
 //! - 预览图：.sample-box a href
 
 use scraper::{Html, Selector};
-use super::common::{select_all_attr, select_all_text, select_attr, select_text};
+use super::common::{extract_head_meta, select_all_attr, select_all_text, select_attr, select_text};
 use super::{SearchResult, Source};
 
 pub struct Javbus;
@@ -24,7 +24,10 @@ impl Source for Javbus {
     fn parse(&self, html: &str, code: &str) -> Option<SearchResult> {
         let doc = Html::parse_document(html);
 
-        // 封面：bigImage href 通常是大图，img src 通常是缩略图
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
+
+        // 封面：bigImage href 通常是大图，img src 通常是缩略图，回退 head
         let poster_url = select_attr(&doc, ".bigImage img", "src")
             .map(|u| {
                 if u.starts_with("http") { u }
@@ -37,10 +40,11 @@ impl Source for Javbus {
                 if u.starts_with("http") { u }
                 else { format!("https://www.javbus.com{}", u) }
             })
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.cover_url.clone());
 
-        // 标题
-        let raw_title = select_text(&doc, "h3").unwrap_or_default();
+        // 标题：h3 优先，回退 head
+        let raw_title = select_text(&doc, "h3")
+            .unwrap_or_else(|| head.title.clone());
         let title = if raw_title.is_empty() {
             String::new()
         } else {

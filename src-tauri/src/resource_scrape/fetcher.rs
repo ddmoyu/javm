@@ -6,9 +6,10 @@
 
 use reqwest::Client;
 use tauri::AppHandle;
+use tauri::Listener;
 
 use super::client;
-use super::sources::{FetchMode, ResourceSite};
+use super::sources::ResourceSite;
 use super::webview_support;
 
 #[derive(Debug, Clone, Copy)]
@@ -26,6 +27,9 @@ pub struct Fetcher {
 
 /// WebView 获取超时时间（秒）
 const WEBVIEW_TIMEOUT_SECS: u64 = 60;
+
+/// Cloudflare 手动验证超时时间（秒）
+const CF_MANUAL_TIMEOUT_SECS: u64 = 60;
 
 /// WebView 窗口标识
 const WEBVIEW_WINDOW_LABEL: &str = "scraper_window";
@@ -62,10 +66,13 @@ impl Fetcher {
         show_webview: bool,
     ) -> Result<String, String> {
         use tauri::Listener;
+        use std::sync::{Arc, Mutex};
+        use std::time::Instant;
 
         let window = get_or_create_webview_window(app, url)?;
-        webview_support::sync_window_visibility(&window, show_webview);
-        webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
+        let effective_show_webview = should_keep_webview_visible(show_webview);
+        webview_support::sync_window_visibility(&window, effective_show_webview);
+        webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, "idle");
 
         let cf_event_name = webview_support::next_event_name("resource-scrape-cf-status");
         let html_event_name = webview_support::next_event_name("resource-scrape-html-result");
@@ -73,9 +80,32 @@ impl Fetcher {
             app,
             &window,
             &cf_event_name,
-            show_webview,
+            effective_show_webview,
             Some(RESOURCE_SCRAPE_CF_STATE_EVENT),
         );
+
+        let cf_state = Arc::new(Mutex::new(CfChallengeState::default()));
+        let cf_state_listener = cf_state.clone();
+        let cf_state_listener_id = app.listen(cf_event_name.clone(), move |event| {
+            let Ok(challenge_detected) = serde_json::from_str::<bool>(event.payload()) else {
+                return;
+            };
+
+            let mut guard = match cf_state_listener.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
+
+            if challenge_detected {
+                if !guard.active {
+                    guard.active = true;
+                    guard.detected_at = Some(Instant::now());
+                }
+            } else {
+                guard.active = false;
+                guard.detected_at = None;
+            }
+        });
 
         // 使用 oneshot channel 接收 HTML 结果
         let (tx, mut rx) = tokio::sync::oneshot::channel::<String>();
@@ -93,9 +123,11 @@ impl Fetcher {
         });
 
         // 轮询等待页面就绪，然后通过 eval 触发事件发送 HTML
-        let max_attempts = WEBVIEW_TIMEOUT_SECS * 2; // 每 500ms 检查一次
+        let started_at = Instant::now();
         let js = webview_support::build_html_extract_script(&cf_event_name, &html_event_name);
-        for attempt in 0..max_attempts {
+        let mut attempt: u64 = 0;
+        loop {
+            attempt += 1;
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
             if let Err(e) = window.eval(&js) {
@@ -105,45 +137,57 @@ impl Fetcher {
                 continue;
             }
 
+            let (cf_active, cf_timeout_hit) = {
+                let guard = match cf_state.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        cleanup_webview_fetch(app, &window, listener_id, cf_listener_id, cf_state_listener_id, effective_show_webview, "failed");
+                        return Err("WebView Cloudflare 状态同步失败".to_string());
+                    }
+                };
+
+                let timeout_hit = guard.active
+                    && guard
+                        .detected_at
+                        .map(|detected_at| detected_at.elapsed().as_secs() >= CF_MANUAL_TIMEOUT_SECS)
+                        .unwrap_or(false);
+
+                (guard.active, timeout_hit)
+            };
+
+            if cf_timeout_hit {
+                cleanup_webview_fetch(app, &window, listener_id, cf_listener_id, cf_state_listener_id, false, "timeout");
+                return Err(format!("Cloudflare 手动验证超时（{}秒）", CF_MANUAL_TIMEOUT_SECS));
+            }
+
+            if !cf_active && started_at.elapsed().as_secs() >= WEBVIEW_TIMEOUT_SECS {
+                cleanup_webview_fetch(app, &window, listener_id, cf_listener_id, cf_state_listener_id, false, "failed");
+                return Err(format!("WebView 获取超时（{}秒）", WEBVIEW_TIMEOUT_SECS));
+            }
+
             // 检查是否已收到结果
             match rx.try_recv() {
                 Ok(html) => {
-                    app.unlisten(listener_id);
-                    app.unlisten(cf_listener_id);
-                    webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
-                    // 隐藏窗口以便复用
-                    let _ = window.hide();
+                    cleanup_webview_fetch(app, &window, listener_id, cf_listener_id, cf_state_listener_id, effective_show_webview, "idle");
                     return Ok(html);
                 }
                 Err(tokio::sync::oneshot::error::TryRecvError::Empty) => {
                     // 继续等待
                 }
                 Err(tokio::sync::oneshot::error::TryRecvError::Closed) => {
-                    app.unlisten(listener_id);
-                    app.unlisten(cf_listener_id);
-                    webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
-                    let _ = window.hide();
+                    cleanup_webview_fetch(app, &window, listener_id, cf_listener_id, cf_state_listener_id, false, "failed");
                     return Err("WebView HTML 接收通道已关闭".to_string());
                 }
             }
         }
-
-        // 超时
-        app.unlisten(listener_id);
-        app.unlisten(cf_listener_id);
-        webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, false);
-        let _ = window.hide();
-        Err(format!("WebView 获取超时（{}秒）", WEBVIEW_TIMEOUT_SECS))
     }
 
-    /// 智能获取：根据网站配置和全局设置选择获取模式
+    /// 智能获取：始终先 HTTP，失败或内容明显不匹配时回退到 WebView
     ///
-    /// 模式选择逻辑：
-    /// 1. 网站 fetch_mode == WebViewOnly → 始终 WebView
-    /// 2. 网站 fetch_mode == HttpOnly → 始终 HTTP
-    /// 3. 网站 fetch_mode == Both 且 webview_enabled == true → WebView
-    /// 4. 网站 fetch_mode == Both 且 webview_enabled == false → HTTP
-    /// 5. HTTP 失败时，若允许回退且网站支持 WebView → 回退 WebView
+    /// 逻辑：
+    /// 1. 始终先尝试 HTTP 获取
+    /// 2. HTTP 失败且用户开启了 WebView 增强和回退 → 回退到 WebView
+    /// 3. HTTP 成功但返回内容与目标番号明显不匹配 → 自动回退到 WebView
     pub async fn fetch(
         &self,
         app: &AppHandle,
@@ -151,75 +195,113 @@ impl Fetcher {
         site: &ResourceSite,
         options: FetchOptions,
     ) -> Result<String, String> {
-        let mode = select_fetch_mode(&site.fetch_mode, options.webview_enabled);
         println!(
-            "[获取] {} 选择模式: {} ({}) fallback={} visible={}",
+            "[获取] {} HTTP ({}) webview={} fallback={} visible={}",
             site.name,
-            mode.as_str(),
             url,
+            options.webview_enabled,
             options.webview_fallback_enabled,
             options.show_webview
         );
 
-        match mode {
-            ResolvedMode::Http => {
-                let result = self.fetch_http(url).await;
-                // HTTP 失败时尝试回退到 WebView
-                if result.is_err()
-                    && options.webview_fallback_enabled
-                    && supports_webview(&site.fetch_mode)
-                {
+        match self.fetch_http(url).await {
+            Ok(html) => {
+                if should_retry_with_webview(url, &html) {
+                    println!(
+                        "[获取] {} HTTP 内容疑似错页，自动回退到 WebView",
+                        site.name,
+                    );
+                    match Self::fetch_webview(app, url, options.show_webview).await {
+                        Ok(webview_html) => Ok(webview_html),
+                        Err(e) => {
+                            println!(
+                                "[获取] {} WebView 回退失败，继续使用 HTTP 内容: {}",
+                                site.name,
+                                e
+                            );
+                            Ok(html)
+                        }
+                    }
+                } else {
+                    Ok(html)
+                }
+            }
+            Err(err) => {
+                if options.webview_enabled && options.webview_fallback_enabled {
                     println!(
                         "[获取] {} HTTP 失败，回退到 WebView: {}",
                         site.name,
-                        result.as_ref().unwrap_err()
+                        err
                     );
                     Self::fetch_webview(app, url, options.show_webview).await
                 } else {
-                    result
+                    Err(err)
                 }
             }
-            ResolvedMode::WebView => Self::fetch_webview(app, url, options.show_webview).await,
         }
     }
 }
 
-/// 解析后的获取模式（内部使用）
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ResolvedMode {
-    Http,
-    WebView,
+fn should_retry_with_webview(url: &str, html: &str) -> bool {
+    let Some(designation) = extract_designation_from_url(url) else {
+        return false;
+    };
+
+    let html_upper = html.to_uppercase();
+    if html_upper.contains(&designation) {
+        return false;
+    }
+
+    // 对于明确是番号详情页的 URL，如果返回 HTML 连目标番号都不包含，
+    // 大概率是广告跳转页、反爬页或站点通用页。
+    true
 }
 
-impl ResolvedMode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            ResolvedMode::Http => "HTTP",
-            ResolvedMode::WebView => "WebView",
-        }
+fn extract_designation_from_url(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    let segment = parsed
+        .path_segments()?
+        .filter(|part| !part.is_empty())
+        .next_back()?;
+    if looks_like_designation(segment) {
+        Some(segment.to_uppercase())
+    } else {
+        None
     }
 }
 
-/// 根据网站 FetchMode 和全局 webview_enabled 选择实际获取模式
-///
-/// 此函数为纯逻辑，方便单元测试和属性测试。
-pub fn select_fetch_mode(fetch_mode: &FetchMode, webview_enabled: bool) -> ResolvedMode {
-    match fetch_mode {
-        FetchMode::WebViewOnly => ResolvedMode::WebView,
-        FetchMode::HttpOnly => ResolvedMode::Http,
-        FetchMode::Both => {
-            if webview_enabled {
-                ResolvedMode::WebView
-            } else {
-                ResolvedMode::Http
-            }
-        }
-    }
+fn looks_like_designation(value: &str) -> bool {
+    value.contains('-')
+        && value.chars().any(|c| c.is_ascii_alphabetic())
+        && value.chars().any(|c| c.is_ascii_digit())
 }
 
-/// 判断网站是否支持 WebView 模式
-pub fn supports_webview(fetch_mode: &FetchMode) -> bool {
-    matches!(fetch_mode, FetchMode::WebViewOnly | FetchMode::Both)
+fn should_keep_webview_visible(show_webview: bool) -> bool {
+    cfg!(debug_assertions) || show_webview
+}
+
+#[derive(Debug, Default)]
+struct CfChallengeState {
+    active: bool,
+    detected_at: Option<std::time::Instant>,
+}
+
+fn cleanup_webview_fetch(
+    app: &AppHandle,
+    window: &tauri::WebviewWindow,
+    listener_id: tauri::EventId,
+    cf_listener_id: tauri::EventId,
+    cf_state_listener_id: tauri::EventId,
+    keep_visible: bool,
+    final_status: &'static str,
+) {
+    app.unlisten(listener_id);
+    app.unlisten(cf_listener_id);
+    app.unlisten(cf_state_listener_id);
+    webview_support::emit_cf_state(app, RESOURCE_SCRAPE_CF_STATE_EVENT, final_status);
+    if !keep_visible {
+        let _ = window.hide();
+    }
 }
 
 /// 获取或创建隐藏的 WebView 窗口
@@ -265,48 +347,53 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_select_fetch_mode_webview_only() {
-        // WebViewOnly 始终选择 WebView，无论全局设置
-        assert_eq!(
-            select_fetch_mode(&FetchMode::WebViewOnly, false),
-            ResolvedMode::WebView
-        );
-        assert_eq!(
-            select_fetch_mode(&FetchMode::WebViewOnly, true),
-            ResolvedMode::WebView
-        );
+    fn should_retry_when_detail_page_mismatches_designation() {
+        let html = r#"
+        <html>
+            <head><title>广告落地页</title></head>
+            <body>
+                <div>buy now</div>
+            </body>
+        </html>
+        "#;
+
+        assert!(should_retry_with_webview(
+            "https://example.com/video/SSIS-392",
+            html,
+        ));
     }
 
     #[test]
-    fn test_select_fetch_mode_http_only() {
-        // HttpOnly 始终选择 HTTP，无论全局设置
-        assert_eq!(
-            select_fetch_mode(&FetchMode::HttpOnly, false),
-            ResolvedMode::Http
-        );
-        assert_eq!(
-            select_fetch_mode(&FetchMode::HttpOnly, true),
-            ResolvedMode::Http
-        );
+    fn should_not_retry_when_search_url_has_no_designation_segment() {
+        let html = r#"
+        <html>
+            <head><title>搜索页</title></head>
+            <body>
+                <div>任意搜索结果内容</div>
+            </body>
+        </html>
+        "#;
+
+        assert!(!should_retry_with_webview(
+            "https://www.javlibrary.com/cn/vl_searchbyid.php?keyword=SSIS-392",
+            html,
+        ));
     }
 
     #[test]
-    fn test_select_fetch_mode_both() {
-        // Both 模式根据 webview_enabled 选择
-        assert_eq!(
-            select_fetch_mode(&FetchMode::Both, false),
-            ResolvedMode::Http
-        );
-        assert_eq!(
-            select_fetch_mode(&FetchMode::Both, true),
-            ResolvedMode::WebView
-        );
+    fn debug_build_keeps_webview_visible() {
+        let visible = should_keep_webview_visible(false);
+        if cfg!(debug_assertions) {
+            assert!(visible);
+        } else {
+            assert!(!visible);
+        }
     }
 
     #[test]
-    fn test_supports_webview() {
-        assert!(!supports_webview(&FetchMode::HttpOnly));
-        assert!(supports_webview(&FetchMode::WebViewOnly));
-        assert!(supports_webview(&FetchMode::Both));
+    fn cleanup_keeps_window_visible_when_requested() {
+        assert!(should_keep_webview_visible(true));
     }
 }
+
+

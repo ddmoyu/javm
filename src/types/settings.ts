@@ -76,7 +76,6 @@ export interface DownloadSettings {
 export interface ResourceSite {
     id: string           // 网站标识（如 "javbus"）
     name: string         // 显示名称
-    fetchMode: 'HttpOnly' | 'WebViewOnly' | 'Both'  // 获取模式
     enabled: boolean     // 是否启用
 }
 
@@ -172,15 +171,15 @@ export const defaultSettings: AppSettings = {
         devShowWebview: false,
         defaultSite: 'javbus',
         sites: [
-            { id: 'javbus', name: 'JavBus', fetchMode: 'Both', enabled: true },
-            { id: 'javmenu', name: 'JavMenu', fetchMode: 'HttpOnly', enabled: true },
-            { id: 'javsb', name: 'JavSB', fetchMode: 'Both', enabled: true },
-            { id: 'javxx', name: 'JAVXX', fetchMode: 'HttpOnly', enabled: true },
-            { id: 'javplace', name: 'JavPlace', fetchMode: 'HttpOnly', enabled: true },
-            { id: 'projectjav', name: 'ProjectJav', fetchMode: 'HttpOnly', enabled: true },
-            { id: '3xplanet', name: '3xplanet', fetchMode: 'HttpOnly', enabled: true },
-            { id: 'freejavbt', name: 'FreeJavBT', fetchMode: 'Both', enabled: true },
-            { id: 'javlibrary', name: 'JavLibrary', fetchMode: 'Both', enabled: true },
+            { id: 'javbus', name: 'JavBus', enabled: true },
+            { id: 'javmenu', name: 'JavMenu', enabled: true },
+            { id: 'javsb', name: 'JavSB', enabled: true },
+            { id: 'javxx', name: 'JAVXX', enabled: true },
+            { id: 'javplace', name: 'JavPlace', enabled: true },
+            { id: 'projectjav', name: 'ProjectJav', enabled: true },
+            { id: '3xplanet', name: '3xplanet', enabled: true },
+            { id: 'freejavbt', name: 'FreeJavBT', enabled: true },
+            { id: 'javlibrary', name: 'JavLibrary', enabled: true },
         ],
     },
     ai: {

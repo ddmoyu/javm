@@ -149,15 +149,19 @@ async function startFinding() {
       handleCapturedUrl(event.payload)
     })
 
-    unlistenCf = await listen<boolean>('video-finder-cf-state', (event) => {
-      const nextActive = Boolean(event.payload)
-      if (cfChallengeActive.value === nextActive) return
+    unlistenCf = await listen<{ status: 'idle' | 'active' | 'passed' | 'timeout' | 'failed'; active: boolean }>('video-finder-cf-state', (event) => {
+      const payload = event.payload
+      if (!payload) return
 
-      cfChallengeActive.value = nextActive
-      if (nextActive) {
+      cfChallengeActive.value = Boolean(payload.active)
+      if (payload.status === 'active') {
         toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
-      } else {
+      } else if (payload.status === 'passed') {
         toast.success('Cloudflare 验证已通过，继续监听视频链接')
+      } else if (payload.status === 'timeout') {
+        toast.error('Cloudflare 验证超时，已停止监听视频链接')
+      } else if (payload.status === 'failed') {
+        toast.error('Cloudflare 验证失败，视频链接监听未完成')
       }
     })
   } catch (e) {

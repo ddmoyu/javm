@@ -36,8 +36,9 @@ https://jav.sb/
 https://jav.guru/
 https://javtiful.com/main 
 https://123av.com/zh/dm9 
-https://thisav2.com/dm194/cn 
 https://cn.myjav.tv/ 
+
+https://thisav2.com/dm194/cn 
 https://cn.javd.me/ 
 https://xchina.co/ 
 https://javgg.net/ 

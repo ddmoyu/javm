@@ -220,6 +220,11 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
 
     const recentLogs = computed(() => logs.value.slice(0, 100))
 
+    type CfStatePayload = {
+        status: 'idle' | 'active' | 'passed' | 'timeout' | 'failed'
+        active: boolean
+    }
+
     // ============ 搜索操作 ============
 
     /**
@@ -263,17 +268,29 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
             })
             unlisteners.push(unDone)
 
-            const unCf = await listen<boolean>('resource-scrape-cf-state', (event) => {
-                const nextActive = Boolean(event.payload)
-                if (cfChallengeActive.value === nextActive) {
+            const unCf = await listen<CfStatePayload>('resource-scrape-cf-state', (event) => {
+                const payload = event.payload
+                if (!payload) return
+
+                cfChallengeActive.value = Boolean(payload.active)
+
+                if (payload.status === 'active') {
+                    toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
                     return
                 }
 
-                cfChallengeActive.value = nextActive
-                if (nextActive) {
-                    toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
-                } else {
+                if (payload.status === 'passed') {
                     toast.success('Cloudflare 验证已通过，继续刮削中')
+                    return
+                }
+
+                if (payload.status === 'timeout') {
+                    toast.error('Cloudflare 验证超时，已取消本次刮削')
+                    return
+                }
+
+                if (payload.status === 'failed') {
+                    toast.error('Cloudflare 验证失败，本次刮削未完成')
                 }
             })
             unlisteners.push(unCf)

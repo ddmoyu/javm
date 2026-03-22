@@ -296,7 +296,6 @@ pub async fn rs_search_resource(
             .unwrap_or(ResourceSite {
                 id: source.name().to_string(),
                 name: source.name().to_string(),
-                fetch_mode: sources::FetchMode::HttpOnly,
                 enabled: true,
             });
         let handle = tokio::spawn(async move {

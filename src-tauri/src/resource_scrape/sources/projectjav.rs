@@ -9,7 +9,7 @@
 //! - 演员：a[href*="/actress/"]
 //! - 标签：.badge-info a[href*="/tag/"]
 
-use super::common::{dedup_strings, select_all_attr, select_attr, select_text};
+use super::common::{dedup_strings, extract_head_meta, select_all_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{Html, Selector};
 
@@ -45,17 +45,18 @@ impl Source for ProjectJav {
         let code_upper = code.to_uppercase();
         let code_lower = code.to_lowercase();
 
-        // 封面图：优先找 img[src*="covers"]，再 fallback
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
+
+        // 封面图：优先找 img[src*="covers"]，再 fallback 到 head
         let cover_url = select_cover_img(&doc)
-            .or_else(|| select_attr(&doc, r#"meta[property="og:image"]"#, "content"))
+            .or_else(|| Some(head.cover_url.clone()).filter(|u| !u.is_empty()))
             .or_else(|| find_cover_image(&doc, &code_upper, &code_lower))
             .unwrap_or_default();
 
-        // 标题：优先 .second-main 容器，其次 h1/meta/title
+        // 标题：优先 .second-main 容器，回退 head
         let raw_title = select_projectjav_title(&doc)
-            .or_else(|| select_attr(&doc, r#"meta[property="og:title"]"#, "content"))
-            .or_else(|| select_text(&doc, "title"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.title);
 
         // 清理标题：去掉番号、网站名等
         let title = raw_title

@@ -58,3 +58,58 @@ pub fn dedup_strings(items: Vec<String>) -> Vec<String> {
         .filter(|s| !s.is_empty() && seen.insert(s.clone()))
         .collect()
 }
+
+/// 从 `<head>` 中提取的公共元数据
+///
+/// 所有数据源解析器的统一第一步：先从 head meta 标签获取基础数据，
+/// 然后各数据源再从 body 中提取补充/覆盖数据。
+pub struct HeadMeta {
+    /// og:image / twitter:image
+    pub cover_url: String,
+    /// og:url / canonical
+    pub page_url: String,
+    /// og:title / twitter:title / `<title>`
+    pub title: String,
+    /// og:description / twitter:description / meta description
+    pub description: String,
+    /// og:site_name
+    pub site_name: String,
+    /// meta keywords
+    pub keywords: String,
+}
+
+/// 从 `<head>` 中提取所有常见 meta 标签数据
+pub fn extract_head_meta(doc: &Html) -> HeadMeta {
+    let cover_url = select_attr(doc, r#"meta[property="og:image"]"#, "content")
+        .or_else(|| select_attr(doc, r#"meta[name="twitter:image"]"#, "content"))
+        .unwrap_or_default();
+
+    let page_url = select_attr(doc, r#"meta[property="og:url"]"#, "content")
+        .or_else(|| select_attr(doc, r#"link[rel="canonical"]"#, "href"))
+        .unwrap_or_default();
+
+    let title = select_attr(doc, r#"meta[property="og:title"]"#, "content")
+        .or_else(|| select_attr(doc, r#"meta[name="twitter:title"]"#, "content"))
+        .or_else(|| select_text(doc, "title"))
+        .unwrap_or_default();
+
+    let description = select_attr(doc, r#"meta[property="og:description"]"#, "content")
+        .or_else(|| select_attr(doc, r#"meta[name="twitter:description"]"#, "content"))
+        .or_else(|| select_attr(doc, r#"meta[name="description"]"#, "content"))
+        .unwrap_or_default();
+
+    let site_name = select_attr(doc, r#"meta[property="og:site_name"]"#, "content")
+        .unwrap_or_default();
+
+    let keywords = select_attr(doc, r#"meta[name="keywords"]"#, "content")
+        .unwrap_or_default();
+
+    HeadMeta {
+        cover_url,
+        page_url,
+        title,
+        description,
+        site_name,
+        keywords,
+    }
+}

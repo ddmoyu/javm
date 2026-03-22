@@ -14,7 +14,7 @@
 
 use scraper::{Html, Selector};
 
-use super::common::{dedup_strings, select_attr, select_text};
+use super::common::{dedup_strings, extract_head_meta, select_text};
 use super::{SearchResult, Source};
 
 pub struct Javtiful;
@@ -64,28 +64,27 @@ impl Source for Javtiful {
         let doc = Html::parse_document(html);
         let code_upper = code.trim().to_uppercase();
 
-        // 标题：优先 og:title，回退 h1 / <title>
-        let raw_title = select_attr(&doc, r#"meta[property="og:title"]"#, "content")
-            .or_else(|| select_text(&doc, "title"))
-            .or_else(|| select_text(&doc, "h1"))
-            .unwrap_or_default();
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
+
+        // 标题：优先 head，回退 h1
+        let raw_title = if !head.title.is_empty() {
+            head.title
+        } else {
+            select_text(&doc, "h1").unwrap_or_default()
+        };
         let cleaned_title = clean_title(&raw_title);
         let title = strip_code_prefix(&cleaned_title, &code_upper);
 
-        // 封面：.player-wrapper 的 background url，回退 og:image
+        // 封面：.player-wrapper 的 background url，回退 head
         let cover_url = extract_player_bg_url(&doc)
-            .or_else(|| select_attr(&doc, r#"meta[property="og:image"]"#, "content"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.cover_url);
 
-        // 页面 URL：og:url / canonical
-        let page_url = select_attr(&doc, r#"meta[property="og:url"]"#, "content")
-            .or_else(|| select_attr(&doc, r#"link[rel="canonical"]"#, "href"))
-            .unwrap_or_default();
+        // 页面 URL
+        let page_url = head.page_url;
 
-        // 简介/描述：og:description / meta description
-        let raw_desc = select_attr(&doc, r#"meta[property="og:description"]"#, "content")
-            .or_else(|| select_attr(&doc, r#"meta[name="description"]"#, "content"))
-            .unwrap_or_default();
+        // 简介/描述
+        let raw_desc = head.description;
 
         // 从 description 提取演员："Starring By: {name}"
         let actors_from_desc = extract_starring(&raw_desc);

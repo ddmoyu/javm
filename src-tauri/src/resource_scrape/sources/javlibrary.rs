@@ -15,7 +15,7 @@
 //! - 评分: `#video_review span` 文本中的数字（格式如 "(7.50)"）
 
 use scraper::{Html, Selector};
-use super::common::{select_all_text, select_attr, select_text};
+use super::common::{extract_head_meta, select_all_text, select_attr, select_text};
 use super::{SearchResult, Source};
 
 pub struct JavLibrary;
@@ -68,7 +68,10 @@ impl Source for JavLibrary {
     fn parse(&self, html: &str, code: &str) -> Option<SearchResult> {
         let doc = Html::parse_document(html);
 
-        // 封面图: img#video_jacket_img 的 src
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
+
+        // 封面图: img#video_jacket_img 优先，回退 head
         let cover_url = select_attr(&doc, "img#video_jacket_img", "src")
             .map(|u| {
                 // javlibrary 的封面 URL 可能以 // 开头
@@ -78,13 +81,13 @@ impl Source for JavLibrary {
                     u
                 }
             })
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.cover_url.clone());
 
-        // 标题: h3.post-title 文本，去掉番号部分
+        // 标题: h3.post-title 优先，回退 head
         let raw_title = select_text(&doc, "h3.post-title")
             .or_else(|| select_text(&doc, "#video_title a"))
             .or_else(|| select_text(&doc, "#video_title"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.title);
 
         let title = raw_title
             .replace(code, "")

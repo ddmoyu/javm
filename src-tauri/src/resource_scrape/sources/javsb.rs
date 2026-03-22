@@ -15,7 +15,7 @@
 //!
 //! 站点受 Cloudflare 保护，因此应配合 WebView 获取。
 
-use super::common::{select_attr, select_text};
+use super::common::{dedup_strings, extract_head_meta, select_text};
 use super::{SearchResult, Source};
 use scraper::{Html, Selector};
 
@@ -40,21 +40,13 @@ impl Source for JavSb {
 
 fn parse_detail_page(doc: &Html, code: &str) -> Option<SearchResult> {
     let requested_code = code.trim().to_uppercase();
-    let page_url = select_attr(doc, r#"meta[property="og:url"]"#, "content")
-        .or_else(|| select_attr(doc, r#"link[rel="canonical"]"#, "href"))
-        .unwrap_or_default();
-    let cover_url = select_attr(doc, r#"meta[property="og:image"]"#, "content")
-        .or_else(|| select_attr(doc, r#"meta[name="twitter:image"]"#, "content"))
-        .unwrap_or_default();
 
-    let raw_title = select_attr(doc, r#"meta[property="og:title"]"#, "content")
-        .or_else(|| select_attr(doc, r#"meta[name="twitter:title"]"#, "content"))
-        .or_else(|| select_text(doc, "title"))
-        .unwrap_or_default();
-    let meta_description = select_attr(doc, r#"meta[property="og:description"]"#, "content")
-        .or_else(|| select_attr(doc, r#"meta[name="twitter:description"]"#, "content"))
-        .or_else(|| select_attr(doc, r#"meta[name="description"]"#, "content"))
-        .unwrap_or_default();
+    // 第一步：从 <head> 提取基础数据
+    let head = extract_head_meta(doc);
+    let page_url = head.page_url;
+    let cover_url = head.cover_url;
+    let raw_title = head.title;
+    let meta_description = head.description;
 
     let resolved_code = if page_url.is_empty() {
         extract_code_like_value(&raw_title)
@@ -71,19 +63,45 @@ fn parse_detail_page(doc: &Html, code: &str) -> Option<SearchResult> {
     }
 
     let title = clean_title(&raw_title, &resolved_code);
-    let premiered = extract_description_value(&meta_description, "發布日期:").unwrap_or_default();
-    let duration = extract_description_value(&meta_description, "片長:").unwrap_or_default();
-    let tags_list = extract_description_csv(&meta_description, "題材有");
-    let actors_list = extract_description_csv(&meta_description, "出演女優:");
-    let director = String::new();
-    let studio = String::new();
-    let category = extract_description_value(&meta_description, "類型:").unwrap_or_default();
-    let plot = extract_plot_text(&meta_description);
-    let plot = if plot.is_empty() { meta_description.clone() } else { plot };
+    let intro_fields = extract_intro_fields(doc);
+
+    let premiered = extract_description_value(&meta_description, "發布日期:")
+        .or_else(|| intro_fields.get_text("發布日期"))
+        .unwrap_or_default();
+    let duration = extract_description_value(&meta_description, "片長:")
+        .or_else(|| intro_fields.get_text("影片時長"))
+        .unwrap_or_default();
+
+    let mut tags_list = extract_description_csv(&meta_description, "題材有");
+    tags_list.extend(intro_fields.get_links("標籤分類").unwrap_or_default());
+    let tags_list = dedup_strings(tags_list);
+
+    let mut actors_list = extract_description_csv(&meta_description, "出演女優:");
+    actors_list.extend(intro_fields.get_links("出演女優").unwrap_or_default());
+    actors_list.extend(intro_fields.get_links("出演男優").unwrap_or_default());
+    let actors_list = dedup_strings(actors_list);
+
+    let director = intro_fields
+        .get_links("導演")
+        .and_then(|values| values.into_iter().next())
+        .unwrap_or_default();
+    let studio = intro_fields
+        .get_links("製作商")
+        .and_then(|values| values.into_iter().next())
+        .unwrap_or_default();
+    let category = extract_description_value(&meta_description, "類型:")
+        .or_else(|| intro_fields.get_links("影片分類").and_then(|values| values.into_iter().next()))
+        .unwrap_or_default();
+    let body_plot = extract_intro_plot(doc);
+    let plot = if !body_plot.is_empty() {
+        body_plot
+    } else {
+        let plot = extract_plot_text(&meta_description);
+        if plot.is_empty() { meta_description.clone() } else { plot }
+    };
     let thumbs = extract_shot_thumbs(doc);
 
-    let meta_keywords = select_attr(doc, r#"meta[name="keywords"]"#, "content")
-        .unwrap_or_default();
+    let meta_keywords = head.keywords;
     let mut tags = tags_list.join(", ");
     if !category.is_empty() {
         tags = append_csv_value(&tags, &category);
@@ -305,6 +323,97 @@ fn extract_plot_text(description: &str) -> String {
     } else {
         String::new()
     }
+}
+
+struct IntroFields {
+    rows: Vec<(String, String, Vec<String>)>,
+}
+
+impl IntroFields {
+    fn get_text(&self, label: &str) -> Option<String> {
+        self.rows
+            .iter()
+            .find(|(name, _, _)| name.contains(label))
+            .map(|(_, value, _)| value.clone())
+            .filter(|value| !value.is_empty())
+    }
+
+    fn get_links(&self, label: &str) -> Option<Vec<String>> {
+        self.rows
+            .iter()
+            .find(|(name, _, _)| name.contains(label))
+            .map(|(_, _, values)| values.clone())
+            .filter(|values| !values.is_empty())
+    }
+}
+
+fn extract_intro_plot(doc: &Html) -> String {
+    select_text(
+        doc,
+        r#"div[data-tab-panel="intro"] div[x-data] > div[class*="line-clamp"]"#,
+    )
+    .unwrap_or_default()
+}
+
+fn extract_intro_fields(doc: &Html) -> IntroFields {
+    let row_sel = match Selector::parse(r#"div[data-tab-panel="intro"] .space-y-2 > div.text-secondary"#) {
+        Ok(selector) => selector,
+        Err(_) => return IntroFields { rows: Vec::new() },
+    };
+    let span_sel = match Selector::parse("span") {
+        Ok(selector) => selector,
+        Err(_) => return IntroFields { rows: Vec::new() },
+    };
+    let link_sel = match Selector::parse("a") {
+        Ok(selector) => selector,
+        Err(_) => return IntroFields { rows: Vec::new() },
+    };
+
+    let mut rows = Vec::new();
+    for row in doc.select(&row_sel) {
+        let Some(label_span) = row.select(&span_sel).next() else {
+            continue;
+        };
+
+        let label_text = label_span.text().collect::<Vec<_>>().join(" ");
+        let label = label_text
+            .replace("\u{a0}", " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim()
+            .trim_end_matches(':')
+            .trim_end_matches('：')
+            .trim()
+            .to_string();
+        if label.is_empty() {
+            continue;
+        }
+
+        let links = dedup_strings(
+            row.select(&link_sel)
+                .filter_map(|link| {
+                    let text = link.text().collect::<Vec<_>>().join(" ");
+                    let cleaned = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                    if cleaned.is_empty() { None } else { Some(cleaned) }
+                })
+                .collect(),
+        );
+
+        let full_text = row.text().collect::<Vec<_>>().join(" ");
+        let value = full_text
+            .replacen(&label_text, "", 1)
+            .replace("\u{a0}", " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ")
+            .trim_matches(|c: char| c == ':' || c == '：' || c == ' ')
+            .to_string();
+
+        rows.push((label, value, links));
+    }
+
+    IntroFields { rows }
 }
 
 fn is_precise_code_match(haystack: &str, code: &str) -> bool {
@@ -543,5 +652,81 @@ mod tests {
         assert_eq!(result.thumbs.len(), 3);
         assert_eq!(result.thumbs[0], "https://img.18av.mov/img/311468/0.jpg");
         assert_eq!(result.thumbs[2], "https://img.18av.mov/img/311468/2.jpg");
+    }
+
+    #[test]
+    fn parse_detail_page_supplements_fields_from_intro_panel() {
+        let html = r#"
+        <html>
+            <head>
+                <meta property="og:url" content="https://jav.sb/jav/ssis-392-1-1.html">
+                <meta property="og:title" content="SSIS-392 一次難忘的射精體驗 - JAVSB">
+                <meta property="og:image" content="https://jav.sb/upload/cover.jpg">
+                <meta property="og:description" content="番號 SSIS-392 線上看. 發布日期: 2022-05-06. 類型: 日本有碼. 出演女優: 三上悠亞. 片長: 1:58:39.">
+            </head>
+            <body>
+                <div id="tab-panels">
+                    <div data-tab-panel="intro">
+                        <div x-data="{ showMore: false }" class="mb-4">
+                            <div class="mb-1 text-secondary break-all line-clamp-2">一次難忘的射精體驗……Yua Mikami 的男性美學風格。</div>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="text-secondary">
+                                <span>影片分類&nbsp;:&nbsp;</span>
+                                <a href="/javtype/Censored.html" class="cat">日本有碼</a>
+                            </div>
+                            <div class="text-secondary">
+                                <span>作品番號&nbsp;:&nbsp;</span>
+                                <span class="font-medium">ssis-392</span>
+                            </div>
+                            <div class="text-secondary">
+                                <span>發布日期&nbsp;:&nbsp;</span>
+                                <span class="font-medium">2022-05-06</span>
+                            </div>
+                            <div class="text-secondary">
+                                <span>影片時長&nbsp;:&nbsp;</span>
+                                <span class="font-medium">1:58:39</span>
+                            </div>
+                            <div class="text-secondary">
+                                <span>標籤分類&nbsp;:&nbsp;</span>
+                                <a href="/genres/individual.html" class="text-nord13 font-medium">單體作品</a>
+                                <a href="/genres/4k.html" class="text-nord13 font-medium">4K</a>
+                            </div>
+                            <div class="text-secondary">
+                                <span>出演女優&nbsp;:&nbsp;</span>
+                                <a href="/actresses/yua_mikami.html" class="text-nord13 font-medium" title="三上悠亞 (三上悠亜)">三上悠亞 (三上悠亜)</a>
+                            </div>
+                            <div class="text-secondary">
+                                <span>出演男優&nbsp;:&nbsp;</span>
+                                <a href="/actresses/muscle_sawano.html" class="text-nord13 font-medium">マッスル澤野</a>
+                                <a href="/actresses/samejima.html" class="text-nord13 font-medium">鮫島</a>
+                            </div>
+                            <div class="text-secondary">
+                                <span>導演&nbsp;:&nbsp;</span>
+                                <a href="/director/TAKE-D.html" class="text-nord13 font-medium">TAKE-D</a>
+                            </div>
+                            <div class="text-secondary">
+                                <span>製作商&nbsp;:&nbsp;</span>
+                                <a href="/maker/S1.html" class="text-nord13 font-medium">S1</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </body>
+        </html>
+        "#;
+
+        let result = JavSb.parse(html, "SSIS-392").expect("应解析 intro panel 补充数据");
+        assert_eq!(result.premiered, "2022-05-06");
+        assert_eq!(result.duration, "1:58:39");
+        assert_eq!(result.director, "TAKE-D");
+        assert_eq!(result.studio, "S1");
+        assert!(result.actors.contains("三上悠亞"));
+        assert!(result.actors.contains("マッスル澤野"));
+        assert!(result.actors.contains("鮫島"));
+        assert!(result.tags.contains("日本有碼"));
+        assert!(result.tags.contains("單體作品"));
+        assert!(result.tags.contains("4K"));
+        assert!(result.plot.contains("一次難忘的射精體驗"));
     }
 }

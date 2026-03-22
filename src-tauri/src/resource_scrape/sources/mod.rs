@@ -1,8 +1,9 @@
 //! 数据源注册表与资源网站配置
 //!
-//! 定义 Source trait、FetchMode 枚举、ResourceSite 结构体，
+//! 定义 Source trait、ResourceSite 结构体，
 //! 以及数据源注册和默认网站配置函数。
 
+pub mod av123;
 pub mod common;
 pub mod freejavbt;
 pub mod javbus;
@@ -13,6 +14,7 @@ pub mod javplace;
 pub mod javsb;
 pub mod javtiful;
 pub mod javxx;
+pub mod myjav;
 pub mod projectjav;
 pub mod threexplanet;
 
@@ -39,17 +41,6 @@ pub trait Source: Send + Sync {
     }
 }
 
-/// 资源网站获取模式
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum FetchMode {
-    /// 仅支持 HTTP
-    HttpOnly,
-    /// 仅支持 WebView
-    WebViewOnly,
-    /// 两者皆支持
-    Both,
-}
-
 /// 资源网站定义
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceSite {
@@ -57,8 +48,6 @@ pub struct ResourceSite {
     pub id: String,
     /// 显示名称，如 "JavBus"
     pub name: String,
-    /// 支持的获取模式
-    pub fetch_mode: FetchMode,
     /// 是否启用
     pub enabled: bool,
 }
@@ -77,6 +66,8 @@ pub fn all_sources() -> Vec<Box<dyn Source>> {
         Box::new(javlibrary::JavLibrary),
         Box::new(javguru::JavGuru),
         Box::new(javtiful::Javtiful),
+        Box::new(av123::Av123),
+        Box::new(myjav::MyJav),
     ]
 }
 
@@ -86,67 +77,66 @@ pub fn default_sites() -> Vec<ResourceSite> {
         ResourceSite {
             id: "javbus".to_string(),
             name: "JavBus".to_string(),
-            fetch_mode: FetchMode::Both,
             enabled: true,
         },
         ResourceSite {
             id: "javmenu".to_string(),
             name: "JavMenu".to_string(),
-            fetch_mode: FetchMode::HttpOnly,
             enabled: true,
         },
         ResourceSite {
             id: "javsb".to_string(),
             name: "JavSB".to_string(),
-            fetch_mode: FetchMode::Both,
             enabled: true,
         },
         ResourceSite {
             id: "javxx".to_string(),
             name: "JAVXX".to_string(),
-            fetch_mode: FetchMode::HttpOnly,
             enabled: true,
         },
         ResourceSite {
             id: "javplace".to_string(),
             name: "JavPlace".to_string(),
-            fetch_mode: FetchMode::HttpOnly,
             enabled: true,
         },
         ResourceSite {
             id: "projectjav".to_string(),
             name: "ProjectJav".to_string(),
-            fetch_mode: FetchMode::HttpOnly,
             enabled: true,
         },
         ResourceSite {
             id: "3xplanet".to_string(),
             name: "3xplanet".to_string(),
-            fetch_mode: FetchMode::HttpOnly,
             enabled: true,
         },
         ResourceSite {
             id: "freejavbt".to_string(),
             name: "FreeJavBT".to_string(),
-            fetch_mode: FetchMode::Both,
             enabled: true,
         },
         ResourceSite {
             id: "javlibrary".to_string(),
             name: "JavLibrary".to_string(),
-            fetch_mode: FetchMode::Both,
             enabled: true,
         },
         ResourceSite {
             id: "javguru".to_string(),
             name: "JavGuru".to_string(),
-            fetch_mode: FetchMode::Both,
             enabled: true,
         },
         ResourceSite {
             id: "javtiful".to_string(),
             name: "Javtiful".to_string(),
-            fetch_mode: FetchMode::HttpOnly,
+            enabled: true,
+        },
+        ResourceSite {
+            id: "123av".to_string(),
+            name: "123AV".to_string(),
+            enabled: true,
+        },
+        ResourceSite {
+            id: "myjav".to_string(),
+            name: "MyJav".to_string(),
             enabled: true,
         },
     ]

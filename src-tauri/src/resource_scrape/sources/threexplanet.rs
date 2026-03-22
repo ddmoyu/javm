@@ -8,7 +8,7 @@
 //! - 预览图：img 含 /screens/
 //! - 下载区在 <h1 class="postdownload"> 之后，需要截断
 
-use super::common::{select_all_attr, select_attr, select_text};
+use super::common::{extract_head_meta, select_all_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{ElementRef, Html, Selector};
 use std::collections::HashMap;
@@ -26,6 +26,9 @@ impl Source for ThreeXPlanet {
 
     fn parse(&self, html: &str, code: &str) -> Option<SearchResult> {
         let doc = Html::parse_document(html);
+
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
         let spec_fields = extract_spec_fields(&doc);
 
         // 标题
@@ -45,13 +48,12 @@ impl Source for ThreeXPlanet {
         // 从内容区提取所有图片
         let content_images = select_all_attr(&doc, ".tdb_single_content img", "src");
 
-        // 封面图
+        // 封面图：内容区 cover 图优先，回退 head
         let cover_url = content_images
             .iter()
             .find(|u| u.contains("_cover") || u.contains("cover"))
             .cloned()
-            .or_else(|| select_attr(&doc, r#"meta[property="og:image"]"#, "content"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.cover_url.clone());
 
         // 预览截图
         let thumbs: Vec<String> = content_images

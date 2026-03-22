@@ -15,7 +15,7 @@
 use scraper::{Html, Selector};
 use std::collections::HashSet;
 
-use super::common::{dedup_strings, select_attr, select_text};
+use super::common::{dedup_strings, extract_head_meta, select_attr, select_text};
 use super::{SearchResult, Source};
 
 pub struct JavGuru;
@@ -148,11 +148,13 @@ impl Source for JavGuru {
         let doc = Html::parse_document(html);
         let code_upper = code.trim().to_uppercase();
 
-        // 标题：h1.titl 或回退到 h1 / og:title
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
+
+        // 标题：h1.titl 优先，回退 head
         let raw_title = select_text(&doc, "h1.titl")
             .or_else(|| select_text(&doc, "h1"))
-            .or_else(|| select_attr(&doc, r#"meta[property="og:title"]"#, "content"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.title.clone());
 
         // 清理标题：去掉 [CODE] 前缀
         let title = raw_title
@@ -164,10 +166,9 @@ impl Source for JavGuru {
             .trim()
             .to_string();
 
-        // 封面图：.large-screenimg img 或 og:image
+        // 封面图：.large-screenimg img 优先，回退 head
         let cover_url = select_attr(&doc, ".large-screenimg img", "src")
-            .or_else(|| select_attr(&doc, r#"meta[property="og:image"]"#, "content"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.cover_url.clone());
 
         // 从 .infoleft ul li 提取结构化字段
         let info_items = extract_info_items(&doc);
@@ -204,15 +205,12 @@ impl Source for JavGuru {
         // 截图：.wp-content img
         let thumbs = extract_screenshots(&doc, &cover_url);
 
-        // 剧情：.wp-content p 纯文本段落
+        // 剧情：.wp-content p 优先，回退 head description
         let plot = extract_plot(&doc)
-            .or_else(|| select_attr(&doc, r#"meta[property="og:description"]"#, "content"))
-            .unwrap_or_default();
+            .unwrap_or_else(|| head.description.clone());
 
         // 页面 URL
-        let page_url = select_attr(&doc, r#"meta[property="og:url"]"#, "content")
-            .or_else(|| select_attr(&doc, r#"link[rel="canonical"]"#, "href"))
-            .unwrap_or_default();
+        let page_url = head.page_url;
 
         if title.is_empty() && cover_url.is_empty() {
             return None;

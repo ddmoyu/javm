@@ -306,7 +306,6 @@ impl TaskQueueManager {
             let detail_site = ResourceSite {
                 id: site.id.clone(),
                 name: site.name.clone(),
-                fetch_mode: site.fetch_mode.clone(),
                 enabled: true,
             };
             match fetcher

@@ -4,7 +4,7 @@
 //! 当前实现直接请求详情页，并优先在包含“详情”和番号的内容容器中提取字段，
 //! 以避免误采集页脚中的全站演员/制作商导航链接。
 
-use super::common::{dedup_strings, select_attr, select_text};
+use super::common::{dedup_strings, extract_head_meta, select_attr, select_text};
 use super::{SearchResult, Source};
 use scraper::{ElementRef, Html, Selector};
 use url::Url;
@@ -26,14 +26,13 @@ impl Source for JavXX {
         let base_url = self.build_url(&code_upper);
         let detail_root = find_detail_root(&doc, &code_upper);
 
+        // 第一步：从 <head> 提取基础数据
+        let head = extract_head_meta(&doc);
+
         let raw_title = select_text(&doc, "#video-info h1.title")
             .or_else(|| detail_root.and_then(|root| select_text_in(&root, "h1")))
             .or_else(|| select_text(&doc, "h1"))
-            .or_else(|| {
-                select_attr(&doc, r#"meta[property="og:title"]"#, "content")
-                    .map(|t| clean_title(&t))
-            })
-            .or_else(|| select_text(&doc, "title").map(|t| clean_title(&t)))
+            .or_else(|| Some(clean_title(&head.title)))
             .unwrap_or_default();
         let original_title = clean_title(&raw_title);
         let title = strip_code_prefix(&original_title, &code_upper);
@@ -43,7 +42,8 @@ impl Source for JavXX {
             format!("{} {}", code_upper, original_title)
         };
 
-        let cover_url = select_attr(&doc, r#"meta[property="og:image"]"#, "content")
+        let cover_url = Some(head.cover_url.clone())
+            .filter(|u| !u.is_empty())
             .or_else(|| {
                 detail_root.and_then(|root| {
                     select_first_image_in(&root)
@@ -103,9 +103,7 @@ impl Source for JavXX {
 
         let thumbs = Vec::new();
 
-        let page_url = select_attr(&doc, r#"meta[property="og:url"]"#, "content")
-            .or_else(|| select_attr(&doc, r#"link[rel="canonical"]"#, "href"))
-            .unwrap_or_default();
+        let page_url = head.page_url;
 
         if title.is_empty() && cover_url.is_empty() {
             return None;

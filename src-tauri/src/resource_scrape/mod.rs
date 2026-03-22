@@ -13,6 +13,7 @@ pub mod client;
 pub mod database_writer;
 pub mod detector;
 pub mod sources;
+pub mod cf_detection;
 pub mod fetcher;
 pub mod commands;
 pub mod queue_manager;
