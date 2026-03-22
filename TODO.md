@@ -29,3 +29,8 @@ https://v2.tauri.app/plugin/updater/
 https://github.com/tauri-apps/tauri-action
 
 18. 刮削还是有 cf 验证问题，目前好像不正常，导致无法获取视频地址
+
+
+exe 30508KB
+
+nsis exe 16074KB

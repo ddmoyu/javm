@@ -1,5 +1,6 @@
 use crate::resource_scrape::types::{ScrapeMetadata, SearchResult};
 use crate::settings::{self, AIProvider as SettingsAIProvider};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -81,12 +82,9 @@ pub async fn translate_scrape_metadata(
 	};
 
 	let input_json = serde_json::to_string(&input).map_err(|e| format!("构建翻译请求失败: {}", e))?;
-	let prompt = format!(
-		"你是一个视频元数据翻译器。\n请将输入 JSON 中的文本翻译成目标语言：{}。\n仅翻译明显是日语或英语的内容；其他语言保持原样。\n保留专有名词、番号、人名、组织名，不要音译、不增加解释。\n必须严格返回 JSON，对象字段与输入完全一致，不能新增字段，不能输出 markdown。\n\n输入 JSON:\n{}",
-		target_language, input_json
-	);
+	let system_prompt = build_system_prompt(target_language);
 
-	let content = call_provider(provider, &prompt).await?;
+	let content = call_provider(provider, &system_prompt, &input_json).await?;
 	let json_payload = extract_json_object(&content).ok_or_else(|| "翻译响应不是有效 JSON".to_string())?;
 	let translated: TranslationOutput =
 		serde_json::from_str(&json_payload).map_err(|e| format!("解析翻译结果失败: {}", e))?;
@@ -144,12 +142,9 @@ pub async fn translate_search_result(
 	};
 
 	let input_json = serde_json::to_string(&input).map_err(|e| format!("构建翻译请求失败: {}", e))?;
-	let prompt = format!(
-		"你是一个视频元数据翻译器。\n请将输入 JSON 中的文本翻译成目标语言：{}。\n仅翻译明显是日语或英语的内容；其他语言保持原样。\n保留专有名词、番号、人名、组织名，不要音译、不增加解释。\n必须严格返回 JSON，对象字段与输入完全一致，不能新增字段，不能输出 markdown。\n\n输入 JSON:\n{}",
-		target_language, input_json
-	);
+	let system_prompt = build_system_prompt(target_language);
 
-	let content = call_provider(provider, &prompt).await?;
+	let content = call_provider(provider, &system_prompt, &input_json).await?;
 	let json_payload = extract_json_object(&content).ok_or_else(|| "翻译响应不是有效 JSON".to_string())?;
 	let translated: TranslationOutput =
 		serde_json::from_str(&json_payload).map_err(|e| format!("解析翻译结果失败: {}", e))?;
@@ -160,7 +155,7 @@ pub async fn translate_search_result(
 fn apply_search_result_translation(result: &SearchResult, translated: TranslationOutput) -> SearchResult {
 	let mut out = result.clone();
 
-	apply_non_empty(&mut out.title, translated.title);
+	apply_title_translation(&mut out.title, translated.title, Some(result.code.as_str()));
 	apply_non_empty(&mut out.plot, translated.plot);
 	apply_non_empty(&mut out.outline, translated.outline);
 	apply_non_empty(&mut out.tagline, translated.tagline);
@@ -198,7 +193,7 @@ fn apply_search_result_translation(result: &SearchResult, translated: Translatio
 fn apply_translation(metadata: &ScrapeMetadata, translated: TranslationOutput) -> ScrapeMetadata {
 	let mut result = metadata.clone();
 
-	apply_non_empty(&mut result.title, translated.title);
+	apply_title_translation(&mut result.title, translated.title, Some(metadata.local_id.as_str()));
 	apply_non_empty(&mut result.plot, translated.plot);
 	apply_non_empty(&mut result.outline, translated.outline);
 	apply_non_empty(&mut result.tagline, translated.tagline);
@@ -237,6 +232,82 @@ fn apply_non_empty(target: &mut String, candidate: String) {
 	}
 }
 
+fn apply_title_translation(
+	target: &mut String,
+	candidate: String,
+	code: Option<&str>,
+) {
+	let value = candidate.trim();
+	if value.is_empty() {
+		return;
+	}
+
+	let cleaned = sanitize_translated_title(value, code);
+	if !cleaned.is_empty() {
+		*target = cleaned;
+	}
+}
+
+fn sanitize_translated_title(title: &str, code: Option<&str>) -> String {
+	let mut cleaned = title.trim().replace('　', " ");
+
+	if let Some(code) = code {
+		cleaned = strip_code_from_title(&cleaned, code);
+	}
+
+	clean_title_edge_delimiters(&cleaned)
+}
+
+fn strip_code_from_title(title: &str, code: &str) -> String {
+	let trimmed_code = code.trim();
+	if trimmed_code.is_empty() {
+		return title.to_string();
+	}
+
+	let escaped = regex::escape(trimmed_code);
+	let pattern = format!(r"(?i)(^|[\s\[\]【】()（）-_:：]){}(?=$|[\s\[\]【】()（）-_:：])", escaped);
+	let re = Regex::new(&pattern).unwrap();
+	let replaced = re.replace_all(title, " ");
+	clean_title_edge_delimiters(replaced.as_ref())
+}
+
+fn clean_title_edge_delimiters(value: &str) -> String {
+	value
+		.trim()
+		.trim_matches(|c: char| {
+			c.is_whitespace()
+				|| matches!(
+					c,
+					'-'
+						| '_'
+						| ':'
+						| '：'
+						| '|'
+						| '/'
+						| '&'
+						| '＆'
+						| '、'
+						| '，'
+						| ','
+						| '·'
+						| '•'
+						| '「'
+						| '」'
+						| '『'
+						| '』'
+						| '【'
+						| '】'
+						| '('
+						| ')'
+						| '（'
+						| '）'
+				)
+		})
+		.split_whitespace()
+		.collect::<Vec<_>>()
+		.join(" ")
+}
+
 fn map_target_language(language: &str) -> &'static str {
 	match language.trim().to_lowercase().as_str() {
 		"zh-cn" => "简体中文",
@@ -247,7 +318,34 @@ fn map_target_language(language: &str) -> &'static str {
 	}
 }
 
-async fn call_provider(provider: &SettingsAIProvider, prompt: &str) -> Result<String, String> {
+fn build_system_prompt(target_language: &str) -> String {
+	format!(
+		"你是影片元数据翻译引擎，负责将日语/英语影片信息准确翻译为{target}。\n\
+		\n\
+		## 语言识别\n\
+		- 含有平假名（ぁ-ん）或片假名（ァ-ヺ）的文本一定是日语，必须翻译\n\
+		- 即使文本大部分是汉字，只要混有假名就是日语，不要误判为中文\n\
+		- 纯英文文本也必须翻译\n\
+		- 已是{target}的纯中文内容才保留原样\n\
+		\n\
+		## 各字段翻译策略\n\
+		- title：优先只保留标题语义本身，不要包含番号；若末尾只是孤立的人名后缀，尽量省略，但不要为此破坏标题原意\n\
+		- plot / outline / tagline：完整翻译为通顺自然的{target}，忠实原意，不添加不删减\n\
+		- tags / genres：翻译为{target}中该领域的常用术语，每个标签保持简短\n\
+		- studio / maker / publisher / label：厂牌名称原样保留，不翻译\n\
+		- director / set_name：日语人名原样保留，描述性文本则翻译\n\
+		- 人名（演员、导演）一律保留原文，不音译\n\
+		- 空字符串返回空字符串，空数组返回空数组\n\
+		\n\
+		## 输出格式\n\
+		- 仅返回纯 JSON 对象，字段名与输入完全一致\n\
+		- 禁止新增或删除字段\n\
+		- 禁止输出 markdown 代码块、注释或任何非 JSON 内容",
+		target = target_language
+	)
+}
+
+async fn call_provider(provider: &SettingsAIProvider, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
 	let client = crate::utils::proxy::apply_proxy_auto(
 		reqwest::Client::builder().timeout(std::time::Duration::from_secs(40)),
 	)
@@ -270,10 +368,9 @@ async fn call_provider(provider: &SettingsAIProvider, prompt: &str) -> Result<St
 	};
 
 	if provider.provider == "claude" {
-		call_claude_api(&client, base_url, &provider.api_key, &provider.model, prompt).await
+		call_claude_api(&client, base_url, &provider.api_key, &provider.model, system_prompt, user_prompt).await
 	} else {
-		// openai / deepseek / custom 均走 OpenAI 兼容接口
-		call_openai_compatible_api(&client, base_url, &provider.api_key, &provider.model, prompt).await
+		call_openai_compatible_api(&client, base_url, &provider.api_key, &provider.model, system_prompt, user_prompt).await
 	}
 }
 
@@ -282,17 +379,19 @@ async fn call_claude_api(
 	base_url: &str,
 	api_key: &str,
 	model: &str,
-	prompt: &str,
+	system_prompt: &str,
+	user_prompt: &str,
 ) -> Result<String, String> {
 	let endpoint = format!("{}/messages", base_url.trim_end_matches('/'));
 
 	let payload = serde_json::json!({
 		"model": model,
 		"max_tokens": 1400,
-		"temperature": 0.2,
+		"temperature": 0.1,
+		"system": system_prompt,
 		"messages": [{
 			"role": "user",
-			"content": prompt
+			"content": user_prompt
 		}]
 	});
 
@@ -328,18 +427,19 @@ async fn call_openai_compatible_api(
 	base_url: &str,
 	api_key: &str,
 	model: &str,
-	prompt: &str,
+	system_prompt: &str,
+	user_prompt: &str,
 ) -> Result<String, String> {
 	let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
 	let payload = serde_json::json!({
 		"model": model,
-		"messages": [{
-			"role": "user",
-			"content": prompt
-		}],
+		"messages": [
+			{ "role": "system", "content": system_prompt },
+			{ "role": "user", "content": user_prompt }
+		],
 		"max_tokens": 1400,
-		"temperature": 0.2,
+		"temperature": 0.1,
 		"response_format": { "type": "json_object" }
 	});
 
