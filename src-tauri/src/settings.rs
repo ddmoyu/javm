@@ -160,6 +160,7 @@ fn merge_scrape_sites(saved_sites: &[ResourceSite]) -> Vec<ResourceSite> {
 }
 
 fn normalize_scrape_settings(scrape: &mut ScrapeSettings) {
+    scrape.concurrent = scrape.concurrent.clamp(1, 10);
     scrape.max_webview_windows = scrape.max_webview_windows.clamp(1, 8);
     scrape.sites = merge_scrape_sites(&scrape.sites);
 

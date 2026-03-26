@@ -704,6 +704,27 @@ watch(() => settingsStore.settings, async (newSettings) => {
 
               <div class="flex items-center justify-between gap-4">
                 <div>
+                  <p class="font-medium">搜索并发数</p>
+                  <p class="text-sm text-muted-foreground">同时请求的数据源数量，推荐 3-5 个，过高可能导致 IP 被封或触发验证</p>
+                </div>
+                <Select :model-value="String(localSettings.scrape.concurrent ?? 5)"
+                  @update:model-value="(v) => { localSettings.scrape.concurrent = Number(v); saveScrapeSettings() }">
+                  <SelectTrigger class="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1</SelectItem>
+                    <SelectItem value="2">2</SelectItem>
+                    <SelectItem value="3">3</SelectItem>
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="8">8</SelectItem>
+                    <SelectItem value="10">10（不限）</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div class="flex items-center justify-between gap-4">
+                <div>
                   <p class="font-medium">最大 WebView 窗口数</p>
                   <p class="text-sm text-muted-foreground">多个网站同时触发 Cloudflare 验证时，最多同时保留的刮削窗口数量。相同网站会复用同一个窗口。</p>
                 </div>

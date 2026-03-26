@@ -311,8 +311,11 @@ pub async fn rs_search_resource(
     }
 
     let total = search_sources.len();
+    let max_concurrent = (app_settings.scrape.concurrent.max(1) as usize).min(total);
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
+    println!("[搜索] 最大并发数: {}，数据源总数: {}", max_concurrent, total);
 
-    // 并发请求所有数据源
+    // 并发请求所有数据源（受 semaphore 限制）
     let mut handles = Vec::new();
     for source in search_sources {
         let client = http_client.clone();
@@ -320,6 +323,7 @@ pub async fn rs_search_resource(
         let code = code.clone();
         let app = app.clone();
         let token = token.clone();
+        let semaphore = semaphore.clone();
         let site = enabled_sites
             .iter()
             .find(|item| item.id.eq_ignore_ascii_case(source.name()))
@@ -333,6 +337,21 @@ pub async fn rs_search_resource(
             let name = source.name().to_string();
 
             // 检查是否已取消
+            if token.is_cancelled() {
+                println!("[搜索] {} 已取消，跳过", name);
+                return;
+            }
+
+            // 获取并发许可
+            let _permit = match semaphore.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    println!("[搜索] {} 信号量已关闭，跳过", name);
+                    return;
+                }
+            };
+
+            // 获取许可后再次检查取消
             if token.is_cancelled() {
                 println!("[搜索] {} 已取消，跳过", name);
                 return;
