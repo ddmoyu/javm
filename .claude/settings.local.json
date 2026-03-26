@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(cargo test:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(node scripts/bump-version.mjs minor)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git tag:*)",
+      "Bash(git push:*)"
     ]
   }
 }
