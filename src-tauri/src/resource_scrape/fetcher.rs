@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Listener, Manager};
 
+use super::cf_detection;
 use super::client;
 use super::sources::ResourceSite;
 use super::webview_support;
@@ -32,9 +33,6 @@ const WEBVIEW_TIMEOUT_SECS: u64 = 60;
 
 /// Cloudflare 手动验证超时时间（秒）
 const CF_MANUAL_TIMEOUT_SECS: u64 = 60;
-
-/// 检测到 Cloudflare 后延迟显示窗口，避免瞬时误判造成闪窗。
-const CF_SHOW_DELAY_SECS: u64 = 3;
 
 /// 前端刮削 CF 状态事件
 const RESOURCE_SCRAPE_CF_STATE_EVENT: &str = "resource-scrape-cf-state";
@@ -326,25 +324,9 @@ impl Fetcher {
                 (guard.active, timeout_hit)
             };
 
-            let should_show_cf_window = {
-                let guard = match cf_state.lock() {
-                    Ok(guard) => guard,
-                    Err(_) => {
-                        cleanup_webview_fetch(app, &window, listener_id, cf_listener_id, cf_state_listener_id, false, "failed");
-                        return Err("WebView Cloudflare 状态同步失败".to_string());
-                    }
-                };
-
-                guard.active
-                    && guard
-                        .detected_at
-                        .map(|detected_at| detected_at.elapsed().as_secs() >= CF_SHOW_DELAY_SECS)
-                        .unwrap_or(false)
-            };
-
             webview_support::sync_window_visibility(
                 &window,
-                effective_show_webview || should_show_cf_window,
+                effective_show_webview || cf_active,
             );
 
             if cf_timeout_hit {
@@ -398,34 +380,43 @@ impl Fetcher {
 
         match self.fetch_http(url).await {
             Ok(html) => {
-                if should_retry_with_webview(url, &html) {
+                if let Some(reason) = webview_fallback_reason(url, &html) {
                     println!(
-                        "[获取] {} HTTP 内容疑似错页，自动回退到 WebView",
+                        "[获取] {} HTTP 内容需要回退到 WebView: {}",
                         site.name,
+                        reason,
                     );
-                    match Self::fetch_webview(
-                        app,
-                        url,
-                        site,
-                        options.show_webview,
-                        options.max_webview_windows,
-                    ).await {
-                        Ok(webview_html) => Ok(webview_html),
-                        Err(e) => {
-                            println!(
-                                "[获取] {} WebView 回退失败，继续使用 HTTP 内容: {}",
-                                site.name,
-                                e
-                            );
-                            Ok(html)
+                    if options.webview_fallback_enabled {
+                        match Self::fetch_webview(
+                            app,
+                            url,
+                            site,
+                            options.show_webview,
+                            options.max_webview_windows,
+                        ).await {
+                            Ok(webview_html) => Ok(webview_html),
+                            Err(e) => {
+                                println!(
+                                    "[获取] {} WebView 回退失败，继续使用 HTTP 内容: {}",
+                                    site.name,
+                                    e
+                                );
+                                Ok(html)
+                            }
                         }
+                    } else {
+                        println!(
+                            "[获取] {} 已检测到需要 WebView，但未开启回退开关，继续使用 HTTP 内容",
+                            site.name,
+                        );
+                        Ok(html)
                     }
                 } else {
                     Ok(html)
                 }
             }
             Err(err) => {
-                if options.webview_enabled && options.webview_fallback_enabled {
+                if options.webview_fallback_enabled {
                     println!(
                         "[获取] {} HTTP 失败，回退到 WebView: {}",
                         site.name,
@@ -459,6 +450,18 @@ fn should_retry_with_webview(url: &str, html: &str) -> bool {
     // 对于明确是番号详情页的 URL，如果返回 HTML 连目标番号都不包含，
     // 大概率是广告跳转页、反爬页或站点通用页。
     true
+}
+
+fn webview_fallback_reason(url: &str, html: &str) -> Option<&'static str> {
+    if cf_detection::is_cloudflare_challenge_html(html) {
+        return Some("命中 Cloudflare 验证页");
+    }
+
+    if should_retry_with_webview(url, html) {
+        return Some("内容疑似错页或反爬页");
+    }
+
+    None
 }
 
 fn extract_designation_from_url(url: &str) -> Option<String> {
@@ -585,6 +588,7 @@ fn lock_webview_pool(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resource_scrape::cf_detection;
 
     #[test]
     fn should_retry_when_detail_page_mismatches_designation() {
@@ -618,6 +622,40 @@ mod tests {
             "https://www.javlibrary.com/cn/vl_searchbyid.php?keyword=SSIS-392",
             html,
         ));
+    }
+
+    #[test]
+    fn should_fallback_when_http_returns_cloudflare_challenge() {
+        let html = r#"
+        <html>
+            <head><title>Just a moment...</title></head>
+            <body>
+                <form class="challenge-form"></form>
+                <div>Checking your browser before accessing</div>
+            </body>
+        </html>
+        "#;
+
+        assert!(cf_detection::is_cloudflare_challenge_html(html));
+        assert_eq!(
+            webview_fallback_reason("https://freejavbt.com/zh/FSDSS-496", html),
+            Some("命中 Cloudflare 验证页")
+        );
+    }
+
+    #[test]
+    fn should_fallback_when_http_returns_mismatch_page() {
+        let html = r#"
+        <html>
+            <head><title>广告落地页</title></head>
+            <body><div>buy now</div></body>
+        </html>
+        "#;
+
+        assert_eq!(
+            webview_fallback_reason("https://freejavbt.com/zh/FSDSS-496", html),
+            Some("内容疑似错页或反爬页")
+        );
     }
 
     #[test]

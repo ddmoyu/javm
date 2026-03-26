@@ -1,14 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "scraper",
-  "description": "Capability for the scraper window - 纯净 WebView，不注入 IPC 桥",
-  "windows": ["scraper_window"],
-  "webviews": ["scraper_window"],
+  "description": "Capability for the scraper window - 资源刮削 WebView",
+  "windows": ["scraper_window*"],
+  "webviews": ["scraper_window*"],
   "remote": {
     "urls": ["https://*", "http://*"]
   },
   "permissions": [
     "core:default",
+    "core:event:allow-emit",
+    "core:event:allow-listen",
     "core:window:allow-close",
     "core:window:allow-hide",
     "core:window:allow-show",

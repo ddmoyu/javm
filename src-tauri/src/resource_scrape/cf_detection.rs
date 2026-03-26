@@ -6,12 +6,8 @@ use serde_json::json;
 const HARD_MARKERS: &[&str] = &[
     "challenge-form",
     "cf-browser-verification",
-    "cf-turnstile",
-    "cf-turnstile-response",
     "cf-chl-widget",
     "_cf_chl_opt",
-    "challenges.cloudflare.com",
-    "cdn-cgi/challenge-platform",
     "challenge-success-text",
     "包含 cloudflare 安全质询的小组件",
 ];
@@ -43,6 +39,14 @@ const SOFT_MARKERS: &[&str] = &[
 const AUX_MARKERS: &[&str] = &[
     "cloudflare",
     "ray id:",
+];
+
+const WIDGET_MARKERS: &[&str] = &[
+    "cf-turnstile",
+    "cf-turnstile-response",
+    "challenges.cloudflare.com",
+    "cdn-cgi/challenge-platform",
+    "turnstile",
 ];
 
 /// 可见文字长度上限：超过此值的页面视为正常内容页，
@@ -83,7 +87,14 @@ pub fn is_cloudflare_challenge_html(html: &str) -> bool {
         .filter(|marker| lower_html.contains(&marker.to_lowercase()))
         .count();
 
-    (title_matched && (soft_hits >= 1 || aux_hits >= 1)) || (soft_hits >= 2 && aux_hits >= 1)
+    let widget_hits = WIDGET_MARKERS
+        .iter()
+        .filter(|marker| lower_html.contains(&marker.to_lowercase()))
+        .count();
+
+    (title_matched && (soft_hits >= 1 || aux_hits >= 1))
+        || (soft_hits >= 2 && aux_hits >= 1)
+        || (widget_hits >= 1 && soft_hits >= 1)
 }
 
 pub fn build_cloudflare_detection_function() -> String {
@@ -95,14 +106,17 @@ pub fn build_cloudflare_detection_function() -> String {
     format!(
         r#"
             function __javmDetectCloudflareChallenge() {{
-                // 1. DOM 检测 — 最可靠，CF 验证页特有元素
-                var domMatched = document.querySelector('.challenge-form') !== null
-                    || document.querySelector('.cf-turnstile') !== null
+                // 1. DOM 检测：仅将明确的挑战页结构视为硬命中。
+                var hardDomMatched = document.querySelector('.challenge-form') !== null
+                    || document.querySelector('.cf-browser-verification') !== null;
+                if (hardDomMatched) return true;
+
+                var widgetDetected = document.querySelector('.cf-turnstile') !== null
                     || document.querySelector('[id*="turnstile"]') !== null
                     || document.querySelector('input[name="cf-turnstile-response"]') !== null
                     || document.querySelector('iframe[title*="Cloudflare"]') !== null
-                    || document.querySelector('iframe[title*="cloudflare"]') !== null;
-                if (domMatched) return true;
+                    || document.querySelector('iframe[title*="cloudflare"]') !== null
+                    || document.querySelector('iframe[src*="challenges.cloudflare.com"]') !== null;
 
                 var html = document.documentElement ? document.documentElement.outerHTML : '';
                 var lowerHtml = html.toLowerCase();
@@ -154,7 +168,9 @@ pub fn build_cloudflare_detection_function() -> String {
                     }}
                 }}
 
-                return (titleMatched && (softHits >= 1 || auxHits >= 1)) || (softHits >= 2 && auxHits >= 1);
+                return (titleMatched && (softHits >= 1 || auxHits >= 1))
+                    || (softHits >= 2 && auxHits >= 1)
+                    || (widgetDetected && softHits >= 1);
             }}
         "#,
         hard_markers = hard_markers,
@@ -342,6 +358,59 @@ mod tests {
         "#;
 
         assert!(is_cloudflare_challenge_html(html));
+    }
+
+    #[test]
+    fn does_not_flag_normal_page_with_turnstile_widget_only() {
+        let long_content = "正常详情页内容".repeat(200);
+        let html = format!(
+            r#"
+            <html>
+                <head><title>FSDSS-496 - 正常详情页</title></head>
+                <body>
+                    <article>{}</article>
+                    <form id="comment-form">
+                        <div class="cf-turnstile"></div>
+                        <input type="hidden" name="cf-turnstile-response" />
+                    </form>
+                </body>
+            </html>
+            "#,
+            long_content
+        );
+
+        assert!(!is_cloudflare_challenge_html(&html));
+    }
+
+    #[test]
+    fn does_not_flag_sparse_page_with_widget_without_challenge_copy() {
+        let html = r#"
+        <html>
+            <head><title>Redirecting...</title></head>
+            <body>
+                <iframe title="Cloudflare" src="https://challenges.cloudflare.com/widget"></iframe>
+            </body>
+        </html>
+        "#;
+
+        assert!(!is_cloudflare_challenge_html(html));
+    }
+
+    #[test]
+    fn does_not_flag_page_with_challenge_platform_script_only() {
+        let html = r#"
+        <html>
+            <head>
+                <script defer src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script>
+            </head>
+            <body>
+                <h1>ProjectJav - High Speed Jav Torrent</h1>
+                <p>正常搜索结果页面</p>
+            </body>
+        </html>
+        "#;
+
+        assert!(!is_cloudflare_challenge_html(html));
     }
 
     #[test]
