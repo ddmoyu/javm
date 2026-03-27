@@ -368,6 +368,8 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
         id: site_id_string.clone(),
         name: site_id_string.clone(),
         enabled: true,
+        avg_score: None,
+        scrape_count: None,
     };
     let site_id_owned = site_id_string.clone();
 

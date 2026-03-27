@@ -305,6 +305,8 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
             id: site.id.clone(),
             name: site.name.clone(),
             enabled: true,
+            avg_score: None,
+            scrape_count: None,
         };
         match fetcher
             .fetch(

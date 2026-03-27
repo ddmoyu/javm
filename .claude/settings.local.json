@@ -9,7 +9,19 @@
       "Bash(git tag:*)",
       "Bash(git push:*)",
       "Bash(grep -E \"\\\\.rs$\")",
-      "Bash(bun run:*)"
+      "Bash(bun run:*)",
+      "Bash(curl -sL https://vite.dev/guide/migration.html)",
+      "Bash(grep -r vite /e/ddmoyu/javm --include=*.json --include=*.config.* --exclude-dir=node_modules --exclude-dir=dist)",
+      "Bash(curl -sL https://raw.githubusercontent.com/vitejs/vite/main/packages/vite/CHANGELOG.md)",
+      "Bash(grep -r VITE_ /e/ddmoyu/javm/src --include=*.ts --include=*.vue --include=*.js)",
+      "Bash(ls -la /e/ddmoyu/javm/.env*)",
+      "Bash(npm ls:*)",
+      "Bash(grep -r \"404\\\\|Not Found\\\\|is_success\\\\|status\\\\\\(\\\\\\)\" /e/ddmoyu/javm/src-tauri/src/resource_scrape/*.rs)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(grep -rn \"scraper_priority\\\\|scraperPriority\" /e/ddmoyu/javm --include=*.rs --include=*.ts)",
+      "Bash(grep -E \"\\\\.\\(vue|ts|js\\)$\")",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }

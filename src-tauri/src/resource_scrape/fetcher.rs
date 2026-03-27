@@ -299,6 +299,13 @@ impl Fetcher {
             attempt += 1;
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
+            // 检测窗口是否被用户手动关闭
+            if app.get_webview_window(window.label()).is_none() {
+                println!("[WebView 获取] 窗口已被用户关闭，跳过该数据源");
+                cleanup_webview_fetch_without_window(app, window.label(), listener_id, cf_listener_id, cf_state_listener_id, "failed");
+                return Err("WebView 窗口已被用户关闭".to_string());
+            }
+
             if let Err(e) = window.eval(&js) {
                 if attempt % 20 == 0 {
                     println!("[WebView 获取] eval 失败 (第 {} 次): {}", attempt, e);
@@ -416,7 +423,15 @@ impl Fetcher {
                 }
             }
             Err(err) => {
-                if options.webview_fallback_enabled {
+                // HTTP 4xx 客户端错误（如 404）表示资源不存在，WebView 重试无意义
+                if is_http_client_error(&err) {
+                    println!(
+                        "[获取] {} HTTP 客户端错误，跳过 WebView 回退: {}",
+                        site.name,
+                        err
+                    );
+                    Err(err)
+                } else if options.webview_fallback_enabled {
                     println!(
                         "[获取] {} HTTP 失败，回退到 WebView: {}",
                         site.name,
@@ -522,6 +537,30 @@ fn cleanup_webview_fetch(
     }
 }
 
+/// 窗口已被关闭时的清理（无需再操作窗口本身）
+fn cleanup_webview_fetch_without_window(
+    app: &AppHandle,
+    label: &str,
+    listener_id: tauri::EventId,
+    cf_listener_id: tauri::EventId,
+    cf_state_listener_id: tauri::EventId,
+    final_status: &'static str,
+) {
+    app.unlisten(listener_id);
+    app.unlisten(cf_listener_id);
+    app.unlisten(cf_state_listener_id);
+    let pool = app.state::<WebviewPoolState>();
+    let snapshot = pool.update_cf_state(label, false);
+    pool.release(label);
+    webview_support::emit_cf_state(
+        app,
+        RESOURCE_SCRAPE_CF_STATE_EVENT,
+        final_status,
+        snapshot.site_id,
+        snapshot.active_count,
+    );
+}
+
 /// 获取或创建隐藏的 WebView 窗口
 ///
 /// 若窗口已存在则复用，通过 navigate 导航到新 URL，避免重复创建导致闪烁。
@@ -577,6 +616,19 @@ fn next_webview_label(inner: &mut WebviewPoolInner) -> String {
 
 fn normalize_site_key(site_id: &str) -> String {
     site_id.trim().to_lowercase()
+}
+
+/// 判断错误信息是否为 HTTP 4xx 客户端错误
+///
+/// 4xx 状态码表示客户端请求有误或资源不存在（如 404），
+/// 用 WebView 重试不会改变结果，应直接跳过回退。
+fn is_http_client_error(err: &str) -> bool {
+    if let Some(rest) = err.strip_prefix("HTTP ") {
+        // 状态码格式："HTTP 404 Not Found" 或 "HTTP 403 Forbidden"
+        rest.starts_with('4')
+    } else {
+        false
+    }
 }
 
 fn lock_webview_pool(
@@ -666,6 +718,28 @@ mod tests {
     #[test]
     fn cleanup_keeps_window_visible_when_requested() {
         assert!(should_keep_webview_visible(true));
+    }
+
+    #[test]
+    fn should_detect_http_client_errors() {
+        assert!(is_http_client_error("HTTP 404 Not Found"));
+        assert!(is_http_client_error("HTTP 403 Forbidden"));
+        assert!(is_http_client_error("HTTP 410 Gone"));
+        assert!(is_http_client_error("HTTP 451 Unavailable For Legal Reasons"));
+    }
+
+    #[test]
+    fn should_not_treat_server_errors_as_client_errors() {
+        assert!(!is_http_client_error("HTTP 500 Internal Server Error"));
+        assert!(!is_http_client_error("HTTP 502 Bad Gateway"));
+        assert!(!is_http_client_error("HTTP 503 Service Unavailable"));
+    }
+
+    #[test]
+    fn should_not_treat_network_errors_as_client_errors() {
+        assert!(!is_http_client_error("请求失败: connection refused"));
+        assert!(!is_http_client_error("请求失败: timeout"));
+        assert!(!is_http_client_error("读取响应体失败: unexpected EOF"));
     }
 }
 

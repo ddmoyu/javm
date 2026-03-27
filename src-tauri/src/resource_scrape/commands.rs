@@ -332,6 +332,8 @@ pub async fn rs_search_resource(
                 id: source.name().to_string(),
                 name: source.name().to_string(),
                 enabled: true,
+                avg_score: None,
+                scrape_count: None,
             });
         let handle = tokio::spawn(async move {
             let name = source.name().to_string();

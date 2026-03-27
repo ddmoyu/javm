@@ -7,6 +7,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { ScrapeTask, ScrapeLogEntry, ResourceItem } from '@/types'
 import { ScrapeStatus } from '@/types'
+import { useSettingsStore } from '@/stores/settings'
 
 // ============ 开发模式配置 ============
 // 开发阶段设置为 true 以移除时间限制
@@ -179,6 +180,46 @@ class RateLimiter {
     }
 }
 
+/** 根据本次搜索结果，累计更新各数据源的平均丰富度得分 */
+function accumulateSourceScores(searchResults: ResourceItem[]) {
+    const settingsStore = useSettingsStore()
+    const sites = settingsStore.settings.scrape.sites
+    if (!sites?.length || !searchResults.length) return
+
+    // 按来源聚合本次最高得分
+    const scoreBySource = new Map<string, number>()
+    for (const item of searchResults) {
+        if (!item.source || item.detailScore == null) continue
+        const prev = scoreBySource.get(item.source) ?? 0
+        if (item.detailScore > prev) {
+            scoreBySource.set(item.source, item.detailScore)
+        }
+    }
+
+    if (scoreBySource.size === 0) return
+
+    let changed = false
+    const updatedSites = sites.map(site => {
+        const score = scoreBySource.get(site.id)
+        if (score == null) return site
+
+        const prevAvg = site.avgScore ?? 0
+        const prevCount = site.scrapeCount ?? 0
+        const newCount = prevCount + 1
+        // 增量平均：newAvg = prevAvg + (score - prevAvg) / newCount
+        const newAvg = Math.round(prevAvg + (score - prevAvg) / newCount)
+
+        changed = true
+        return { ...site, avgScore: newAvg, scrapeCount: newCount }
+    })
+
+    if (changed) {
+        settingsStore.updateSettings({
+            scrape: { ...settingsStore.settings.scrape, sites: updatedSites }
+        })
+    }
+}
+
 export const useResourceScrapeStore = defineStore('resourceScrape', () => {
     // ============ 搜索状态 ============
     const keyword = ref('')
@@ -263,6 +304,8 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
 
             // 监听搜索完成事件
             const unDone = await listen('search-done', () => {
+                // 累计更新数据源丰富度得分
+                accumulateSourceScores(results.value)
                 searchLoading.value = false
                 cfChallengeActive.value = false
                 cancelCurrentSearch = null
@@ -288,12 +331,12 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
                 }
 
                 if (payload.status === 'timeout') {
-                    toast.error(`Cloudflare 验证超时${siteLabel}，已取消本次刮削`)
+                    toast.warning(`Cloudflare 验证超时${siteLabel}，该数据源已跳过`)
                     return
                 }
 
                 if (payload.status === 'failed') {
-                    toast.error(`Cloudflare 验证失败${siteLabel}，本次刮削未完成`)
+                    toast.warning(`Cloudflare 验证失败${siteLabel}，该数据源已跳过`)
                 }
             })
             unlisteners.push(unCf)

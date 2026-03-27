@@ -77,6 +77,10 @@ export interface ResourceSite {
     id: string           // 网站标识（如 "javbus"）
     name: string         // 显示名称
     enabled: boolean     // 是否启用
+    /** 累计平均丰富度得分（0-100），多次刮削结果加权平均 */
+    avgScore?: number
+    /** 累计刮削次数（有效返回结果的次数） */
+    scrapeCount?: number
 }
 
 /** 刮削设置 */

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Plus, GripVertical, Edit, Trash2, ExternalLink } from 'lucide-vue-next'
+import { Plus, GripVertical, Edit, Trash2, ExternalLink, ChevronsUpDown } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import packageInfo from '../../package.json'
 import appLogo from '../../src-tauri/icons/128x128.png'
@@ -46,6 +46,11 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import AIConfigDialog from '@/components/AIConfigDialog.vue'
 import { selectDirectory } from '@/lib/tauri'
 import { THEME_OPTIONS, VIEW_MODE_OPTIONS } from '@/utils/constants'
@@ -93,6 +98,9 @@ const recommendedProxyServices = [
 
 // 当前激活的 tab
 const activeTab = ref('theme')
+
+// 刮削源列表折叠状态
+const scrapeSourcesOpen = ref(false)
 
 // 本地编辑状态 - 使用深拷贝确保所有嵌套对象都被正确初始化
 const localSettings = ref({
@@ -248,6 +256,13 @@ const enabledScrapeSites = computed(() => {
   return (localSettings.value.scrape.sites || []).filter(site => site.enabled)
 })
 
+/** 按累计丰富度得分降序排列的数据源列表（用于设置界面展示） */
+const sortedScrapeSites = computed(() => {
+  return [...(localSettings.value.scrape.sites || [])].sort((a, b) => {
+    return (b.avgScore ?? 0) - (a.avgScore ?? 0)
+  })
+})
+
 const ensureValidDefaultScrapeSite = () => {
   const enabled = enabledScrapeSites.value
   if (enabled.length === 0) {
@@ -283,7 +298,8 @@ const toggleAllScrapeSites = (enabled: boolean) => {
   if (!enabled && sites.length > 0) {
     // 全部关闭时保留第一个，确保至少有一个启用
     sites.forEach((site, i) => { site.enabled = i === 0 })
-    toast.warning(`已保留 ${sites[0].name} 为唯一启用网站`)
+    const displayName = isDeveloperMode ? sites[0].name : '数据源 1'
+    toast.warning(`已保留 ${displayName} 为唯一启用网站`)
   } else {
     sites.forEach(site => { site.enabled = enabled })
   }
@@ -293,6 +309,8 @@ const toggleAllScrapeSites = (enabled: boolean) => {
 
 const saveScrapeSettings = () => {
   ensureValidDefaultScrapeSite()
+  // maxWebviewWindows 跟随搜索并发数
+  localSettings.value.scrape.maxWebviewWindows = localSettings.value.scrape.concurrent ?? 5
   settingsStore.updateSettings({ scrape: localSettings.value.scrape })
 }
 
@@ -410,8 +428,9 @@ watch(() => settingsStore.settings, async (newSettings) => {
 
 <template>
   <ScrollArea class="h-full">
-    <div class="p-6">
+    <div class="px-6">
       <Tabs :model-value="activeTab" @update:model-value="(v) => activeTab = String(v)" class="space-y-6">
+        <div class="sticky top-0 z-10 bg-background pt-6 pb-1">
         <TabsList class="grid w-full grid-cols-5">
           <TabsTrigger value="theme">基础</TabsTrigger>
           <TabsTrigger value="download">下载</TabsTrigger>
@@ -419,6 +438,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
           <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="about">关于</TabsTrigger>
         </TabsList>
+        </div>
 
         <!-- 基础设置 -->
         <TabsContent value="theme">
@@ -646,142 +666,139 @@ watch(() => settingsStore.settings, async (newSettings) => {
 
         <!-- 资源刮削设置 -->
         <TabsContent value="scrape">
-          <Card>
-            <CardHeader>
-              <CardTitle>资源刮削</CardTitle>
-              <CardDescription>配置资源网站和刮削行为</CardDescription>
-            </CardHeader>
-            <CardContent class="space-y-6">
-              <template v-if="isDeveloperMode">
-                <div class="space-y-3">
+          <div class="space-y-6">
+            <!-- 设置项 -->
+            <Card>
+              <CardHeader>
+                <CardTitle>资源刮削</CardTitle>
+                <CardDescription>配置资源网站和刮削行为</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-6">
+                <!-- 默认刮削网站 -->
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">默认刮削网站</p>
+                    <p class="text-sm text-muted-foreground">详情刮削、自动刮削和任务队列优先使用这个已启用的网站</p>
+                  </div>
+                  <Select :model-value="localSettings.scrape.defaultSite"
+                    @update:model-value="(v) => { localSettings.scrape.defaultSite = String(v); saveScrapeSettings() }">
+                    <SelectTrigger class="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="site in enabledScrapeSites"
+                        :key="site.id" :value="site.id">
+                        {{ site.name }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <p class="font-medium">搜索并发数</p>
+                    <p class="text-sm text-muted-foreground">同时请求的数据源数量，推荐 3-5 个，过高可能导致 IP 被封或触发验证</p>
+                  </div>
+                  <Select :model-value="String(localSettings.scrape.concurrent ?? 5)"
+                    @update:model-value="(v) => { localSettings.scrape.concurrent = Number(v); saveScrapeSettings() }">
+                    <SelectTrigger class="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1</SelectItem>
+                      <SelectItem value="2">2</SelectItem>
+                      <SelectItem value="3">3</SelectItem>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="8">8</SelectItem>
+                      <SelectItem value="10">10（不限）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <template v-if="isDeveloperMode">
+                  <Separator />
+
+                  <div class="space-y-4 rounded-lg border border-dashed p-4">
+                    <div>
+                      <p class="font-medium">开发调试</p>
+                      <p class="text-sm text-muted-foreground">仅开发环境可见，不会对普通用户开放</p>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-4">
+                      <div>
+                        <p class="font-medium">WebView 增强</p>
+                        <p class="text-sm text-muted-foreground">对 Both 类型站点优先使用 WebView 抓取，而不是 HTTP</p>
+                      </div>
+                      <Switch :model-value="!!localSettings.scrape.webviewEnabled"
+                        @update:model-value="(v: boolean) => { localSettings.scrape.webviewEnabled = v; saveScrapeSettings() }" />
+                    </div>
+
+                    <div class="flex items-center justify-between gap-4">
+                      <div>
+                        <p class="font-medium">HTTP 失败回退 WebView</p>
+                        <p class="text-sm text-muted-foreground">当 HTTP 失败、命中 Cloudflare 验证或明显返回错页时，自动回退到 WebView</p>
+                      </div>
+                      <Switch :model-value="!!localSettings.scrape.webviewFallbackEnabled"
+                        @update:model-value="(v: boolean) => { localSettings.scrape.webviewFallbackEnabled = v; saveScrapeSettings() }" />
+                    </div>
+
+                    <div class="flex items-center justify-between gap-4">
+                      <div>
+                        <p class="font-medium">显示隐藏 WebView</p>
+                        <p class="text-sm text-muted-foreground">开发调试时默认显示用于抓取的隐藏 WebView 窗口</p>
+                      </div>
+                      <Switch :model-value="!!localSettings.scrape.devShowWebview"
+                        @update:model-value="(v: boolean) => { localSettings.scrape.devShowWebview = v; saveScrapeSettings() }" />
+                    </div>
+                  </div>
+                </template>
+              </CardContent>
+            </Card>
+
+            <!-- 刮削源列表（折叠） -->
+            <Card>
+              <CardContent class="pt-6">
+                <Collapsible v-model:open="scrapeSourcesOpen">
                   <div class="flex items-center justify-between">
                     <div>
-                      <p class="font-medium">刮削网站开关</p>
-                      <p class="text-sm text-muted-foreground">开发时可直接控制参与刮削的网站；关闭后不会再参与搜索、自动刮削和任务队列</p>
+                      <p class="font-medium">数据源管理</p>
+                      <p class="text-sm text-muted-foreground">管理参与刮削的数据源，关闭后不再参与搜索和任务队列</p>
                     </div>
-                    <div class="flex shrink-0 gap-2">
+                    <div class="flex shrink-0 items-center gap-2">
                       <Button variant="outline" size="sm" @click="toggleAllScrapeSites(true)">全部开启</Button>
                       <Button variant="outline" size="sm" @click="toggleAllScrapeSites(false)">全部关闭</Button>
+                      <CollapsibleTrigger as-child>
+                        <Button variant="ghost" size="sm">
+                          <ChevronsUpDown class="h-4 w-4" />
+                        </Button>
+                      </CollapsibleTrigger>
                     </div>
                   </div>
-                  <div class="space-y-3 rounded-lg border p-3">
-                    <div v-for="(site, index) in localSettings.scrape.sites" :key="site.id"
-                      class="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-3">
-                      <div class="min-w-0">
-                        <div class="flex items-center gap-2">
-                          <p class="font-medium">{{ site.name || `数据源 ${index + 1}` }}</p>
-                          <Badge variant="outline">{{ site.id }}</Badge>
+                  <CollapsibleContent>
+                    <div class="mt-4 space-y-3 rounded-lg border p-3">
+                      <div v-for="site in sortedScrapeSites" :key="site.id"
+                        class="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-3">
+                        <div class="min-w-0">
+                          <div class="flex items-center gap-2">
+                            <p class="font-medium">{{ isDeveloperMode ? (site.name || site.id) : `数据源 ${localSettings.scrape.sites.indexOf(site) + 1}` }}</p>
+                            <Badge v-if="isDeveloperMode" variant="outline">{{ site.id }}</Badge>
+                            <Badge v-if="site.scrapeCount" variant="secondary" class="text-xs tabular-nums">
+                              {{ site.avgScore ?? 0 }}分
+                            </Badge>
+                          </div>
+                          <p v-if="site.scrapeCount" class="mt-1 text-xs text-muted-foreground">
+                            累计 {{ site.scrapeCount }} 次刮削
+                          </p>
                         </div>
-                        <p class="mt-1 text-sm text-muted-foreground">关闭后该网站不会参与当前环境的刮削流程</p>
+                        <Switch :model-value="!!site.enabled"
+                          @update:model-value="(v: boolean) => toggleScrapeSite(site.id, v)" />
                       </div>
-                      <Switch :model-value="!!site.enabled"
-                        @update:model-value="(v: boolean) => toggleScrapeSite(site.id, v)" />
                     </div>
-                  </div>
-                </div>
-                <Separator />
-              </template>
-
-              <!-- 默认刮削网站 -->
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="font-medium">默认刮削网站</p>
-                  <p class="text-sm text-muted-foreground">详情刮削、自动刮削和任务队列优先使用这个已启用的网站</p>
-                </div>
-                <Select :model-value="localSettings.scrape.defaultSite"
-                  @update:model-value="(v) => { localSettings.scrape.defaultSite = String(v); saveScrapeSettings() }">
-                  <SelectTrigger class="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem v-for="site in enabledScrapeSites"
-                      :key="site.id" :value="site.id">
-                      {{ site.name }}
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <p class="font-medium">搜索并发数</p>
-                  <p class="text-sm text-muted-foreground">同时请求的数据源数量，推荐 3-5 个，过高可能导致 IP 被封或触发验证</p>
-                </div>
-                <Select :model-value="String(localSettings.scrape.concurrent ?? 5)"
-                  @update:model-value="(v) => { localSettings.scrape.concurrent = Number(v); saveScrapeSettings() }">
-                  <SelectTrigger class="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="3">3</SelectItem>
-                    <SelectItem value="5">5</SelectItem>
-                    <SelectItem value="8">8</SelectItem>
-                    <SelectItem value="10">10（不限）</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div class="flex items-center justify-between gap-4">
-                <div>
-                  <p class="font-medium">最大 WebView 窗口数</p>
-                  <p class="text-sm text-muted-foreground">多个网站同时触发 Cloudflare 验证时，最多同时保留的刮削窗口数量。相同网站会复用同一个窗口。</p>
-                </div>
-                <Select :model-value="String(localSettings.scrape.maxWebviewWindows ?? 3)"
-                  @update:model-value="(v) => { localSettings.scrape.maxWebviewWindows = Number(v); saveScrapeSettings() }">
-                  <SelectTrigger class="w-40">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1</SelectItem>
-                    <SelectItem value="2">2</SelectItem>
-                    <SelectItem value="3">3</SelectItem>
-                    <SelectItem value="4">4</SelectItem>
-                    <SelectItem value="5">5</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <template v-if="isDeveloperMode">
-                <Separator />
-
-                <div class="space-y-4 rounded-lg border border-dashed p-4">
-                  <div>
-                    <p class="font-medium">开发调试</p>
-                    <p class="text-sm text-muted-foreground">仅开发环境可见，不会对普通用户开放</p>
-                  </div>
-
-                  <div class="flex items-center justify-between gap-4">
-                    <div>
-                      <p class="font-medium">WebView 增强</p>
-                      <p class="text-sm text-muted-foreground">对 Both 类型站点优先使用 WebView 抓取，而不是 HTTP</p>
-                    </div>
-                    <Switch :model-value="!!localSettings.scrape.webviewEnabled"
-                      @update:model-value="(v: boolean) => { localSettings.scrape.webviewEnabled = v; saveScrapeSettings() }" />
-                  </div>
-
-                  <div class="flex items-center justify-between gap-4">
-                    <div>
-                      <p class="font-medium">HTTP 失败回退 WebView</p>
-                      <p class="text-sm text-muted-foreground">当 HTTP 失败、命中 Cloudflare 验证或明显返回错页时，自动回退到 WebView</p>
-                    </div>
-                    <Switch :model-value="!!localSettings.scrape.webviewFallbackEnabled"
-                      @update:model-value="(v: boolean) => { localSettings.scrape.webviewFallbackEnabled = v; saveScrapeSettings() }" />
-                  </div>
-
-                  <div class="flex items-center justify-between gap-4">
-                    <div>
-                      <p class="font-medium">显示隐藏 WebView</p>
-                      <p class="text-sm text-muted-foreground">开发调试时默认显示用于抓取的隐藏 WebView 窗口</p>
-                    </div>
-                    <Switch :model-value="!!localSettings.scrape.devShowWebview"
-                      @update:model-value="(v: boolean) => { localSettings.scrape.devShowWebview = v; saveScrapeSettings() }" />
-                  </div>
-                </div>
-              </template>
-            </CardContent>
-          </Card>
+                  </CollapsibleContent>
+                </Collapsible>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         <!-- AI 设置 -->
@@ -966,6 +983,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
           </div>
         </TabsContent>
       </Tabs>
+    <div class="pb-6" />
     </div>
   </ScrollArea>
 

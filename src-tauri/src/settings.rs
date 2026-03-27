@@ -154,6 +154,8 @@ fn merge_scrape_sites(saved_sites: &[ResourceSite]) -> Vec<ResourceSite> {
     for site in &mut merged {
         if let Some(saved) = saved_sites.iter().find(|item| item.id == site.id) {
             site.enabled = saved.enabled;
+            site.avg_score = saved.avg_score;
+            site.scrape_count = saved.scrape_count;
         }
     }
     merged
