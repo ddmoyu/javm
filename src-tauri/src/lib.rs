@@ -98,6 +98,7 @@ pub fn run() {
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             db.check_and_reset_if_needed();
             db.init().map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            app.manage(db);
 
             // 注册深度链接处理器
             #[cfg(desktop)]
@@ -128,25 +129,7 @@ pub fn run() {
                         }
 
                         if let (Some(x), Some(y)) = (vp_settings.x, vp_settings.y) {
-                            let mut is_visible = false;
-                            if let Ok(monitors) = main_window.available_monitors() {
-                                for m in monitors {
-                                    let pos = m.position();
-                                    let size = m.size();
-                                    if (x as i32) < pos.x + size.width as i32 - 100
-                                        && (x as i32) + 100 > pos.x
-                                        && (y as i32) < pos.y + size.height as i32 - 100
-                                        && (y as i32) + 100 > pos.y
-                                    {
-                                        is_visible = true;
-                                        break;
-                                    }
-                                }
-                            } else {
-                                is_visible = true;
-                            }
-
-                            if is_visible {
+                            if utils::system_commands::is_position_visible_on_monitors(&main_window, x, y) {
                                 let _ = main_window
                                     .set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
                             } else {

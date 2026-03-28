@@ -1,6 +1,54 @@
 use crate::db::Database;
+use crate::error::AppError;
 use std::sync::Arc;
 use tokio::{sync::Semaphore, task::JoinSet};
+
+/// 校验路径是否在已注册的扫描目录范围内，防止路径穿越
+///
+/// 检查 `target` 是否位于 `directories` 表中任一目录（或其子目录）下。
+/// 用于验证前端传入的 `target_dir`、`thumb_path` 等参数。
+pub(crate) fn validate_path_within_managed_dirs(
+    conn: &rusqlite::Connection,
+    target: &std::path::Path,
+) -> Result<(), AppError> {
+    // 规范化：统一分隔符为 /，展开 ..
+    let normalize = |p: &std::path::Path| -> String {
+        // 先尝试 canonicalize（路径存在时），否则用 to_string_lossy
+        let s = p.canonicalize()
+            .map(|c| c.to_string_lossy().to_string())
+            .unwrap_or_else(|_| p.to_string_lossy().to_string());
+        s.replace('\\', "/")
+    };
+
+    let target_normalized = normalize(target);
+
+    // 检查是否包含路径穿越序列
+    if target_normalized.contains("/../") || target_normalized.ends_with("/..") {
+        return Err(AppError::Business("路径包含非法穿越序列".to_string()));
+    }
+
+    let mut stmt = conn
+        .prepare("SELECT path FROM directories")?;
+    let paths: Vec<String> = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .filter_map(Result::ok)
+        .collect();
+
+    for dir_path in &paths {
+        let dir_normalized = normalize(std::path::Path::new(dir_path));
+        // 确保目标路径在某个已注册目录下（精确前缀匹配 + 分隔符边界）
+        if target_normalized == dir_normalized
+            || target_normalized.starts_with(&format!("{}/", dir_normalized))
+        {
+            return Ok(());
+        }
+    }
+
+    Err(AppError::Business(format!(
+        "目标路径不在已注册的扫描目录范围内: {}",
+        target.display()
+    )))
+}
 
 // ==================== 视频管理 ====================
 
@@ -294,32 +342,8 @@ pub(crate) fn update_all_directories_count(conn: &rusqlite::Connection) -> Resul
         .collect();
 
     for path in paths {
-        let normalized_path = std::path::Path::new(&path)
-            .to_string_lossy()
-            .replace('\\', "/");
-
-        let path_pattern = if normalized_path.ends_with('/') {
-            format!("{}%", normalized_path)
-        } else {
-            format!("{}/%", normalized_path)
-        };
-
-        let video_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM videos WHERE
-                    dir_path = ? OR
-                    dir_path = ? OR
-                    REPLACE(dir_path, '\\', '/') LIKE ? OR
-                    REPLACE(dir_path, '\\', '/') = ?",
-                rusqlite::params![&path, &normalized_path, &path_pattern, &normalized_path],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
-
-        let _ = conn.execute(
-            "UPDATE directories SET video_count = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",
-            rusqlite::params![video_count, &path],
-        );
+        let video_count = Database::count_videos_in_directory(conn, &path).unwrap_or(0);
+        let _ = Database::update_directory_video_count(conn, &path, video_count);
     }
     Ok(())
 }

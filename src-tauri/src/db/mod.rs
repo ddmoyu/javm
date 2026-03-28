@@ -1119,6 +1119,38 @@ impl Database {
         )
     }
 
+    /// 规范化路径并统计目录下视频数量（封装路径规范化逻辑）
+    pub fn count_videos_in_directory(conn: &Connection, path: &str) -> Result<i64> {
+        let (normalized, pattern) = Self::normalize_dir_path(path);
+        Self::get_directory_video_count(conn, path, &normalized, &pattern)
+    }
+
+    /// 删除指定目录及其子目录下的所有视频记录
+    pub fn delete_videos_in_directory(conn: &Connection, path: &str) -> Result<usize> {
+        let (normalized, pattern) = Self::normalize_dir_path(path);
+        conn.execute(
+            "DELETE FROM videos WHERE
+                dir_path = ? OR
+                dir_path = ? OR
+                REPLACE(dir_path, '\\', '/') LIKE ? OR
+                REPLACE(dir_path, '\\', '/') = ?",
+            params![path, &normalized, &pattern, &normalized],
+        )
+    }
+
+    /// 规范化目录路径：统一分隔符 + 构建 LIKE 模式
+    fn normalize_dir_path(path: &str) -> (String, String) {
+        let normalized = std::path::Path::new(path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let pattern = if normalized.ends_with('/') {
+            format!("{}%", normalized)
+        } else {
+            format!("{}/%", normalized)
+        };
+        (normalized, pattern)
+    }
+
     pub fn update_directory_video_count(conn: &Connection, path: &str, count: i64) -> Result<()> {
         conn.execute(
             "UPDATE directories SET video_count = ?, updated_at = CURRENT_TIMESTAMP WHERE path = ?",

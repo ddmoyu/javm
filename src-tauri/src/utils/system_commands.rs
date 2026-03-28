@@ -4,6 +4,26 @@ use uuid::Uuid;
 
 const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+/// 检查物理坐标 (x, y) 是否在任一显示器的可见区域内
+pub fn is_position_visible_on_monitors(window: &tauri::WebviewWindow, x: f64, y: f64) -> bool {
+    if let Ok(monitors) = window.available_monitors() {
+        for m in monitors {
+            let pos = m.position();
+            let size = m.size();
+            if (x as i32) < pos.x + size.width as i32 - 100
+                && (x as i32) + 100 > pos.x
+                && (y as i32) < pos.y + size.height as i32 - 100
+                && (y as i32) + 100 > pos.y
+            {
+                return true;
+            }
+        }
+        false
+    } else {
+        true // 获取失败则假定可见
+    }
+}
+
 pub async fn open_in_explorer(path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
@@ -127,25 +147,7 @@ pub async fn open_video_player_window(
 
     let mut position_set = false;
     if let (Some(x), Some(y)) = (vp_settings.x, vp_settings.y) {
-        let mut is_visible = false;
-        if let Ok(monitors) = window.available_monitors() {
-            for m in monitors {
-                let pos = m.position();
-                let size = m.size();
-                if (x as i32) < pos.x + size.width as i32 - 100
-                    && (x as i32) + 100 > pos.x
-                    && (y as i32) < pos.y + size.height as i32 - 100
-                    && (y as i32) + 100 > pos.y
-                {
-                    is_visible = true;
-                    break;
-                }
-            }
-        } else {
-            is_visible = true; // 获取失败则假定可见
-        }
-
-        if is_visible {
+        if is_position_visible_on_monitors(&window, x, y) {
             let _ = window.set_position(tauri::PhysicalPosition::new(x as i32, y as i32));
             position_set = true;
         }
