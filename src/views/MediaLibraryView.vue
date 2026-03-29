@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed, watch } from 'vue'
-import { Search, ArrowUpDown, Filter, X, LayoutGrid, List } from 'lucide-vue-next'
+import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw } from 'lucide-vue-next'
 import { useVideoStore, useSettingsStore } from '@/stores'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -48,6 +48,10 @@ const viewMode = computed(() => settingsStore.settings.general.viewMode || 'card
 const toggleViewMode = () => {
   const newMode: ViewMode = viewMode.value === 'card' ? 'list' : 'card'
   settingsStore.updateSettings({ general: { ...settingsStore.settings.general, viewMode: newMode } })
+}
+
+const refreshMediaLibrary = async () => {
+  await videoStore.fetchVideos()
 }
 
 // 输入法组合状态
@@ -450,6 +454,17 @@ const unscrapedChecked = computed({
         >
           <List v-if="viewMode === 'card'" class="size-4" />
           <LayoutGrid v-else class="size-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          class="h-9 w-9"
+          title="刷新多媒体页"
+          :disabled="videoStore.loading"
+          @click="refreshMediaLibrary"
+        >
+          <RefreshCw class="size-4" :class="{ 'animate-spin': videoStore.loading }" />
         </Button>
       </div>
     </div>
