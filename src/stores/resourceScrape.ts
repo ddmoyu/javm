@@ -491,6 +491,16 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
         }
     }
 
+    async function createCoverCaptureTasks(path: string): Promise<number> {
+        try {
+            const count = await invoke<number>('rs_create_cover_capture_tasks', { path })
+            return count
+        } catch (e) {
+            console.error('Failed to create cover capture tasks:', e)
+            throw e
+        }
+    }
+
     async function startTask(path: string) {
         try {
             const taskId = await invoke<string>('rs_start_task_queue')
@@ -811,6 +821,7 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
         // 任务操作
         fetchTasks,
         createTask,
+        createCoverCaptureTasks,
         startTask,
         stopTask,
         updateTaskProgress,
