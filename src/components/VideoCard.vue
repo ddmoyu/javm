@@ -115,9 +115,9 @@ const onImgError = () => {
         @click="handleClick">
 
         <!-- 封面图 / 占位图 -->
-        <div class="aspect-video overflow-hidden bg-muted flex items-center justify-center relative">
+        <div class="aspect-[800/536] overflow-hidden bg-muted flex items-center justify-center relative">
           <img v-if="imageSrc" :src="imageSrc" :alt="video.title || video.originalTitle"
-            class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy"
+            class="w-full h-full object-contain transition-transform duration-300" loading="lazy"
             @error="onImgError" />
 
           <div v-else class="flex flex-col items-center justify-center text-muted-foreground/50">

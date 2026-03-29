@@ -87,12 +87,12 @@ const onImgError = () => { imgError.value = true }
         @click="handleClick"
       >
         <!-- 缩略图 -->
-        <div class="h-[100px] aspect-video shrink-0 rounded overflow-hidden bg-muted flex items-center justify-center">
+        <div class="h-[100px] aspect-[800/536] shrink-0 rounded overflow-hidden bg-muted flex items-center justify-center">
           <img
             v-if="imageSrc"
             :src="imageSrc"
             :alt="video.title"
-            class="w-full h-full object-cover"
+            class="w-full h-full object-contain"
             loading="lazy"
             @error="onImgError"
           />

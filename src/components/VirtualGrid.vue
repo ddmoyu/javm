@@ -43,6 +43,8 @@ const columnConfig = {
   maxColumns: 10,
 }
 
+const coverAspectRatio = 536 / 800
+
 // 是否为列表模式
 const isListMode = computed(() => props.viewMode === 'list')
 
@@ -64,7 +66,7 @@ const rowCount = computed(() => Math.ceil(props.items.length / columns.value))
 // 卡片高度（列表模式使用固定行高）
 const cardHeight = computed(() => {
   if (isListMode.value) return 126 // 列表行高
-  const coverHeight = columnConfig.cardWidth * (9 / 16)
+  const coverHeight = columnConfig.cardWidth * coverAspectRatio
   return coverHeight + 60 + columnConfig.gap // 封面高度 + 信息区域 + 行间距
 })
 
