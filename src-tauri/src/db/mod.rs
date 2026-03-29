@@ -833,6 +833,68 @@ impl Database {
         let rows = stmt.query_map([dir_path], |row| row.get::<_, String>(0))?;
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
+
+    /// 预加载目录下所有已有视频的扫描信息到 HashMap，避免逐个查询
+    pub fn get_existing_video_scan_info_map(
+        conn: &Connection,
+        dir_path: &str,
+    ) -> Result<std::collections::HashMap<String, ExistingVideoScanInfo>> {
+        let mut stmt = conn.prepare(
+            "SELECT
+                video_path, id, title, original_title, studio, premiered, director,
+                local_id, rating, file_size, fast_hash, duration, resolution,
+                file_mtime, nfo_mtime, poster_mtime, thumb_mtime, fanart_mtime
+            FROM videos
+            WHERE dir_path LIKE ? || '%'"
+        )?;
+        let rows = stmt.query_map([dir_path], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                ExistingVideoScanInfo {
+                    id: row.get(1)?,
+                    title: row.get(2)?,
+                    original_title: row.get(3)?,
+                    studio: row.get(4)?,
+                    premiered: row.get(5)?,
+                    director: row.get(6)?,
+                    local_id: row.get(7)?,
+                    rating: row.get(8)?,
+                    file_size: row.get::<_, Option<u64>>(9)?.unwrap_or(0),
+                    fast_hash: row.get(10)?,
+                    duration: row.get(11)?,
+                    resolution: row.get(12)?,
+                    file_mtime: row.get(13)?,
+                    nfo_mtime: row.get(14)?,
+                    poster_mtime: row.get(15)?,
+                    thumb_mtime: row.get(16)?,
+                    fanart_mtime: row.get(17)?,
+                },
+            ))
+        })?;
+        Ok(rows.filter_map(|r| r.ok()).collect())
+    }
+
+    /// 批量删除视频记录（按路径列表）
+    pub fn batch_delete_videos_by_paths(conn: &rusqlite::Transaction, paths: &[&str]) -> Result<()> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        // 分批处理，SQLite 参数上限为 999
+        for chunk in paths.chunks(500) {
+            let placeholders: Vec<&str> = chunk.iter().map(|_| "?").collect();
+            let sql = format!(
+                "DELETE FROM videos WHERE video_path IN ({})",
+                placeholders.join(",")
+            );
+            let params: Vec<&dyn rusqlite::types::ToSql> = chunk
+                .iter()
+                .map(|s| s as &dyn rusqlite::types::ToSql)
+                .collect();
+            conn.execute(&sql, params.as_slice())?;
+        }
+        Ok(())
+    }
+
     // ==================== 视频查重与辅助操作 ====================
 
     /// 根据番号 (local_id) 获取已存在的视频信息 (包含 id, title, video_path 等)

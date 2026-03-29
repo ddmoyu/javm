@@ -9,6 +9,15 @@ const SKIPPED_DIRECTORY_NAMES: &[&str] = &[
     "backdrops",
 ];
 
+/// .ts 文件最小大小阈值（10MB），低于此值视为 TypeScript 源文件而非 MPEG-TS 视频
+const TS_MIN_VIDEO_SIZE: u64 = 10 * 1024 * 1024;
+
+/// MPEG-TS 同步字节
+const MPEG_TS_SYNC_BYTE: u8 = 0x47;
+
+/// MPEG-TS 包大小
+const MPEG_TS_PACKET_SIZE: usize = 188;
+
 /// 支持的视频文件扩展名
 pub const VIDEO_EXTENSIONS: &[&str] = &[
     "mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v", "mpg", "mpeg", "3gp", "ts",
@@ -33,8 +42,10 @@ fn should_probe_video_content(path: &Path) -> bool {
 
 /// 判断文件是否应当作为视频参与扫描。
 ///
-/// 对扩展名存在歧义的文件（当前是 .ts）进一步做元数据探测，
-/// 避免将 TypeScript 源文件当成视频扫描入库。
+/// 对扩展名存在歧义的文件（当前是 .ts）进行多重快速检测：
+/// 1. 文件大小必须 >= 10MB（TypeScript 源文件通常远小于此）
+/// 2. 文件头部必须包含 MPEG-TS 同步字节 0x47（每 188 字节出现一次）
+/// 仅当以上检测均不足以排除时，才回退到 nom-exif 元数据探测。
 pub fn should_scan_as_video(path: &Path) -> bool {
     if !is_video_file(path) {
         return false;
@@ -44,7 +55,59 @@ pub fn should_scan_as_video(path: &Path) -> bool {
         return true;
     }
 
-    crate::metadata::extract_metadata(path).is_ok()
+    // 快速检测 1：文件大小
+    let file_size = match path.metadata() {
+        Ok(m) => m.len(),
+        Err(_) => return false,
+    };
+    if file_size < TS_MIN_VIDEO_SIZE {
+        return false;
+    }
+
+    // 快速检测 2：MPEG-TS 同步字节
+    if !is_mpeg_ts_header(path) {
+        return false;
+    }
+
+    true
+}
+
+/// 检查文件头部是否含有 MPEG-TS 同步字节 (0x47)
+///
+/// 读取前 752 字节（4 个 TS 包），检查第 0、188、376、564 字节位置是否均为 0x47。
+/// 如果首字节不是 0x47，会在前 188 字节内搜索首个 0x47 作为偏移量重试。
+fn is_mpeg_ts_header(path: &Path) -> bool {
+    use std::io::Read;
+    let mut file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+
+    let mut buf = [0u8; MPEG_TS_PACKET_SIZE * 4];
+    let bytes_read = match file.read(&mut buf) {
+        Ok(n) => n,
+        Err(_) => return false,
+    };
+
+    if bytes_read < MPEG_TS_PACKET_SIZE * 2 {
+        return false;
+    }
+
+    // 查找首个 0x47 同步字节
+    let offset = match buf[..MPEG_TS_PACKET_SIZE].iter().position(|&b| b == MPEG_TS_SYNC_BYTE) {
+        Some(pos) => pos,
+        None => return false,
+    };
+
+    // 验证连续 3 个 TS 包的同步字节
+    for i in 1..3 {
+        let pos = offset + i * MPEG_TS_PACKET_SIZE;
+        if pos >= bytes_read || buf[pos] != MPEG_TS_SYNC_BYTE {
+            return false;
+        }
+    }
+
+    true
 }
 
 pub fn is_skipped_directory(path: &Path) -> bool {
@@ -59,6 +122,8 @@ pub fn is_skipped_directory(path: &Path) -> bool {
 }
 
 /// 异步递归统计目录下视频文件数量
+///
+/// 仅根据扩展名判断，不做内容探测（跳过 FFmpeg 调用），确保统计阶段快速完成。
 pub fn count_video_files_async(
     dir: &Path,
 ) -> Pin<Box<dyn Future<Output = Result<u32, String>> + Send + '_>> {
@@ -89,7 +154,7 @@ pub fn count_video_files_async(
 
             if meta.is_dir() {
                 count += count_video_files_async(&path).await?;
-            } else if should_scan_as_video(&path) {
+            } else if is_video_file(&path) {
                 count += 1;
             }
         }

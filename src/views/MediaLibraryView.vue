@@ -161,6 +161,8 @@ onMounted(() => {
 
 // 为了演示，计算属性直接从 Store 取
 const displayVideos = computed(() => videoStore.filteredVideos)
+const hasFilteredResults = computed(() => displayVideos.value.length > 0)
+const isFilteredEmpty = computed(() => !videoStore.loading && !hasFilteredResults.value && videoStore.totalCount > 0)
 
 // 视频总数显示
 const videoCount = computed(() => {
@@ -176,6 +178,11 @@ const clearFilters = () => {
     resolution: [],
     scraped: [],
   }
+}
+
+const clearMediaFilters = () => {
+  clearSearch()
+  clearFilters()
 }
 
 // 筛选徽章计数
@@ -449,7 +456,23 @@ const unscrapedChecked = computed({
 
     <!-- 视频网格 -->
     <div class="flex-1 overflow-hidden py-4">
-      <VirtualGrid :items="displayVideos" :loading="false" :view-mode="viewMode" @select="handleVideoSelect" @scrape="handleScrape" />
+      <div v-if="isFilteredEmpty" class="flex h-full flex-col items-center justify-center gap-4 text-center">
+        <div class="space-y-2 text-muted-foreground">
+          <p class="text-lg text-foreground">当前筛选条件下暂无视频</p>
+          <p class="text-sm">批量刮削结束后，若当前只显示未刮削视频，列表会变为空。清空搜索或筛选后可恢复显示。</p>
+        </div>
+        <Button variant="outline" @click="clearMediaFilters">
+          清空筛选
+        </Button>
+      </div>
+      <VirtualGrid
+        v-else
+        :items="displayVideos"
+        :loading="videoStore.loading && videoStore.totalCount === 0"
+        :view-mode="viewMode"
+        @select="handleVideoSelect"
+        @scrape="handleScrape"
+      />
     </div>
 
     <!-- 视频详情对话框 -->

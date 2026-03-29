@@ -204,7 +204,6 @@ pub fn run() {
             app.manage(resource_scrape::commands::RsTaskQueueState::new());
             app.manage(resource_scrape::fetcher::WebviewPoolState::default());
             app.manage(resource_scrape::commands::SearchCancelState::new());
-            app.manage(resource_scrape::commands::CoverCaptureState::new());
 
             Ok(())
         })
@@ -292,16 +291,6 @@ pub fn run() {
             resource_scrape::commands::rs_find_video_links,
             resource_scrape::commands::rs_close_video_finder,
             resource_scrape::commands::rs_get_video_sites,
-            resource_scrape::commands::rs_get_cover_capture_tasks,
-            resource_scrape::commands::rs_get_videos_without_cover,
-            resource_scrape::commands::rs_batch_capture_covers,
-            resource_scrape::commands::rs_stop_cover_capture,
-            resource_scrape::commands::rs_create_cover_capture_tasks,
-            resource_scrape::commands::rs_delete_completed_cover_tasks,
-            resource_scrape::commands::rs_delete_failed_cover_tasks,
-            resource_scrape::commands::rs_delete_all_cover_tasks,
-            resource_scrape::commands::rs_delete_cover_task,
-            resource_scrape::commands::rs_retry_cover_task,
             resource_scrape::commands::rs_check_video_exists_by_code,
         ])
         .run(tauri::generate_context!())

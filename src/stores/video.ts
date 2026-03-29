@@ -407,6 +407,27 @@ export const useVideoStore = defineStore('video', () => {
         }
     }
 
+    async function syncDirectoryCountBatch(ids: string[]) {
+        const dirs = ids.map(id => directories.value.find(d => d.id === id)).filter(Boolean)
+        if (dirs.length === 0) return
+
+        const { scanDirectory } = await import('@/lib/tauri')
+
+        // 并发扫描所有目录
+        await Promise.allSettled(dirs.map(async (dir) => {
+            try {
+                const count = await scanDirectory(dir!.path)
+                dir!.videoCount = count
+                dir!.updatedAt = new Date().toISOString()
+            } catch (e) {
+                console.error(`Failed to sync directory ${dir!.path}:`, e)
+            }
+        }))
+
+        // 所有扫描完成后只刷新一次视频列表
+        await fetchVideos()
+    }
+
     return {
         // State
         videos,
@@ -442,5 +463,6 @@ export const useVideoStore = defineStore('video', () => {
         addDirectory,
         removeDirectory,
         syncDirectoryCount,
+        syncDirectoryCountBatch,
     }
 })

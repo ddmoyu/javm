@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { Trash2, RefreshCw, FolderPlus, Copy, FolderOpen, Camera, Radar } from 'lucide-vue-next'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { Trash2, RefreshCw, FolderPlus, Copy, FolderOpen, Radar } from 'lucide-vue-next'
 import { useVideoStore, useResourceScrapeStore } from '@/stores'
 import { selectDirectory, openInExplorer } from '@/lib/tauri'
 import { Button } from '@/components/ui/button'
@@ -28,8 +28,10 @@ const scrapeStore = useResourceScrapeStore()
 
 // 同步状态
 const syncingIds = ref<Set<string>>(new Set())
+const addingToScrapePaths = ref<Set<string>>(new Set())
 const duplicateDialogOpen = ref(false)
 const removeAdsDialogOpen = ref(false)
+const scrapeToastTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 // 扫描状态 - 分别管理添加目录和刷新目录的状态
 const isAddingDirectory = ref(false)
@@ -38,6 +40,30 @@ const isRefreshingAll = ref(false)
 onMounted(() => {
   videoStore.fetchDirectories()
 })
+
+onUnmounted(() => {
+  for (const timer of scrapeToastTimers.values()) {
+    clearTimeout(timer)
+  }
+  scrapeToastTimers.clear()
+})
+
+const clearScrapeToastTimer = (toastId: string) => {
+  const timer = scrapeToastTimers.get(toastId)
+  if (timer) {
+    clearTimeout(timer)
+    scrapeToastTimers.delete(toastId)
+  }
+}
+
+const scheduleScrapeToastDismiss = (toastId: string, delay: number) => {
+  clearScrapeToastTimer(toastId)
+  const timer = setTimeout(() => {
+    toast.dismiss(toastId)
+    scrapeToastTimers.delete(toastId)
+  }, delay)
+  scrapeToastTimers.set(toastId, timer)
+}
 
 // 添加目录
 const handleAddDirectory = async () => {
@@ -65,20 +91,21 @@ const handleAddDirectory = async () => {
 const handleRefreshAll = async () => {
   try {
     isRefreshingAll.value = true
-    for (const dir of videoStore.directories) {
-      if (!syncingIds.value.has(dir.id)) {
-        handleSyncDirectory(dir.id)
-      }
+    const ids = videoStore.directories
+      .filter(dir => !syncingIds.value.has(dir.id))
+      .map(dir => dir.id)
+
+    for (const id of ids) {
+      syncingIds.value.add(id)
     }
-    toast.success('开始刷新所有目录')
+
+    await videoStore.syncDirectoryCountBatch(ids)
   } catch (e) {
     console.error('Failed to refresh all:', e)
     toast.error('刷新失败')
   } finally {
-    // 延迟重置状态，等待扫描完成
-    setTimeout(() => {
-      isRefreshingAll.value = false
-    }, 1000)
+    videoStore.directories.forEach(dir => syncingIds.value.delete(dir.id))
+    isRefreshingAll.value = false
   }
 }
 
@@ -98,7 +125,6 @@ const handleSyncDirectory = async (id: string) => {
   syncingIds.value.add(id)
   try {
     await videoStore.syncDirectoryCount(id)
-    toast.success('目录已同步')
   } catch (e) {
     console.error('Failed to sync directory:', e)
     toast.error('同步失败')
@@ -120,6 +146,9 @@ const handleOpenDirectory = async (path: string) => {
 // 检查是否正在同步
 const isSyncing = (id: string) => syncingIds.value.has(id)
 
+// 检查是否正在添加到批量刮削
+const isAddingToScrapeCenter = (path: string) => addingToScrapePaths.value.has(path)
+
 // 计算总视频数
 const totalVideoCount = computed(() => {
   return videoStore.directories.reduce((sum, dir) => sum + (dir.videoCount || 0), 0)
@@ -137,33 +166,53 @@ const handleRemoveAds = () => {
 
 // 添加到批量刮削
 const handleAddToScrapeCenter = async (directory: any) => {
+  if (addingToScrapePaths.value.has(directory.path)) {
+    toast.info('该目录正在添加到批量刮削')
+    return
+  }
+
+  const toastId = `scrape-center-${directory.path}`
+  clearScrapeToastTimer(toastId)
+  addingToScrapePaths.value.add(directory.path)
+  toast.info('正在添加到批量刮削', {
+    id: toastId,
+    description: '正在扫描目录并筛选未刮削视频，请稍候...',
+    duration: Infinity,
+  })
+
   try {
     const result = await scrapeStore.createTask(directory.path)
     if (result === 'created') {
-      toast.success('已添加到批量刮削')
+      toast.success('已添加到批量刮削', {
+        id: toastId,
+        description: '目录中的新视频已加入批量刮削队列。',
+        duration: 2500,
+      })
+      scheduleScrapeToastDismiss(toastId, 2500)
     } else if (result === 'updated') {
-      toast.success('刮削任务已更新')
+      toast.success('刮削任务已更新', {
+        id: toastId,
+        duration: 2500,
+      })
+      scheduleScrapeToastDismiss(toastId, 2500)
     } else if (result === 'duplicate') {
-      toast.info('该目录已在批量刮削中')
+      toast.info('该目录已在批量刮削中', {
+        id: toastId,
+        description: '目录中没有发现需要新增的刮削任务。',
+        duration: 2500,
+      })
+      scheduleScrapeToastDismiss(toastId, 2500)
     }
   } catch (e) {
     console.warn(`Failed to add directory ${directory.path} to scrape tasks:`, e)
-    toast.error('添加失败')
-  }
-}
-
-// 添加到批量截图封面
-const handleAddToCoverCapture = async (directory: any) => {
-  try {
-    const count = await scrapeStore.createCoverCaptureTasks(directory.path)
-    if (count > 0) {
-      toast.success(`已添加 ${count} 个无封面视频到批量截图封面`)
-    } else {
-      toast.info('该目录下所有视频都已有封面或已在任务列表中')
-    }
-  } catch (e) {
-    console.warn(`Failed to add directory ${directory.path} to cover capture tasks:`, e)
-    toast.error('添加失败')
+    toast.error('添加失败', {
+      id: toastId,
+      description: (e as Error).message,
+      duration: 3500,
+    })
+    scheduleScrapeToastDismiss(toastId, 3500)
+  } finally {
+    addingToScrapePaths.value.delete(directory.path)
   }
 }
 </script>
@@ -269,13 +318,15 @@ const handleAddToCoverCapture = async (directory: any) => {
                 />
                 同步数量
               </ContextMenuItem>
-              <ContextMenuItem @click="handleAddToScrapeCenter(directory)">
-                <Radar class="mr-2 size-4" />
-                添加到批量刮削
-              </ContextMenuItem>
-              <ContextMenuItem @click="handleAddToCoverCapture(directory)">
-                <Camera class="mr-2 size-4" />
-                添加到批量截图封面
+              <ContextMenuItem
+                :disabled="isAddingToScrapeCenter(directory.path)"
+                @click="handleAddToScrapeCenter(directory)"
+              >
+                <Radar
+                  class="mr-2 size-4"
+                  :class="{ 'animate-pulse': isAddingToScrapeCenter(directory.path) }"
+                />
+                {{ isAddingToScrapeCenter(directory.path) ? '添加中...' : '添加到批量刮削' }}
               </ContextMenuItem>
               <ContextMenuItem
                 class="text-destructive focus:text-destructive"

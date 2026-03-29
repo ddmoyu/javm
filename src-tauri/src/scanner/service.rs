@@ -12,7 +12,7 @@ use crate::scanner::file_scanner::{
 };
 use chrono::Utc;
 use rusqlite::Transaction;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -130,10 +130,13 @@ impl ScannerService {
             .map_err(|e| format!("获取数据库连接失败: {}", e))?;
         let root_path = Path::new(path);
 
+        // 预加载目录下所有已有视频的扫描信息到 HashMap，避免逐个查询数据库
+        let mut existing_map: HashMap<String, crate::db::ExistingVideoScanInfo> =
+            Database::get_existing_video_scan_info_map(&conn, path)
+                .map_err(|e| format!("预加载视频扫描信息失败: {}", e))?;
+
         // 获取数据库中已有的视频路径，用于检测已删除的文件
-        let mut existing_paths: HashSet<String> =
-            Database::get_existing_video_paths(&conn, path)
-                .map_err(|e| format!("查询已有路径失败: {}", e))?;
+        let mut existing_paths: HashSet<String> = existing_map.keys().cloned().collect();
 
         let transaction = conn
             .unchecked_transaction()
@@ -144,18 +147,20 @@ impl ScannerService {
             root_path,
             &transaction,
             &mut existing_paths,
+            &mut existing_map,
             &mut current_count,
             total_files,
             &*progress_callback,
             cover_tx.as_ref(),
         )?;
 
-        // 删除磁盘上已不存在的文件记录
-        for missing_path in &existing_paths {
-            if let Err(e) = Database::delete_video_by_path(&transaction, missing_path) {
-                eprintln!("删除缺失文件记录失败 '{}': {}", missing_path, e);
+        // 批量删除磁盘上已不存在的文件记录
+        if !existing_paths.is_empty() {
+            let missing: Vec<&str> = existing_paths.iter().map(|s| s.as_str()).collect();
+            if let Err(e) = Database::batch_delete_videos_by_paths(&transaction, &missing) {
+                eprintln!("批量删除缺失文件记录失败: {}", e);
             } else {
-                println!("已清理缺失文件记录: {}", missing_path);
+                println!("已清理 {} 条缺失文件记录", missing.len());
             }
         }
 
@@ -171,6 +176,7 @@ impl ScannerService {
         dir: &Path,
         tx: &Transaction,
         existing: &mut HashSet<String>,
+        existing_map: &mut HashMap<String, crate::db::ExistingVideoScanInfo>,
         current: &mut u32,
         total: u32,
         progress_callback: &dyn Fn(ScanProgress),
@@ -209,8 +215,8 @@ impl ScannerService {
 
             if path.is_dir() {
                 count +=
-                    Self::scan_recursive(&path, tx, existing, current, total, progress_callback, cover_tx)?;
-            } else if Self::process_file(&path, tx, existing, cover_tx)? {
+                    Self::scan_recursive(&path, tx, existing, existing_map, current, total, progress_callback, cover_tx)?;
+            } else if Self::process_file(&path, tx, existing, existing_map, cover_tx)? {
                 count += 1;
                 *current += 1;
                 progress_callback(ScanProgress {
@@ -232,6 +238,7 @@ impl ScannerService {
         file_path: &Path,
         tx: &Transaction,
         existing_paths: &mut HashSet<String>,
+        existing_map: &mut HashMap<String, crate::db::ExistingVideoScanInfo>,
         cover_tx: Option<&CoverTaskSender>,
     ) -> Result<bool, String> {
         if !should_scan_as_video(file_path) {
@@ -263,8 +270,7 @@ impl ScannerService {
             return Ok(false);
         }
 
-        let existing = Database::get_video_scan_info(tx, &path_str)
-            .map_err(|e| format!("查询已存在视频扫描信息失败 '{}': {}", path_str, e))?;
+        let existing = existing_map.remove(&path_str);
 
         let poster = crate::media::assets::find_sibling_artwork(file_path, "poster");
         let thumb = crate::media::assets::find_sibling_artwork(file_path, "thumb");

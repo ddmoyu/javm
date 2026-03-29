@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useElementSize } from '@vueuse/core'
@@ -114,9 +114,19 @@ const handleVideoPlay = async (video: Video) => {
   }
 }
 
-// 监听 items、columns 和 viewMode 变化，重新计算虚拟化
-watch([() => props.items.length, columns, () => props.viewMode], () => {
+const remeasureVirtualizer = async () => {
+  await nextTick()
   virtualizer.value.measure()
+}
+
+// 监听数据和布局变化，重新计算虚拟化
+watch([() => props.items, columns, () => props.viewMode], () => {
+  void remeasureVirtualizer()
+})
+
+// KeepAlive 重新激活后强制重测，避免隐藏期间的尺寸缓存导致列表空白
+onActivated(() => {
+  void remeasureVirtualizer()
 })
 </script>
 

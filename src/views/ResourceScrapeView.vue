@@ -7,7 +7,6 @@ import {
   Search,
   Radar,
   Link as LinkIcon,
-  Camera,
   ChevronDown,
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -29,7 +28,6 @@ import SearchResultList from '@/components/SearchResultList.vue'
 import VirtualScrapeTable from '@/components/VirtualScrapeTable.vue'
 import ScrapeDialog from '@/components/ScrapeDialog.vue'
 import VideoLinkFinder from '@/components/VideoLinkFinder.vue'
-import BatchCoverCapture from '@/components/BatchCoverCapture.vue'
 
 // Store
 import { useResourceScrapeStore } from '@/stores/resourceScrape'
@@ -339,10 +337,6 @@ onMounted(async () => {
         <Radar class="mr-2 size-4" />
         批量刮削
       </TabsTrigger>
-      <TabsTrigger value="cover-capture">
-        <Camera class="mr-2 size-4" />
-        批量截图封面
-      </TabsTrigger>
       <TabsTrigger value="video-links">
         <LinkIcon class="mr-2 size-4" />
         资源链接
@@ -461,11 +455,6 @@ onMounted(async () => {
     <!-- 资源链接 Tab -->
     <TabsContent value="video-links" class="flex-1 overflow-hidden">
       <VideoLinkFinder ref="videoLinkFinderRef" />
-    </TabsContent>
-
-    <!-- 批量截图封面 Tab -->
-    <TabsContent value="cover-capture" class="flex-1 overflow-hidden">
-      <BatchCoverCapture />
     </TabsContent>
   </Tabs>
 

@@ -1045,26 +1045,52 @@ pub async fn rs_create_filtered_scrape_tasks(
         return Err("目录中未找到视频文件".to_string());
     }
 
-    let mut tasks_to_create = Vec::new();
+    // 在阻塞线程中批量过滤，将 2N 次数据库查询优化为 2 次
+    let db_clone = db.clone();
+    let tasks_to_create = tauri::async_runtime::spawn_blocking(move || -> Result<Vec<(String, String)>, String> {
+        let conn = db_clone.get_connection().map_err(|e| e.to_string())?;
 
-    for file_path in files {
-        // 跳过已有活跃任务的视频
-        if db
-            .scrape_task_exists_active(&file_path)
+        // 一次性获取所有活跃刮削任务路径
+        let mut stmt = conn.prepare(
+            "SELECT path FROM scrape_tasks WHERE status != 'completed'"
+        ).map_err(|e| e.to_string())?;
+        let active_paths: std::collections::HashSet<String> = stmt
+            .query_map([], |row| row.get::<_, String>(0))
             .map_err(|e| e.to_string())?
-        {
-            continue;
-        }
-        // 跳过已完全刮削的视频
-        if db
-            .is_video_completely_scraped(&file_path)
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt);
+
+        // 一次性获取所有已刮削视频路径（scan_status = 2）
+        let mut stmt2 = conn.prepare(
+            "SELECT video_path FROM videos WHERE scan_status = 2"
+        ).map_err(|e| e.to_string())?;
+        let scraped_paths: std::collections::HashSet<String> = stmt2
+            .query_map([], |row| row.get::<_, String>(0))
             .map_err(|e| e.to_string())?
-        {
-            continue;
+            .filter_map(|r| r.ok())
+            .collect();
+        drop(stmt2);
+
+        let mut result = Vec::new();
+        for file_path in files {
+            // 跳过已有活跃任务的视频
+            if active_paths.contains(&file_path) {
+                continue;
+            }
+            // 跳过已完全刮削的视频（scan_status=2 且 NFO 文件存在）
+            if scraped_paths.contains(&file_path) {
+                let nfo_path = std::path::Path::new(&file_path).with_extension("nfo");
+                if nfo_path.exists() {
+                    continue;
+                }
+            }
+            let id = Uuid::new_v4().to_string();
+            result.push((id, file_path));
         }
-        let id = Uuid::new_v4().to_string();
-        tasks_to_create.push((id, file_path));
-    }
+
+        Ok(result)
+    }).await.map_err(|e| format!("过滤任务失败: {}", e))??;
 
     let created_count = db
         .create_scrape_tasks_batch(tasks_to_create)

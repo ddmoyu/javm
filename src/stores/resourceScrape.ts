@@ -481,30 +481,12 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
             await fetchTasks()
 
             if (count > 0) {
-                toast.success('新建任务成功', {
-                    description: `已添加目录 "${path}"，共创建 ${count} 个视频刮削任务（已过滤已刮削视频）。`
-                })
                 return 'created'
             } else {
-                toast.info('未创建新任务', {
-                    description: `目录 "${path}" 中没有发现需要刮削的新视频文件。`
-                })
                 return 'duplicate'
             }
         } catch (e) {
             console.error('Failed to create scrape task:', e)
-            toast.error('创建任务失败', {
-                description: (e as Error).message
-            })
-            throw e
-        }
-    }
-
-    async function createCoverCaptureTasks(path: string): Promise<number> {
-        try {
-            return await invoke<number>('rs_create_cover_capture_tasks', { path })
-        } catch (e) {
-            console.error('Failed to create cover capture tasks:', e)
             throw e
         }
     }
@@ -829,7 +811,6 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
         // 任务操作
         fetchTasks,
         createTask,
-        createCoverCaptureTasks,
         startTask,
         stopTask,
         updateTaskProgress,
