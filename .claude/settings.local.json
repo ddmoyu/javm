@@ -46,7 +46,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:1421)",
       "Bash(find /e/ddmoyu/javm/src-tauri/target -path */webclaw-http/src/lib.rs -o -path */webclaw-http/src/client.rs)",
       "Bash(find /e/ddmoyu/javm/src-tauri -path */webclaw* -name *.rs)",
-      "Bash(find /c/Users/hunlo/.cargo/git/checkouts/webclaw-tls-3580db2a588b56a3/ce29072/webclaw-http -name *.rs)"
+      "Bash(find /c/Users/hunlo/.cargo/git/checkouts/webclaw-tls-3580db2a588b56a3/ce29072/webclaw-http -name *.rs)",
+      "Bash(grep -E \"\\\\.\\(tsx|ts|jsx\\)$\")"
     ]
   }
 }

@@ -115,6 +115,9 @@ const isOpen = computed({
     set: (val) => emit('update:open', val),
 })
 
+// 始终使用最新的视频路径（截取预览图后视频可能被迁移到同名目录）
+const currentVideoPath = computed(() => formData.value.videoPath || props.video?.videoPath || '')
+
 const normalizedTitle = computed(() => (formData.value.title || '').trim())
 
 const invalidTitleCharacters = computed(() => {
@@ -229,7 +232,7 @@ const { previewThumbs: previewImages, allImages, previewStartIndex } = usePrevie
         return {
             src: imageSrc.value,
             title: '封面',
-            hasLocalVideo: !!props.video?.videoPath,
+            hasLocalVideo: !!currentVideoPath.value,
         }
     },
     getThumbs: () => thumbSources.value,
@@ -324,9 +327,9 @@ const handlePlay = async () => {
         try {
             const isSoftware = settingsStore.settings.general.playMethod === 'software'
             if (isSoftware) {
-                await openVideoPlayerWindow(props.video.videoPath, props.video.title || props.video.originalTitle || 'Unknown Video', false)
+                await openVideoPlayerWindow(currentVideoPath.value, props.video.title || props.video.originalTitle || 'Unknown Video', false)
             } else {
-                await openWithPlayer(props.video.videoPath)
+                await openWithPlayer(currentVideoPath.value)
             }
         } catch (e) {
             console.error('Failed to play video:', e)
@@ -337,7 +340,7 @@ const handlePlay = async () => {
 
 const handleOpenDir = () => {
     if (props.video) {
-        openInExplorer(props.video.videoPath)
+        openInExplorer(currentVideoPath.value)
     }
 }
 
@@ -654,6 +657,10 @@ const handleCaptureCoverSuccess = async (payload: { paths: string | string[]; vi
     // 如果视频被迁移到同名目录，更新表单中的路径
     if (payload.videoPath && payload.videoPath !== formData.value.videoPath) {
         formData.value.videoPath = payload.videoPath
+        // 同步更新 store，确保 props.video 也能拿到最新路径
+        if (props.video) {
+            videoStore.updateVideo(props.video.id, { videoPath: payload.videoPath })
+        }
     }
 
     // 更新表单数据
@@ -686,6 +693,10 @@ const handleCaptureThumbsSuccess = async (payload: { paths: string | string[]; v
     // 如果视频被迁移到同名目录，更新表单中的路径
     if (payload.videoPath && payload.videoPath !== formData.value.videoPath) {
         formData.value.videoPath = payload.videoPath
+        // 同步更新 store，确保 props.video 也能拿到最新路径
+        if (props.video) {
+            videoStore.updateVideo(props.video.id, { videoPath: payload.videoPath })
+        }
     }
 
     isDirty.value = true
@@ -696,9 +707,9 @@ const handleCaptureThumbsSuccess = async (payload: { paths: string | string[]; v
     // 重新获取视频列表以更新预览图显示
     await videoStore.fetchVideos()
     // 使用后端返回的最新路径加载预览图
-    const currentVideoPath = payload.videoPath || props.video?.videoPath
-    if (currentVideoPath) {
-        await loadResolvedPreviewSources(currentVideoPath)
+    const resolvedPath = payload.videoPath || currentVideoPath.value
+    if (resolvedPath) {
+        await loadResolvedPreviewSources(resolvedPath)
     }
 }
 
@@ -753,7 +764,7 @@ const deleteThumbByIndex = async (thumbIdx: number) => {
 
         // 重新获取视频列表
         await videoStore.fetchVideos()
-        await loadResolvedPreviewSources(props.video.videoPath)
+        await loadResolvedPreviewSources(currentVideoPath.value)
 
         toast.success('预览图已删除')
     } catch (e) {
@@ -770,13 +781,13 @@ const clearThumbs = async () => {
     try {
         await invoke('clear_thumbs', {
             videoId: props.video.id,
-            videoPath: props.video.videoPath,
+            videoPath: currentVideoPath.value,
         })
         resetPendingPreviewState()
 
         // 重新获取视频列表
         await videoStore.fetchVideos()
-        await loadResolvedPreviewSources(props.video.videoPath)
+        await loadResolvedPreviewSources(currentVideoPath.value)
 
         toast.success('预览图已清空')
     } catch (e) {
@@ -793,7 +804,7 @@ const downloadLongScreenshot = async () => {
         toast.error('请先填写番号')
         return
     }
-    if (!props.video?.videoPath) {
+    if (!props.video || !currentVideoPath.value) {
         toast.error('视频路径无效')
         return
     }
@@ -803,11 +814,11 @@ const downloadLongScreenshot = async () => {
         const url = `https://memojav.com/image/screenshot/${code}.jpg`
         await invoke<string>('download_remote_image', {
             videoId: props.video.id,
-            videoPath: props.video.videoPath,
+            videoPath: currentVideoPath.value,
             url,
         })
 
-        await loadResolvedPreviewSources(props.video.videoPath)
+        await loadResolvedPreviewSources(currentVideoPath.value)
 
         toast.success('长截图已保存')
     } catch (e) {
@@ -1031,7 +1042,7 @@ const downloadLongScreenshot = async () => {
                             <div class="space-y-1.5 pt-2">
                                 <Label class="text-xs text-muted-foreground">文件路径</Label>
                                 <div class="text-xs text-muted-foreground/70 font-mono break-all select-all hover:text-muted-foreground transition-colors cursor-text">
-                                    {{ props.video?.videoPath }}
+                                    {{ currentVideoPath }}
                                 </div>
                             </div>
 
@@ -1100,11 +1111,11 @@ const downloadLongScreenshot = async () => {
 
     <!-- 截取封面对话框 -->
     <CaptureCoverDialog v-if="props.video" v-model:open="captureCoverDialogOpen" :video-id="props.video.id"
-        :video-path="props.video.videoPath" :mode="'single'" @success="handleCaptureCoverSuccess" />
+        :video-path="currentVideoPath" :mode="'single'" @success="handleCaptureCoverSuccess" />
 
     <!-- 截取预览图对话框 -->
     <CaptureCoverDialog v-if="props.video" v-model:open="captureThumbsDialogOpen" :video-id="props.video.id"
-        :video-path="props.video.videoPath" :mode="'multiple'" @success="handleCaptureThumbsSuccess" />
+        :video-path="currentVideoPath" :mode="'multiple'" @success="handleCaptureThumbsSuccess" />
 
     <!-- 删除确认对话框 -->
     <DeleteVideoDialog v-model:open="showDeleteConfirm" :video="props.video" @success="handleDeleteSuccess" />
