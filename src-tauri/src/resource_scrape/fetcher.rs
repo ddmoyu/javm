@@ -4,14 +4,13 @@
 //! 根据资源网站配置和全局设置智能选择获取模式，
 //! HTTP 失败时可自动回退到 WebView 模式。
 
-use reqwest::Client;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Listener, Manager};
 
 use super::cf_detection;
-use super::client;
 use super::sources::ResourceSite;
+use super::webclaw_client;
 use super::webview_support;
 
 #[derive(Debug, Clone, Copy)]
@@ -22,10 +21,10 @@ pub struct FetchOptions {
     pub max_webview_windows: usize,
 }
 
-/// 双模式获取器
+/// 双模式获取器：webclaw HTTP + WebView 回退
 pub struct Fetcher {
-    /// 共享 HTTP 客户端
-    http_client: Client,
+    /// webclaw TLS 指纹 HTTP 客户端
+    http_client: webclaw_http::Client,
 }
 
 /// WebView 获取超时时间（秒）
@@ -193,16 +192,13 @@ impl WebviewPoolState {
 
 impl Fetcher {
     /// 创建新的获取器
-    pub fn new(http_client: Client) -> Self {
+    pub fn new(http_client: webclaw_http::Client) -> Self {
         Self { http_client }
     }
 
-    /// HTTP 模式获取网页 HTML
-    ///
-    /// 复用 client.rs 的 fetch_html，只返回 HTML 内容（忽略最终 URL）。
+    /// HTTP 模式获取网页 HTML（使用 webclaw Chrome TLS 指纹）
     pub async fn fetch_http(&self, url: &str) -> Result<String, String> {
-        let (_final_url, html) = client::fetch_html(&self.http_client, url).await?;
-        Ok(html)
+        webclaw_client::fetch_html(&self.http_client, url).await
     }
 
     /// WebView 模式获取网页 HTML
@@ -363,12 +359,14 @@ impl Fetcher {
         }
     }
 
-    /// 智能获取：始终先 HTTP，失败或内容明显不匹配时回退到 WebView
+    /// 智能获取：webclaw HTTP 优先，CF 或失败时回退到 WebView
     ///
     /// 逻辑：
-    /// 1. 始终先尝试 HTTP 获取
-    /// 2. HTTP 失败且用户开启了 WebView 增强和回退 → 回退到 WebView
-    /// 3. HTTP 成功但返回内容与目标番号明显不匹配 → 自动回退到 WebView
+    /// 1. 先用 webclaw（Chrome TLS 指纹）发起 HTTP 请求
+    /// 2. 成功且内容正常 → 直接返回
+    /// 3. 成功但检测到 CF 验证页 → 回退到 WebView（显示窗口让用户手动验证）
+    /// 4. HTTP 4xx 客户端错误（404 等）→ 资源不存在，直接报错
+    /// 5. 其他失败（网络错误、5xx 等）→ 回退到 WebView
     pub async fn fetch(
         &self,
         app: &AppHandle,
@@ -377,21 +375,36 @@ impl Fetcher {
         options: FetchOptions,
     ) -> Result<String, String> {
         println!(
-            "[获取] {} HTTP ({}) webview={} fallback={} visible={}",
+            "[获取] {} webclaw ({}) webview_fallback={} visible={}",
             site.name,
             url,
-            options.webview_enabled,
             options.webview_fallback_enabled,
             options.show_webview
         );
 
         match self.fetch_http(url).await {
             Ok(html) => {
-                if let Some(reason) = webview_fallback_reason(url, &html) {
+                // webclaw 成功拿到响应，检查是否是 CF 验证页或错页
+                if cf_detection::is_cloudflare_challenge_html(&html) {
                     println!(
-                        "[获取] {} HTTP 内容需要回退到 WebView: {}",
+                        "[获取] {} webclaw 命中 CF 验证页，回退 WebView",
                         site.name,
-                        reason,
+                    );
+                    if options.webview_fallback_enabled {
+                        Self::fetch_webview(
+                            app,
+                            url,
+                            site,
+                            options.show_webview,
+                            options.max_webview_windows,
+                        ).await
+                    } else {
+                        Err("Cloudflare 验证页，WebView 回退未启用".to_string())
+                    }
+                } else if should_retry_with_webview(url, &html) {
+                    println!(
+                        "[获取] {} webclaw 内容疑似错页，回退 WebView",
+                        site.name,
                     );
                     if options.webview_fallback_enabled {
                         match Self::fetch_webview(
@@ -404,18 +417,13 @@ impl Fetcher {
                             Ok(webview_html) => Ok(webview_html),
                             Err(e) => {
                                 println!(
-                                    "[获取] {} WebView 回退失败，继续使用 HTTP 内容: {}",
-                                    site.name,
-                                    e
+                                    "[获取] {} WebView 也失败，使用 webclaw 内容: {}",
+                                    site.name, e
                                 );
                                 Ok(html)
                             }
                         }
                     } else {
-                        println!(
-                            "[获取] {} 已检测到需要 WebView，但未开启回退开关，继续使用 HTTP 内容",
-                            site.name,
-                        );
                         Ok(html)
                     }
                 } else {
@@ -423,19 +431,17 @@ impl Fetcher {
                 }
             }
             Err(err) => {
-                // HTTP 4xx 客户端错误（如 404）表示资源不存在，WebView 重试无意义
+                // HTTP 4xx：资源不存在，WebView 重试无意义
                 if is_http_client_error(&err) {
                     println!(
-                        "[获取] {} HTTP 客户端错误，跳过 WebView 回退: {}",
-                        site.name,
-                        err
+                        "[获取] {} HTTP 客户端错误，跳过 WebView: {}",
+                        site.name, err
                     );
                     Err(err)
                 } else if options.webview_fallback_enabled {
                     println!(
-                        "[获取] {} HTTP 失败，回退到 WebView: {}",
-                        site.name,
-                        err
+                        "[获取] {} webclaw 失败，回退 WebView: {}",
+                        site.name, err
                     );
                     Self::fetch_webview(
                         app,
@@ -465,18 +471,6 @@ fn should_retry_with_webview(url: &str, html: &str) -> bool {
     // 对于明确是番号详情页的 URL，如果返回 HTML 连目标番号都不包含，
     // 大概率是广告跳转页、反爬页或站点通用页。
     true
-}
-
-fn webview_fallback_reason(url: &str, html: &str) -> Option<&'static str> {
-    if cf_detection::is_cloudflare_challenge_html(html) {
-        return Some("命中 Cloudflare 验证页");
-    }
-
-    if should_retry_with_webview(url, html) {
-        return Some("内容疑似错页或反爬页");
-    }
-
-    None
 }
 
 fn extract_designation_from_url(url: &str) -> Option<String> {
@@ -699,10 +693,6 @@ mod tests {
         "#;
 
         assert!(cf_detection::is_cloudflare_challenge_html(html));
-        assert_eq!(
-            webview_fallback_reason("https://freejavbt.com/zh/FSDSS-496", html),
-            Some("命中 Cloudflare 验证页")
-        );
     }
 
     #[test]
@@ -714,10 +704,10 @@ mod tests {
         </html>
         "#;
 
-        assert_eq!(
-            webview_fallback_reason("https://freejavbt.com/zh/FSDSS-496", html),
-            Some("内容疑似错页或反爬页")
-        );
+        assert!(should_retry_with_webview(
+            "https://freejavbt.com/zh/FSDSS-496",
+            html,
+        ));
     }
 
     #[test]

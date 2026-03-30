@@ -318,7 +318,7 @@ async fn trigger_auto_scrape(app: tauri::AppHandle, task: &DownloadTask) {
 
 /// 执行刮削操作
 async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), String> {
-    use crate::resource_scrape::{client, fetcher::Fetcher, sources::{self, ResourceSite}};
+    use crate::resource_scrape::{webclaw_client, fetcher::Fetcher, sources::{self, ResourceSite}};
     use crate::resource_scrape::database_writer::DatabaseWriter;
     use crate::media::assets::save_nfo_for_video;
     use crate::db::Database;
@@ -340,8 +340,8 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
     println!("[AutoScrape] 使用 {} 获取: {}", source.name(), url);
 
     // 创建 Fetcher 获取 HTML
-    let http_client = client::create_client()?;
-    let fetcher = Fetcher::new(http_client.clone());
+    let http_client = webclaw_client::create_client()?;
+    let fetcher = Fetcher::new(http_client);
 
     let fetch_settings = crate::settings::resolve_scrape_fetch_settings(&settings.scrape);
     let html = fetcher

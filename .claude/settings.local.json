@@ -39,7 +39,14 @@
       "Bash(do sed:*)",
       "Bash(done)",
       "Bash(git fetch:*)",
-      "Bash(node -p \"require\\(''./package.json''\\).version\")"
+      "Bash(node -p \"require\\(''./package.json''\\).version\")",
+      "Bash(find /e/ddmoyu/javm/src-tauri/src/resource_scrape/sources -name \"*.rs\" -exec wc -l {})",
+      "Bash(cargo tree:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:1420)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:1421)",
+      "Bash(find /e/ddmoyu/javm/src-tauri/target -path */webclaw-http/src/lib.rs -o -path */webclaw-http/src/client.rs)",
+      "Bash(find /e/ddmoyu/javm/src-tauri -path */webclaw* -name *.rs)",
+      "Bash(find /c/Users/hunlo/.cargo/git/checkouts/webclaw-tls-3580db2a588b56a3/ce29072/webclaw-http -name *.rs)"
     ]
   }
 }

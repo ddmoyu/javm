@@ -6,71 +6,28 @@
 //!
 //! 所有需要下载图片的模块（media_assets、scraper 等）都应使用此模块，
 //! 避免重复实现下载逻辑。
+//! 使用 webclaw-http 客户端（Chrome TLS 指纹），统一反爬策略。
 
 use std::path::Path;
 use std::sync::Arc;
 
+use webclaw_http::Client as WebclawClient;
+
 /// 默认最大并发下载数
 const DEFAULT_MAX_CONCURRENT: usize = 5;
 
-/// 默认请求超时时间（秒）
-const DEFAULT_TIMEOUT_SECS: u64 = 30;
-
-/// 默认 User-Agent
-const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36";
-
-/// 创建默认的 HTTP 客户端（自动应用代理）
-fn default_client() -> Result<reqwest::Client, String> {
-    crate::utils::proxy::apply_proxy_auto(
-        reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
-            .user_agent(DEFAULT_USER_AGENT),
-    )?
-    .build()
-    .map_err(|e| format!("创建 HTTP 客户端失败: {}", e))
-}
-
-/// 从 URL 中提取 origin 作为 Referer（防盗链）
-fn extract_referer(url: &str) -> Option<String> {
-    // 简单解析：取 scheme + host 部分
-    if let Some(pos) = url.find("://") {
-        let after_scheme = &url[pos + 3..];
-        if let Some(slash) = after_scheme.find('/') {
-            return Some(format!("{}/", &url[..pos + 3 + slash]));
-        }
-        return Some(format!("{}/", url));
-    }
-    None
+/// 创建默认的 webclaw HTTP 客户端（Chrome TLS 指纹 + 代理）
+fn default_client() -> Result<WebclawClient, String> {
+    crate::resource_scrape::webclaw_client::create_client()
 }
 
 /// 下载单张图片并保存到指定路径
-///
-/// 自动从 URL 提取 Referer 以绕过防盗链检查
 pub async fn download_image(
-    client: &reqwest::Client,
+    client: &WebclawClient,
     url: &str,
     save_path: &Path,
 ) -> Result<String, String> {
-    let mut req = client.get(url);
-
-    // 添加 Referer 防盗链
-    if let Some(referer) = extract_referer(url) {
-        req = req.header("Referer", referer);
-    }
-
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("下载失败: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("下载失败，HTTP 状态码: {}", resp.status()));
-    }
-
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("读取数据失败: {}", e))?;
+    let bytes = crate::resource_scrape::webclaw_client::fetch_bytes(client, url).await?;
 
     if bytes.is_empty() {
         return Err("下载的数据为空".to_string());
@@ -96,7 +53,7 @@ pub async fn download_image(
 pub async fn download_cover(
     video_path: &str,
     cover_url: &str,
-    client: Option<&reqwest::Client>,
+    client: Option<&WebclawClient>,
 ) -> Result<String, String> {
     if cover_url.trim().is_empty() {
         return Ok(String::new());
@@ -179,7 +136,7 @@ pub async fn download_images_batch(
     thumb_urls: &[String],
     save_dir: &Path,
     filename_prefix: &str,
-    client: Option<&reqwest::Client>,
+    client: Option<&WebclawClient>,
     max_concurrent: Option<usize>,
 ) -> Result<Vec<String>, String> {
     if thumb_urls.is_empty() {

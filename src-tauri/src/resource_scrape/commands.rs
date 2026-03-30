@@ -8,10 +8,10 @@
 //! 在任务 7.2 移除旧模块后，可通过 `#[tauri::command(rename_all = "snake_case")]`
 //! 或直接重命名恢复原名。
 
-use super::client;
 use super::fetcher::Fetcher;
 use super::sources;
 use super::sources::{ResourceSite, Source};
+use super::webclaw_client;
 use crate::analytics;
 use crate::settings;
 use tauri::{AppHandle, Emitter, Manager};
@@ -200,9 +200,9 @@ fn enrich_search_result_detail(result: &mut SearchResult) {
 }
 
 async fn proxy_preview_images_to_files(
-    client: &reqwest::Client,
+    client: &webclaw_http::Client,
     thumbs: &[String],
-    referer: &str,
+    _referer: &str,
 ) -> (Vec<String>, Option<Vec<String>>) {
     let mut display_urls = Vec::with_capacity(thumbs.len());
     let mut remote_urls = Vec::with_capacity(thumbs.len());
@@ -218,7 +218,7 @@ async fn proxy_preview_images_to_files(
             has_remote_urls = true;
             remote_urls.push(trimmed.to_string());
 
-            match proxy_image_to_file(client, trimmed, referer).await {
+            match proxy_image_to_file(client, trimmed).await {
                 Ok(local_path) => display_urls.push(local_path),
                 Err(e) => {
                     println!("[搜索] 预览图代理失败: {}", e);
@@ -278,7 +278,8 @@ pub async fn rs_search_resource(
     );
 
     analytics::record_search_designation(&app);
-    let http_client = client::create_client()?;
+    let http_client = webclaw_client::create_client()?;
+    println!("[搜索] webclaw 客户端已就绪（Chrome TLS 指纹）");
 
     let app_settings = settings::get_settings(app.clone()).await.unwrap_or_default();
     let enabled_sites = settings::enabled_scrape_sites(&app_settings.scrape);
@@ -425,8 +426,7 @@ pub async fn rs_search_resource(
                         if result.cover_url.starts_with("http://")
                             || result.cover_url.starts_with("https://")
                         {
-                            let referer_url = page_url.as_str();
-                            match proxy_image_to_file(&client, &result.cover_url, referer_url).await
+                            match proxy_image_to_file(&client, &result.cover_url).await
                             {
                                 Ok(local_path) => {
                                     // 保留原始远程 URL，同时提供本地缓存路径
@@ -523,18 +523,8 @@ pub async fn rs_cancel_search(
 /// 用于解决防盗链问题（如 projectjav 的封面图）
 #[tauri::command]
 pub async fn rs_proxy_image(url: String) -> Result<String, String> {
-    let client = client::create_client()?;
-
-    // 从 URL 中提取域名作为 Referer
-    let referer = url
-        .find("://")
-        .and_then(|i| {
-            let after = &url[i + 3..];
-            after.find('/').map(|j| &url[..i + 3 + j])
-        })
-        .unwrap_or(&url);
-
-    proxy_image_to_file(&client, &url, referer).await
+    let client = webclaw_client::create_client()?;
+    proxy_image_to_file(&client, &url).await
 }
 
 /// 获取资源网站列表
@@ -557,35 +547,14 @@ fn get_image_cache_dir() -> Result<PathBuf, String> {
 
 /// 图片代理：下载图片到本地临时文件，返回本地文件路径
 ///
-/// 替代原来的 base64 data URL 方案，避免大字符串在 Tauri 事件中传输导致的问题。
+/// 使用 webclaw（Chrome TLS 指纹）下载图片，绕过防盗链和反爬。
 /// 前端使用 convertFileSrc() 将本地路径转为可访问的 URL。
 async fn proxy_image_to_file(
-    client: &reqwest::Client,
+    client: &webclaw_http::Client,
     url: &str,
-    referer: &str,
 ) -> Result<String, String> {
-    let resp = client
-        .get(url)
-        .header("Referer", referer)
-        .header(
-            "Accept",
-            "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        )
-        .header("Sec-Fetch-Dest", "image")
-        .header("Sec-Fetch-Mode", "no-cors")
-        .header("Sec-Fetch-Site", "same-origin")
-        .send()
-        .await
+    let bytes = webclaw_client::fetch_bytes(client, url).await
         .map_err(|e| format!("图片请求失败: {}", e))?;
-
-    if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
-    }
-
-    let bytes = resp
-        .bytes()
-        .await
-        .map_err(|e| format!("读取图片失败: {}", e))?;
 
     if bytes.is_empty() {
         return Err("下载的图片数据为空".to_string());
@@ -1290,232 +1259,6 @@ pub async fn rs_close_video_finder(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn rs_get_video_sites() -> Result<Vec<super::video_finder::VideoSite>, String> {
     Ok(super::video_finder::get_video_sites())
-}
-
-// ==================== 批量截图封面命令 ====================
-
-/// 批量截图封面全局状态（共享同一个 manager 实例）
-pub struct CoverCaptureState {
-    pub manager: Arc<Mutex<Option<super::cover_capture::CoverCaptureManager>>>,
-}
-
-impl CoverCaptureState {
-    pub fn new() -> Self {
-        Self {
-            manager: Arc::new(Mutex::new(None)),
-        }
-    }
-}
-
-/// 获取所有截图封面任务（从数据库读取）
-#[tauri::command]
-pub async fn rs_get_cover_capture_tasks(app: AppHandle) -> Result<Vec<serde_json::Value>, String> {
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    db.get_all_cover_capture_tasks()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 获取目录下所有没有封面的视频列表
-#[tauri::command]
-pub async fn rs_get_videos_without_cover(
-    app: AppHandle,
-    path: String,
-) -> Result<Vec<serde_json::Value>, String> {
-    if path.trim().is_empty() {
-        return Err("目录路径不能为空".to_string());
-    }
-
-    let files = crate::scanner::file_scanner::find_video_files(&path, usize::MAX)
-        .await
-        .map_err(|e| format!("扫描目录失败: {}", e))?;
-
-    if files.is_empty() {
-        return Err("目录中未找到视频文件".to_string());
-    }
-
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    let conn = db.get_connection().map_err(|e| e.to_string())?;
-
-    let mut results = Vec::new();
-
-    for file_path in files {
-        // 查询数据库中该视频是否有封面
-        let row: Option<(String, Option<String>)> =
-            Database::get_video_id_and_cover(&conn, &file_path).ok();
-
-        match row {
-            Some((video_id, poster_path)) => {
-                // 检查封面文件是否真实存在
-                let has_cover = poster_path
-                    .as_ref()
-                    .map(|p| std::path::Path::new(p).exists())
-                    .unwrap_or(false);
-
-                if !has_cover {
-                    results.push(serde_json::json!({
-                        "videoId": video_id,
-                        "videoPath": file_path,
-                    }));
-                }
-            }
-            None => {
-                // 视频不在数据库中，跳过
-            }
-        }
-    }
-
-    Ok(results)
-}
-
-/// 为目录下无封面视频创建截图封面任务（持久化到数据库）
-#[tauri::command]
-pub async fn rs_create_cover_capture_tasks(app: AppHandle, path: String) -> Result<usize, String> {
-    let videos = rs_get_videos_without_cover(app.clone(), path).await?;
-
-    if videos.is_empty() {
-        return Ok(0);
-    }
-
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    let tasks: Vec<(String, String, String)> = videos
-        .iter()
-        .map(|v| {
-            let id = Uuid::new_v4().to_string();
-            let video_id = v["videoId"].as_str().unwrap_or("").to_string();
-            let video_path = v["videoPath"].as_str().unwrap_or("").to_string();
-            (id, video_id, video_path)
-        })
-        .filter(|(_, vid, vp)| !vid.is_empty() && !vp.is_empty())
-        .collect();
-
-    let count = db
-        .create_cover_capture_tasks_batch(tasks)
-        .await
-        .map_err(|e| format!("创建截图任务失败: {}", e))?;
-
-    Ok(count)
-}
-
-/// 批量截图封面 - 启动处理所有 waiting 状态的任务
-#[tauri::command]
-pub async fn rs_batch_capture_covers(
-    app: AppHandle,
-    concurrency: Option<usize>,
-    capture_state: State<'_, CoverCaptureState>,
-) -> Result<(), String> {
-    let cpu_cores = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(4);
-    let concurrency = concurrency.unwrap_or(cpu_cores).max(1);
-
-    // 从数据库读取所有 waiting 和 failed 状态的任务
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    let all_tasks = db
-        .get_all_cover_capture_tasks()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let tasks: Vec<super::cover_capture::CoverCaptureTask> = all_tasks
-        .iter()
-        .filter(|t| {
-            let status = t["status"].as_str().unwrap_or("");
-            status == "waiting" || status == "failed"
-        })
-        .map(|t| super::cover_capture::CoverCaptureTask {
-            id: t["id"].as_str().unwrap_or("").to_string(),
-            video_id: t["videoId"].as_str().unwrap_or("").to_string(),
-            video_path: t["videoPath"].as_str().unwrap_or("").to_string(),
-            status: "waiting".to_string(),
-            cover_path: None,
-            error: None,
-        })
-        .filter(|t| !t.video_id.is_empty() && !t.video_path.is_empty())
-        .collect();
-
-    if tasks.is_empty() {
-        return Err("没有等待处理的任务".to_string());
-    }
-
-    // 重置 failed 任务状态为 waiting
-    if let Ok(conn) = db.get_connection() {
-        let _ = Database::reset_failed_cover_capture_tasks(&conn);
-    }
-
-    // 创建 manager 并存入全局状态（共享同一实例）
-    let manager = super::cover_capture::CoverCaptureManager::new(app.clone());
-    {
-        let mut state = capture_state.manager.lock().await;
-        *state = Some(manager.clone());
-    }
-
-    // 在后台启动批量截图
-    tauri::async_runtime::spawn(async move {
-        if let Err(e) = manager.batch_capture(tasks, concurrency).await {
-            eprintln!("[批量截图封面] 执行失败: {}", e);
-        }
-    });
-
-    Ok(())
-}
-
-/// 停止批量截图封面
-#[tauri::command]
-pub async fn rs_stop_cover_capture(
-    capture_state: State<'_, CoverCaptureState>,
-) -> Result<(), String> {
-    let state = capture_state.manager.lock().await;
-    if let Some(manager) = state.as_ref() {
-        manager.stop().await;
-        Ok(())
-    } else {
-        Err("没有运行中的截图任务".to_string())
-    }
-}
-
-/// 删除已完成的截图封面任务
-#[tauri::command]
-pub async fn rs_delete_completed_cover_tasks(app: AppHandle) -> Result<usize, String> {
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    db.delete_completed_cover_capture_tasks()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 删除失败的截图封面任务及其对应的本地视频文件
-#[tauri::command]
-pub async fn rs_delete_failed_cover_tasks(app: AppHandle) -> Result<usize, String> {
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    db.delete_failed_cover_capture_tasks()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 删除全部截图封面任务
-#[tauri::command]
-pub async fn rs_delete_all_cover_tasks(app: AppHandle) -> Result<usize, String> {
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    db.delete_all_cover_capture_tasks()
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 删除单个截图封面任务
-#[tauri::command]
-pub async fn rs_delete_cover_task(app: AppHandle, video_id: String) -> Result<usize, String> {
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    db.delete_cover_capture_task(&video_id)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-/// 重试单个截图封面任务
-#[tauri::command]
-pub async fn rs_retry_cover_task(app: AppHandle, video_id: String) -> Result<(), String> {
-    let db = Database::new(&app).map_err(|e| e.to_string())?;
-    db.retry_cover_capture_task(&video_id)
-        .await
-        .map_err(|e| e.to_string())
 }
 
 // ==================== 资源链接下载查重 ====================

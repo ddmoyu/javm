@@ -44,6 +44,7 @@ rand = "0.8"
 tokio-util = "0.7"
 thiserror = "2"
 sysinfo = "0.33"
+webclaw-http = { git = "https://github.com/0xMassi/webclaw-tls" }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
@@ -51,3 +52,10 @@ winreg = "0.55"
 [dev-dependencies]
 tempfile = "3"
 proptest = "1"
+
+[patch.crates-io]
+rustls = { git = "https://github.com/0xMassi/webclaw-tls", package = "rustls" }
+h2 = { git = "https://github.com/0xMassi/webclaw-tls", package = "h2" }
+hyper = { git = "https://github.com/0xMassi/webclaw-tls", package = "hyper" }
+hyper-util = { git = "https://github.com/0xMassi/webclaw-tls", package = "hyper-util" }
+reqwest = { git = "https://github.com/0xMassi/webclaw-tls", package = "reqwest" }
