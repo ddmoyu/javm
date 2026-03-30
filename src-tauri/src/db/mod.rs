@@ -236,21 +236,6 @@ impl Database {
             [],
         )?;
 
-        // 5.1 截图封面任务表
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS cover_capture_tasks (
-                id TEXT PRIMARY KEY,
-                video_id TEXT NOT NULL,
-                video_path TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'waiting',
-                cover_path TEXT,
-                error TEXT,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                completed_at TEXT
-            )",
-            [],
-        )?;
-
         // 6. 目录表
         conn.execute(
             "CREATE TABLE IF NOT EXISTS directories (
@@ -566,147 +551,6 @@ impl Database {
         Ok(has_cover)
     }
 
-    // ==================== 截图封面任务操作 ====================
-
-    /// 批量创建截图封面任务
-    pub async fn create_cover_capture_tasks_batch(
-        &self,
-        tasks: Vec<(String, String, String)>, // (id, video_id, video_path)
-    ) -> AppResult<usize> {
-        self.run_blocking(move |conn| {
-            let mut conn = conn;
-            let tx = conn.transaction()?;
-
-            let mut created = 0;
-            for (id, video_id, video_path) in tasks {
-                let exists: bool = tx
-                    .query_row(
-                        "SELECT COUNT(*) > 0 FROM cover_capture_tasks WHERE video_id = ?1 AND status != 'completed'",
-                        params![video_id],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(false);
-
-                if !exists {
-                    tx.execute(
-                        "INSERT INTO cover_capture_tasks (id, video_id, video_path, status) VALUES (?1, ?2, ?3, 'waiting')",
-                        params![id, video_id, video_path],
-                    )?;
-                    created += 1;
-                }
-            }
-
-            tx.commit()?;
-            Ok(created)
-        }).await
-    }
-
-    /// 获取所有截图封面任务
-    pub async fn get_all_cover_capture_tasks(&self) -> AppResult<Vec<serde_json::Value>> {
-        self.run_blocking(|conn| {
-            let mut stmt = conn.prepare(
-                "SELECT id, video_id, video_path, status, cover_path, error, created_at, completed_at
-                 FROM cover_capture_tasks ORDER BY created_at DESC"
-            )?;
-
-            let rows = stmt.query_map([], |row| {
-                Ok(serde_json::json!({
-                    "id": row.get::<_, String>(0)?,
-                    "videoId": row.get::<_, String>(1)?,
-                    "videoPath": row.get::<_, String>(2)?,
-                    "status": row.get::<_, String>(3)?,
-                    "coverPath": row.get::<_, Option<String>>(4)?,
-                    "error": row.get::<_, Option<String>>(5)?,
-                    "createdAt": row.get::<_, Option<String>>(6)?,
-                    "completedAt": row.get::<_, Option<String>>(7)?,
-                }))
-            })?;
-
-            let mut tasks = Vec::new();
-            for row in rows {
-                tasks.push(row?);
-            }
-            Ok(tasks)
-        }).await
-    }
-
-    /// 更新截图封面任务状态
-    pub fn update_cover_capture_task(
-        &self,
-        video_id: &str,
-        status: &str,
-        cover_path: Option<&str>,
-        error: Option<&str>,
-    ) -> Result<()> {
-        let conn = self.get_connection()?;
-        let completed_at = if status == "completed" || status == "failed" {
-            Some(chrono::Utc::now().to_rfc3339())
-        } else {
-            None
-        };
-
-        conn.execute(
-            "UPDATE cover_capture_tasks SET status = ?1, cover_path = ?2, error = ?3, completed_at = ?4 WHERE video_id = ?5 AND status != 'completed'",
-            params![status, cover_path, error, completed_at, video_id],
-        )?;
-        Ok(())
-    }
-
-    /// 删除已完成的截图封面任务
-    pub async fn delete_completed_cover_capture_tasks(&self) -> AppResult<usize> {
-        self.run_blocking(|conn| {
-            Ok(conn.execute("DELETE FROM cover_capture_tasks WHERE status = 'completed'", [])?)
-        }).await
-    }
-
-    /// 将所有运行中的截图封面任务重置为等待
-    pub fn reset_running_cover_capture_tasks(&self) -> Result<()> {
-        let conn = self.get_connection()?;
-        conn.execute(
-            "UPDATE cover_capture_tasks SET status = 'waiting', error = NULL WHERE status = 'running'",
-            [],
-        )?;
-        Ok(())
-    }
-
-    /// 删除失败的截图封面任务
-    #[allow(dead_code)]
-    pub async fn delete_failed_cover_capture_tasks(&self) -> AppResult<usize> {
-        self.run_blocking(|conn| {
-            Ok(conn.execute("DELETE FROM cover_capture_tasks WHERE status = 'failed'", [])?)
-        }).await
-    }
-
-    /// 删除全部截图封面任务
-    pub async fn delete_all_cover_capture_tasks(&self) -> AppResult<usize> {
-        self.run_blocking(|conn| {
-            Ok(conn.execute("DELETE FROM cover_capture_tasks", [])?)
-        }).await
-    }
-
-    /// 删除单个截图封面任务
-    pub async fn delete_cover_capture_task(&self, video_id: &str) -> AppResult<usize> {
-        let video_id = video_id.to_string();
-        self.run_blocking(move |conn| {
-            Ok(conn.execute(
-                "DELETE FROM cover_capture_tasks WHERE video_id = ?1",
-                rusqlite::params![video_id],
-            )?)
-        }).await
-    }
-
-    /// 重试单个截图封面任务（重置为等待状态）
-    pub async fn retry_cover_capture_task(&self, video_id: &str) -> AppResult<()> {
-        let video_id = video_id.to_string();
-        self.run_blocking(move |conn| {
-            conn.execute(
-                "UPDATE cover_capture_tasks SET status = 'waiting', error = NULL, completed_at = NULL WHERE video_id = ?1 AND status = 'failed'",
-                rusqlite::params![video_id],
-            )?;
-            Ok(())
-        }).await
-    }
-
     pub fn update_video_cover_paths(
         conn: &Connection,
         video_id: &str,
@@ -786,11 +630,6 @@ impl Database {
             rusqlite::params![new_video_path, old_video_path],
         )?;
 
-        conn.execute(
-            "UPDATE cover_capture_tasks SET video_path = ? WHERE video_id = ?",
-            rusqlite::params![new_video_path, video_id],
-        )?;
-
         Ok(())
     }
 
@@ -812,11 +651,6 @@ impl Database {
         conn.execute(
             "UPDATE scrape_tasks SET path = ? WHERE path = ?",
             rusqlite::params![new_video_path, old_video_path],
-        )?;
-
-        conn.execute(
-            "UPDATE cover_capture_tasks SET video_path = ? WHERE video_id = ?",
-            rusqlite::params![new_video_path, video_id],
         )?;
 
         Ok(())
@@ -1221,58 +1055,8 @@ impl Database {
         Ok(())
     }
 
-    pub fn get_failed_cover_capture_tasks(conn: &Connection) -> Result<Vec<(String, String)>> {
-        let mut stmt = conn.prepare(
-            "SELECT video_id, video_path FROM cover_capture_tasks WHERE status = 'failed'",
-        )?;
-
-        let failed_tasks: Vec<(String, String)> = stmt
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .filter_map(|r| r.ok())
-            .collect();
-
-        Ok(failed_tasks)
-    }
-
-    pub fn reset_failed_cover_capture_tasks(conn: &Connection) -> Result<()> {
-        conn.execute(
-            "UPDATE cover_capture_tasks SET status = 'waiting', error = NULL WHERE status = 'failed'",
-            [],
-        )?;
-        Ok(())
-    }
-
-    pub fn get_video_id_and_cover(
-        conn: &Connection,
-        video_path: &str,
-    ) -> Result<(String, Option<String>)> {
-        conn.query_row(
-            "SELECT id, COALESCE(thumb, poster) FROM videos WHERE video_path = ?",
-            [video_path],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-    }
-
-    pub fn get_video_poster_path(conn: &Connection, video_id: &str) -> Result<Option<String>> {
-        conn.query_row(
-            "SELECT poster FROM videos WHERE id = ?",
-            [video_id],
-            |row| row.get(0),
-        )
-    }
-
     pub fn delete_video(conn: &Connection, video_id: &str) -> Result<()> {
         conn.execute("DELETE FROM videos WHERE id = ?", [video_id])?;
-        Ok(())
-    }
-
-    pub fn delete_failed_cover_capture_tasks_sync(conn: &Connection) -> Result<()> {
-        conn.execute(
-            "DELETE FROM cover_capture_tasks WHERE status = 'failed'",
-            [],
-        )?;
         Ok(())
     }
 

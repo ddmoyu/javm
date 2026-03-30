@@ -46,7 +46,6 @@ let unlistenMove: (() => void) | null = null
 let unlistenDeepLink: UnlistenFn | null = null
 let unlistenScrapeTaskProgress: UnlistenFn | null = null
 let unlistenTaskQueueStatus: UnlistenFn | null = null
-let unlistenCoverCaptureDone: UnlistenFn | null = null
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 let activeSecondsTimer: ReturnType<typeof setInterval> | null = null
 let isInitialized = false
@@ -139,10 +138,6 @@ onMounted(async () => {
     }
   })
 
-  unlistenCoverCaptureDone = await listen('cover-capture-done', () => {
-    videoStore.scheduleRefresh()
-  })
-
   unlistenDeepLink = await onOpenUrl((urls) => {
     void handleDeepLinkUrls(urls)
   })
@@ -186,7 +181,6 @@ onUnmounted(() => {
   if (unlistenDeepLink) unlistenDeepLink()
   if (unlistenScrapeTaskProgress) unlistenScrapeTaskProgress()
   if (unlistenTaskQueueStatus) unlistenTaskQueueStatus()
-  if (unlistenCoverCaptureDone) unlistenCoverCaptureDone()
   updaterStore.disposeUpdaterEvents()
   if (saveTimeout) clearTimeout(saveTimeout)
   if (activeSecondsTimer) clearInterval(activeSecondsTimer)
