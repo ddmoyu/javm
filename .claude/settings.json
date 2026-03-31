@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check *)",
+      "Bash(cargo clippy *)",
+      "Bash(cargo test *)",
+      "Bash(cargo build *)",
+      "Bash(cargo tree *)",
+      "Bash(bun run build *)",
+      "Bash(bun run dev *)",
+      "Bash(bun run vb *)",
+      "Bash(bun run release:collect *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(wc *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git tag -l *)",
+      "Bash(git remote -v)"
+    ],
+    "deny": [
+      "Bash(git reset --hard *)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git clean *)",
+      "Bash(rm -rf *)"
+    ]
+  }
+}

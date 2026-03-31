@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .release-context/
 src-tauri/bin/*
+
+# Claude Code 个人配置
+.claude/settings.local.json
