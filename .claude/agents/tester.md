@@ -24,7 +24,6 @@ model: inherit
 - Vue 组件测试使用 `@vue/test-utils` 的 `mount` / `shallowMount`
 - Store 测试使用 `createPinia()` + `setActivePinia()`
 - Mock Tauri `invoke` 调用：`vi.mock('@tauri-apps/api/core')`
-- 工具函数优先测试边界值和异常情况
 
 Rust 测试规范：
 - 使用 `#[cfg(test)]` 和 `mod tests`

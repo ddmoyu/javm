@@ -10,7 +10,7 @@
       "Bash(bun run dev *)",
       "Bash(bun run vb *)",
       "Bash(bun run release:collect *)",
-      "Bash(npx vue-tsc *)",
+      "Bash(bunx vue-tsc *)",
       "Bash(grep *)",
       "Bash(find *)",
       "Bash(wc *)",
