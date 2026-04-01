@@ -519,6 +519,17 @@ watch(() => settingsStore.settings, async (newSettings) => {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <Separator />
+
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">点击封面直接播放</p>
+                    <p class="text-sm text-muted-foreground">开启后点击影片封面会直接播放，关闭后点击封面打开详情</p>
+                  </div>
+                  <Switch :model-value="settingsStore.settings.general.coverClickToPlay ?? true"
+                    @update:model-value="(v: boolean) => settingsStore.updateSettings({ general: { ...settingsStore.settings.general, coverClickToPlay: v } })" />
+                </div>
               </CardContent>
             </Card>
 

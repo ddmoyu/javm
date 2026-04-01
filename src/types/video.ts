@@ -48,6 +48,7 @@ export interface Video {
 export interface VideoFilter {
     search?: string
     tagIds?: number[]
+    directoryPath?: string
     minRating?: number
     maxRating?: number
     status?: ScanStatus

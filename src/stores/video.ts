@@ -20,6 +20,9 @@ export const useVideoStore = defineStore('video', () => {
     const coverVersions = ref<Record<string, number>>({})
     let refreshTimer: ReturnType<typeof setTimeout> | null = null
     let scheduledRefreshIncludesDirectories = false
+
+    const normalizePath = (path?: string) => (path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase()
+
     // ============ Getters ============
     const filteredVideos = computed(() => {
         let result = [...videos.value]
@@ -55,6 +58,16 @@ export const useVideoStore = defineStore('video', () => {
                     return false
                 })
             }
+        }
+
+        if (filter.value.directoryPath) {
+            const selectedDirectory = normalizePath(filter.value.directoryPath)
+
+            result = result.filter(v => {
+                const videoDirectory = normalizePath(v.dirPath || v.videoPath.replace(/[\\/][^\\/]+$/, ''))
+
+                return videoDirectory === selectedDirectory || videoDirectory.startsWith(`${selectedDirectory}/`)
+            })
         }
 
         // 评分过滤

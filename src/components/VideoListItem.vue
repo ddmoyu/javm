@@ -6,6 +6,7 @@ import type { Video, Directory } from '@/types'
 import { SCAN_STATUS_TEXT, SCAN_STATUS_VARIANT } from '@/utils/constants'
 import { formatDuration, formatRating, formatFileSize } from '@/utils/format'
 import { useVideoStore } from '@/stores'
+import { useSettingsStore } from '@/stores/settings'
 import { toImageSrc } from '@/utils/image'
 import {
   openInExplorer,
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const videoStore = useVideoStore()
+const settingsStore = useSettingsStore()
 const imgError = ref(false)
 const showDeleteDialog = ref(false)
 
@@ -62,6 +64,14 @@ const imageSrc = computed(() => {
 
 const handleClick = () => emit('click', props.video)
 const handlePlay = (e?: Event) => { e?.stopPropagation(); emit('play', props.video) }
+const handleCoverClick = (e: MouseEvent) => {
+  e.stopPropagation()
+  if (settingsStore.settings.general.coverClickToPlay) {
+    handlePlay()
+    return
+  }
+  handleClick()
+}
 const handleOpenDir = async () => { await openInExplorer(props.video.videoPath) }
 const handleScrape = () => emit('scrape', props.video)
 const handleDelete = () => { showDeleteDialog.value = true }
@@ -87,7 +97,8 @@ const onImgError = () => { imgError.value = true }
         @click="handleClick"
       >
         <!-- 缩略图 -->
-        <div class="h-[100px] aspect-[800/536] shrink-0 rounded overflow-hidden bg-muted flex items-center justify-center">
+        <div class="h-[100px] aspect-[800/536] shrink-0 rounded overflow-hidden bg-muted flex items-center justify-center"
+          @click.stop="handleCoverClick">
           <img
             v-if="imageSrc"
             :src="imageSrc"

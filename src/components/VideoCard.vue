@@ -6,6 +6,7 @@ import type { Video, Directory } from '@/types'
 import { SCAN_STATUS_TEXT, SCAN_STATUS_VARIANT } from '@/utils/constants'
 import { formatDuration, formatRating } from '@/utils/format'
 import { useVideoStore } from '@/stores'
+import { useSettingsStore } from '@/stores/settings'
 import { toImageSrc } from '@/utils/image'
 import {
   openInExplorer,
@@ -36,6 +37,7 @@ const emit = defineEmits<{
 }>()
 
 const videoStore = useVideoStore()
+const settingsStore = useSettingsStore()
 const imgError = ref(false)
 const showDeleteDialog = ref(false)
 
@@ -74,6 +76,15 @@ const handleClick = () => {
 const handlePlay = (e?: Event) => {
   e?.stopPropagation()
   emit('play', props.video)
+}
+
+const handleCoverClick = (e: MouseEvent) => {
+  e.stopPropagation()
+  if (settingsStore.settings.general.coverClickToPlay) {
+    handlePlay()
+    return
+  }
+  handleClick()
 }
 
 // 打开目录
@@ -115,7 +126,8 @@ const onImgError = () => {
         @click="handleClick">
 
         <!-- 封面图 / 占位图 -->
-        <div class="aspect-[800/536] overflow-hidden bg-muted flex items-center justify-center relative">
+        <div class="aspect-[800/536] overflow-hidden bg-muted flex items-center justify-center relative"
+          @click.stop="handleCoverClick">
           <img v-if="imageSrc" :src="imageSrc" :alt="video.title || video.originalTitle"
             class="w-full h-full object-contain transition-transform duration-300" loading="lazy"
             @error="onImgError" />

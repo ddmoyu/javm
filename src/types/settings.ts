@@ -59,6 +59,7 @@ export interface GeneralSettings {
     scanPaths: string[]
     viewMode: ViewMode
     playMethod: PlayMethod
+    coverClickToPlay: boolean
 }
 
 /** 下载设置 */
@@ -146,6 +147,7 @@ export const defaultSettings: AppSettings = {
         scanPaths: [],
         viewMode: 'card',
         playMethod: 'software',
+        coverClickToPlay: true,
     },
     download: {
         savePath: '',

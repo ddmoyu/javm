@@ -34,6 +34,8 @@ import VideoDetailDialog from '@/components/VideoDetailDialog.vue'
 import ScrapeDialog from '@/components/ScrapeDialog.vue'
 import type { Video, ViewMode } from '@/types'
 
+const ALL_DIRECTORY_VALUE = '__all__'
+
 const videoStore = useVideoStore()
 const settingsStore = useSettingsStore()
 
@@ -99,11 +101,16 @@ const getFileCreatedAfter = (range?: string) => {
 }
 
 const filterState = ref({
+  directoryPath: undefined as string | undefined,
   minRating: undefined as string | undefined,
   maxRating: undefined as string | undefined, // Not explicitly requested but good for range
   fileCreatedRange: undefined as string | undefined,
   resolution: [] as string[],
   scraped: [] as string[], // 刮削状态筛选：'scraped' 已刮削, 'unscraped' 未刮削
+})
+
+const availableDirectories = computed(() => {
+  return [...videoStore.directories].sort((a, b) => a.path.localeCompare(b.path, 'zh-CN'))
 })
 
 // 监听排序变化并应用到 Store
@@ -118,6 +125,7 @@ watch([activeSortBy, activeSortOrder], ([newBy, newOrder]) => {
 const applyFilters = () => {
   console.log('applyFilters 被调用, filterState:', JSON.stringify(filterState.value))
   videoStore.setFilter({
+    directoryPath: filterState.value.directoryPath,
     minRating: filterState.value.minRating ? parseFloat(filterState.value.minRating) : undefined,
     fileCreatedAfter: getFileCreatedAfter(filterState.value.fileCreatedRange),
     resolution: filterState.value.resolution.length > 0 ? filterState.value.resolution : undefined,
@@ -176,6 +184,7 @@ const videoCount = computed(() => {
 // 用于重置筛选
 const clearFilters = () => {
   filterState.value = {
+    directoryPath: undefined,
     minRating: undefined,
     maxRating: undefined,
     fileCreatedRange: undefined,
@@ -192,6 +201,7 @@ const clearMediaFilters = () => {
 // 筛选徽章计数
 const activeFilterCount = computed(() => {
   let count = 0
+  if (filterState.value.directoryPath) count++
   if (filterState.value.minRating) count++
   if (filterState.value.fileCreatedRange) count++
   if (filterState.value.resolution.length > 0) count++
@@ -352,6 +362,24 @@ const unscrapedChecked = computed({
                 清空
               </Button>
             </div>
+            <Separator />
+
+            <div class="space-y-2">
+              <Label class="text-xs text-muted-foreground">目录</Label>
+              <Select :model-value="filterState.directoryPath ?? ALL_DIRECTORY_VALUE"
+                @update:model-value="(v) => { filterState.directoryPath = String(v) === ALL_DIRECTORY_VALUE ? undefined : String(v) }">
+                <SelectTrigger class="h-8">
+                  <SelectValue placeholder="全部目录" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem :value="ALL_DIRECTORY_VALUE">全部目录</SelectItem>
+                  <SelectItem v-for="directory in availableDirectories" :key="directory.id" :value="directory.path">
+                    {{ directory.path }}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Separator />
 
             <!-- 评分筛选 -->
