@@ -404,7 +404,6 @@ onUnmounted(() => {
         class="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
         <LinkIcon class="size-8 opacity-30" />
         <span class="text-sm">输入番号并点击查找，自动捕获候选下载链接，需要科学上网</span>
-        <span class="text-xs">已屏蔽 MP4 和 TS 分片，实际是否可下载交给 N_m3u8DL-RE 判断</span>
       </div>
 
       <!-- 链接列表 -->

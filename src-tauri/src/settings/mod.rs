@@ -60,6 +60,8 @@ pub struct GeneralSettings {
     pub view_mode: String,
     #[serde(rename = "playMethod", default = "default_play_method")]
     pub play_method: String,
+    #[serde(rename = "coverClickToPlay", default = "default_true")]
+    pub cover_click_to_play: bool,
 }
 
 fn default_play_method() -> String {
@@ -373,6 +375,7 @@ impl Default for AppSettings {
                 scan_paths: Vec::new(),
                 view_mode: "card".to_string(),
                 play_method: "software".to_string(),
+                cover_click_to_play: true,
             },
             download: DownloadSettings::default(),
             scrape: ScrapeSettings::default(),

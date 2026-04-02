@@ -55,7 +55,7 @@ watch(coverStateKey, () => {
 // 图片源
 const imageSrc = computed(() => {
   if (imgError.value) return null
-  const path = props.video.thumb || props.video.poster
+  const path = props.video.poster || props.video.thumb
   const src = toImageSrc(path)
   if (!src) return null
   const version = videoStore.coverVersions[props.video.id]

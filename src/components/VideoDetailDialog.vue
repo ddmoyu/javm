@@ -170,7 +170,7 @@ const imageSrc = computed(() => {
         return src ? `${src}${src.includes('?') ? '&' : '?'}t=${_bust}` : ''
     }
 
-    const persistedCoverPath = formData.value.thumb || props.video?.thumb || formData.value.poster || props.video?.poster
+    const persistedCoverPath = formData.value.poster || props.video?.poster || formData.value.thumb || props.video?.thumb
     if (persistedCoverPath) {
         const path = persistedCoverPath
         const src = toImageSrc(path) ?? ''
@@ -664,8 +664,8 @@ const handleCaptureCoverSuccess = async (payload: { paths: string | string[]; vi
     }
 
     // 更新表单数据
-    formData.value.thumb = path
     formData.value.poster = path
+    formData.value.thumb = undefined
     pendingPosterSource.value = path
     isDirty.value = true
 

@@ -54,7 +54,7 @@ pub async fn scan_directory(app: AppHandle, path: String) -> Result<u32, String>
                         &conn,
                         &r.video_id,
                         &r.poster_path,
-                        &r.thumb_path,
+                            None,
                     );
                 }
             }
@@ -99,7 +99,6 @@ pub async fn scan_directory(app: AppHandle, path: String) -> Result<u32, String>
 struct CoverResult {
     video_id: String,
     poster_path: String,
-    thumb_path: String,
 }
 
 /// 封面截帧 dispatcher：从 channel 接收任务，使用自适应并发执行 ffmpeg 截帧
@@ -174,8 +173,7 @@ async fn cover_dispatcher(
                 let _ = std::fs::remove_file(&output);
                 let _ = std::fs::remove_dir(&temp_dir);
 
-                let poster_str = poster_path.to_string_lossy().to_string();
-                Ok::<(String, String), String>((poster_str.clone(), poster_str))
+                Ok::<String, String>(poster_path.to_string_lossy().to_string())
             })
             .await
             .unwrap_or(Err("Task join failed".to_string()));
@@ -184,11 +182,10 @@ async fn cover_dispatcher(
             let total_val = total.load(Ordering::Relaxed);
 
             match result {
-                Ok((poster_path, thumb_path)) => {
+                Ok(poster_path) => {
                     results.lock().await.push(CoverResult {
                         video_id: vid.clone(),
-                        poster_path,
-                        thumb_path: thumb_path.clone(),
+                        poster_path: poster_path.clone(),
                     });
 
                     let _ = app.emit(
@@ -196,7 +193,7 @@ async fn cover_dispatcher(
                         serde_json::json!({
                             "videoId": vid,
                             "status": "completed",
-                            "thumbPath": thumb_path,
+                            "thumbPath": poster_path,
                             "completed": done,
                             "total": total_val,
                             "concurrency": limiter.current_limit(),

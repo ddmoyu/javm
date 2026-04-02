@@ -110,21 +110,18 @@ pub async fn save_captured_cover(
                     video_path.clone()
                 });
 
-        // 保存帧作为封面资源（poster + thumb）
-        let (poster_path, thumb_path) =
+        // 保存帧作为封面资源（仅 poster）
+        let poster_path =
             super::assets::save_frame_as_cover_assets(&actual_video_path, &frame_path)
                 .map_err(AppError::Business)?;
 
         // 更新数据库
         let conn = db.get_connection()?;
 
-        conn.execute(
-            "UPDATE videos SET poster = ?, thumb = ?, updated_at = datetime('now') WHERE id = ?",
-            rusqlite::params![&poster_path, &thumb_path, &video_id],
-        )?;
+        crate::db::Database::update_video_cover_paths(&conn, &video_id, &poster_path, None)?;
 
         Ok(SaveCapturedCoverResult {
-            thumb_path,
+            thumb_path: poster_path,
             video_path: actual_video_path,
         })
     })

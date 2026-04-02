@@ -12,6 +12,25 @@ use super::service::{
     parse_name_list,
 };
 
+fn resolve_cover_path(poster: Option<String>, thumb: Option<String>) -> Option<String> {
+    let has_existing_file = |path: &str| {
+        let trimmed = path.trim();
+        !trimmed.is_empty() && Path::new(trimmed).exists()
+    };
+
+    if let Some(path) = poster.as_deref().filter(|path| has_existing_file(path)) {
+        return Some(path.to_string());
+    }
+
+    if let Some(path) = thumb.as_deref().filter(|path| has_existing_file(path)) {
+        return Some(path.to_string());
+    }
+
+    poster
+        .filter(|path| !path.trim().is_empty())
+        .or_else(|| thumb.filter(|path| !path.trim().is_empty()))
+}
+
 // ==================== 目录管理 ====================
 
 #[tauri::command]
@@ -156,6 +175,9 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
 
         let video_iter = stmt
             .query_map([], |row| {
+                let poster: Option<String> = row.get(11)?;
+                let thumb: Option<String> = row.get(12)?;
+
                 Ok(serde_json::json!({
                     "id": row.get::<_, String>(0)?,
                     "title": row.get::<_, Option<String>>(1)?,
@@ -171,8 +193,8 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
                     "scanStatus": row.get::<_, i32>(8)?,
                     "director": row.get::<_, Option<String>>(9)?,
                     "localId": row.get::<_, Option<String>>(10)?,
-                    "poster": row.get::<_, Option<String>>(11)?,
-                    "thumb": row.get::<_, Option<String>>(12)?,
+                    "poster": resolve_cover_path(poster.clone(), thumb.clone()),
+                    "thumb": thumb,
                     "fanart": row.get::<_, Option<String>>(13)?,
                     "originalTitle": row.get::<_, Option<String>>(14)?,
                     "actors": row.get::<_, Option<String>>(15)?,

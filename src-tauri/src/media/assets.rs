@@ -768,7 +768,7 @@ pub async fn sync_extrafanart_from_urls(
 pub fn save_frame_as_cover_assets(
     video_path: &str,
     frame_path: &str,
-) -> Result<(String, String), String> {
+) -> Result<String, String> {
     let video_path_obj = Path::new(video_path);
     let parent_dir = video_path_obj.parent().ok_or("无效的视频路径")?;
     let file_stem = video_path_obj
@@ -778,21 +778,14 @@ pub fn save_frame_as_cover_assets(
 
     let poster_filename = format!("{}-poster.jpg", file_stem);
     let poster_path = parent_dir.join(&poster_filename);
-    let thumb_filename = format!("{}-thumb.jpg", file_stem);
-    let thumb_path = parent_dir.join(&thumb_filename);
 
     fs::copy(frame_path, &poster_path).map_err(|e| format!("保存 poster 失败: {}", e))?;
-    fs::copy(frame_path, &thumb_path).map_err(|e| format!("保存 thumb 失败: {}", e))?;
 
-    Ok((
-        poster_path.to_string_lossy().to_string(),
-        thumb_path.to_string_lossy().to_string(),
-    ))
+    Ok(poster_path.to_string_lossy().to_string())
 }
 
 pub fn save_frame_as_cover(video_path: &str, frame_path: &str) -> Result<String, String> {
-    let (_, thumb_path) = save_frame_as_cover_assets(video_path, frame_path)?;
-    Ok(thumb_path)
+    save_frame_as_cover_assets(video_path, frame_path)
 }
 
 /// 将截取的多个视频帧保存到 extrafanart 目录

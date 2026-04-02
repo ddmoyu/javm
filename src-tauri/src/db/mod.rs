@@ -555,7 +555,7 @@ impl Database {
         conn: &Connection,
         video_id: &str,
         poster_path: &str,
-        thumb_path: &str,
+        thumb_path: Option<&str>,
     ) -> Result<()> {
         conn.execute(
             "UPDATE videos SET poster = ?, thumb = ?, updated_at = datetime('now') WHERE id = ?",

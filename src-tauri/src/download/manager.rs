@@ -219,18 +219,9 @@ impl DownloadManager {
     }
 }
 
-/// 触发自动刮削任务
-async fn trigger_auto_scrape(app: tauri::AppHandle, task: &DownloadTask) {
+/// 触发下载完成后的后处理：自动刮削，或回退到截图封面
+async fn trigger_post_download_processing(app: tauri::AppHandle, task: &DownloadTask) {
     use tauri::Emitter;
-    
-    let settings = match crate::settings::get_settings(app.clone()).await {
-        Ok(s) => s,
-        Err(_) => return,
-    };
-
-    if !settings.download.auto_scrape {
-        return;
-    }
 
     let filename = match &task.filename {
         Some(f) => f,
@@ -244,12 +235,36 @@ async fn trigger_auto_scrape(app: tauri::AppHandle, task: &DownloadTask) {
     };
 
     let file_path_str = target_file.to_string_lossy().to_string();
-    println!("[AutoScrape] Triggering for: {}", file_path_str);
+    println!("[PostDownload] Triggering for: {}", file_path_str);
+
+    let designation = match extract_designation_from_path(&file_path_str) {
+        Ok(value) => Some(value),
+        Err(e) => {
+            println!("[PostDownload] 未识别到番号，回退截图封面: {}", e);
+            None
+        }
+    };
+
+    let should_try_scrape = if designation.is_some() {
+        match crate::settings::get_settings(app.clone()).await {
+            Ok(settings) => settings.download.auto_scrape,
+            Err(e) => {
+                println!("[PostDownload] 读取设置失败，跳过自动刮削: {}", e);
+                false
+            }
+        }
+    } else {
+        false
+    };
+
+    if designation.is_some() && !should_try_scrape {
+        return;
+    }
 
     let db = match crate::db::Database::new(&app) {
         Ok(db) => db,
         Err(e) => {
-            println!("[AutoScrape] Database::new failed: {}", e);
+            println!("[PostDownload] Database::new failed: {}", e);
             return;
         }
     };
@@ -257,7 +272,7 @@ async fn trigger_auto_scrape(app: tauri::AppHandle, task: &DownloadTask) {
     // 检查是否已刮削
     if let Ok(scraped) = db.is_video_completely_scraped(&file_path_str) {
         if scraped {
-            println!("[AutoScrape] Video already scraped: {}", file_path_str);
+            println!("[PostDownload] Video already scraped: {}", file_path_str);
             return;
         }
     }
@@ -297,23 +312,79 @@ async fn trigger_auto_scrape(app: tauri::AppHandle, task: &DownloadTask) {
     };
     app.emit("download-progress", &scraping_progress).ok();
 
-    // 异步执行刮削任务
+    // 异步执行后处理任务
     let app_clone = app.clone();
     let task_id = task.id.clone();
     let file_path = file_path_str.clone();
+    let should_capture_cover = designation.is_none();
+    let should_try_scrape_in_task = should_try_scrape;
     
     tokio::spawn(async move {
-        match perform_scrape(&app_clone, &file_path).await {
-            Ok(_) => {
-                // 更新下载任务状态为"已完成"
-                update_download_status_completed(&app_clone, &task_id).await;
-            }
-            Err(_) => {
-                // 刮削失败也标记为已完成，不影响下载状态
-                update_download_status_completed(&app_clone, &task_id).await;
+        let mut capture_cover_fallback = should_capture_cover;
+
+        if should_try_scrape_in_task {
+            match perform_scrape(&app_clone, &file_path).await {
+                Ok(_) => {}
+                Err(e) => {
+                    println!("[PostDownload] 自动刮削失败，回退截图封面: {}", e);
+                    capture_cover_fallback = true;
+                }
             }
         }
+
+        if capture_cover_fallback {
+            if let Err(e) = capture_cover_as_fallback(&app_clone, &file_path).await {
+                println!("[PostDownload] 截图封面失败: {}", e);
+            }
+        }
+
+        update_download_status_completed(&app_clone, &task_id).await;
     });
+}
+
+async fn capture_cover_as_fallback(app: &tauri::AppHandle, video_path: &str) -> Result<(), String> {
+    let db = crate::db::Database::new(app).map_err(|e| e.to_string())?;
+    if db.has_cover_image(video_path).map_err(|e| e.to_string())? {
+        return Ok(());
+    }
+
+    let video_id = get_or_create_video_id(&db, video_path)?;
+    let app_handle = app.clone();
+    let video_path = video_path.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let duration = crate::media::ffmpeg::get_video_duration(&video_path)?;
+        if duration <= 0.0 {
+            return Err("视频时长为 0，无法截图".to_string());
+        }
+
+        let timestamp = duration * 0.1;
+        let temp_dir = std::env::temp_dir().join(format!(
+            "jav_download_cover_{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp_dir).map_err(|e| format!("创建临时目录失败: {}", e))?;
+        let output = temp_dir.join("cover.jpg");
+        let output_str = output.to_string_lossy().to_string();
+
+        let cover_result = (|| -> Result<String, String> {
+            crate::media::ffmpeg::extract_frame(&video_path, timestamp, &output_str)?;
+            crate::media::assets::save_frame_as_cover_assets(&video_path, &output_str)
+        })();
+
+        let _ = std::fs::remove_file(&output);
+        let _ = std::fs::remove_dir(&temp_dir);
+
+        let poster_path = cover_result?;
+        let db = crate::db::Database::new(&app_handle).map_err(|e| e.to_string())?;
+        let conn = db.get_connection().map_err(|e| e.to_string())?;
+        crate::db::Database::update_video_cover_paths(&conn, &video_id, &poster_path, None)
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("截图封面任务执行失败: {}", e))?
 }
 
 /// 执行刮削操作
@@ -916,8 +987,8 @@ pub(crate) async fn execute_download(
         app.emit("download-progress", &final_progress).ok();
         crate::analytics::record_download_completed(&app);
 
-        // 触发自动刮削
-        trigger_auto_scrape(app.clone(), &task).await;
+        // 触发下载完成后的自动后处理
+        trigger_post_download_processing(app.clone(), &task).await;
 
         Ok(())
     } else {

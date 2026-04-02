@@ -55,7 +55,7 @@ watch(coverStateKey, () => {
 // 图片源
 const imageSrc = computed(() => {
   if (imgError.value) return null
-  const path = props.video.thumb || props.video.poster
+  const path = props.video.poster || props.video.thumb
   const src = toImageSrc(path)
   if (!src) return null
   const version = videoStore.coverVersions[props.video.id]
@@ -65,6 +65,22 @@ const imageSrc = computed(() => {
 // 是否显示状态徽章
 const showStatusBadge = computed(() => {
   return props.video.scanStatus !== 2 // 非已完成状态显示徽章
+})
+
+const statusBadgeClass = computed(() => {
+  if (props.video.scanStatus === 1) {
+    return 'border-white/70 bg-black/25 text-white shadow-md backdrop-blur-md'
+  }
+
+  return ''
+})
+
+const statusTextClass = computed(() => {
+  if (props.video.scanStatus === 1) {
+    return 'font-semibold text-white mix-blend-difference'
+  }
+
+  return ''
 })
 
 // 处理点击 (查看详情)
@@ -177,8 +193,8 @@ const onImgError = () => {
 
         <!-- 状态徽章 -->
         <Badge v-if="showStatusBadge" :variant="SCAN_STATUS_VARIANT[video.scanStatus]"
-          class="absolute top-2 right-2 z-10">
-          {{ SCAN_STATUS_TEXT[video.scanStatus] }}
+          :class="['absolute top-2 right-2 z-10', statusBadgeClass]">
+          <span :class="statusTextClass">{{ SCAN_STATUS_TEXT[video.scanStatus] }}</span>
         </Badge>
       </div>
     </ContextMenuTrigger>
