@@ -68,8 +68,8 @@ const handleDeepLinkUrls = async (urls: string[]) => {
 
       await router.push('/download')
 
-      const defaultPath = await getDefaultDownloadPath()
-      await downloadStore.addTask(parsed.url, defaultPath, parsed.title)
+      const savePath = settingsStore.settings.download.savePath || await getDefaultDownloadPath()
+      await downloadStore.addTask(parsed.url, savePath, parsed.title)
 
       toast.success('下载任务已添加', {
         description: `正在下载: ${parsed.title}`
