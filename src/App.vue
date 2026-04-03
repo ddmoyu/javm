@@ -58,6 +58,9 @@ const updateNotesHtml = computed(() => {
 })
 
 const handleDeepLinkUrls = async (urls: string[]) => {
+  // 确保任务列表已加载，以便重复检查生效
+  await downloadStore.fetchTasks()
+
   for (const rawUrl of urls) {
     try {
       const parsed = await parseDeepLink(rawUrl)
@@ -75,10 +78,14 @@ const handleDeepLinkUrls = async (urls: string[]) => {
         description: `正在下载: ${parsed.title}`
       })
     } catch (error) {
-      console.error('[deep-link] process failed:', error)
-      toast.error('添加下载任务失败', {
-        description: String(error)
-      })
+      const msg = String(error)
+      if (msg.includes('已存在')) {
+        console.warn('[deep-link] duplicate task:', msg)
+        toast.warning('任务已存在', { description: msg })
+      } else {
+        console.error('[deep-link] process failed:', error)
+        toast.error('添加下载任务失败', { description: msg })
+      }
     }
   }
 }
