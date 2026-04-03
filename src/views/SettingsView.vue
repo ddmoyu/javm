@@ -61,6 +61,7 @@ const settingsStore = useSettingsStore()
 const updaterStore = useUpdaterStore()
 const appVersion = packageInfo.version
 const isDeveloperMode = import.meta.env.DEV
+const exportingLogs = ref(false)
 
 const updateStatusText = computed(() => {
   const info = updaterStore.updateInfo
@@ -180,6 +181,40 @@ const testProxyConnection = async () => {
 
 const openRecommendedService = async (url: string) => {
   await openExternalLink(url)
+}
+
+const handleOpenLogDirectory = async () => {
+  try {
+    const { getLogDirectory, openInExplorer } = await import('@/lib/tauri')
+    const { logDir } = await getLogDirectory()
+    await openInExplorer(logDir)
+  } catch (e) {
+    console.error('打开日志目录失败:', e)
+    toast.error(`打开日志目录失败: ${(e as Error).message || '未知错误'}`)
+  }
+}
+
+const handleExportLogs = async () => {
+  try {
+    const destinationDir = await selectDirectory()
+    if (!destinationDir) {
+      return
+    }
+
+    exportingLogs.value = true
+    const { exportLogs } = await import('@/lib/tauri')
+    const result = await exportLogs(destinationDir)
+
+    toast.success('日志导出完成', {
+      description: `已导出 ${result.fileCount} 个日志文件和诊断信息到 ${result.exportPath}`,
+      duration: 4000,
+    })
+  } catch (e) {
+    console.error('导出日志失败:', e)
+    toast.error(`导出日志失败: ${(e as Error).message || '未知错误'}`)
+  } finally {
+    exportingLogs.value = false
+  }
 }
 
 // 下载设置
@@ -978,6 +1013,32 @@ watch(() => settingsStore.settings, async (newSettings) => {
                       @click="updaterStore.installLatestUpdate()"
                     >
                       {{ updaterStore.installing ? '安装中...' : '立即更新' }}
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div class="space-y-3">
+                  <div class="space-y-1">
+                    <p class="font-medium">日志与诊断</p>
+                    <p class="text-sm text-muted-foreground">导出前端、后端和全局异常日志，便于开发者复现和排查问题。</p>
+                  </div>
+
+                  <div class="flex gap-3">
+                    <Button
+                      variant="outline"
+                      @click="handleOpenLogDirectory"
+                    >
+                      打开日志目录
+                    </Button>
+
+                    <Button
+                      variant="outline"
+                      :disabled="exportingLogs"
+                      @click="handleExportLogs"
+                    >
+                      {{ exportingLogs ? '导出中...' : '导出日志' }}
                     </Button>
                   </div>
                 </div>

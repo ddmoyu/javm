@@ -50,6 +50,10 @@ const emit = defineEmits<Emits>()
 
 const videoStore = useVideoStore()
 
+const formatScanSummary = (successCount: number, failedCount: number) => {
+    return `成功 ${successCount} 个，失败 ${failedCount} 个`
+}
+
 const isOpen = computed({
     get: () => props.open,
     set: (value) => emit('update:open', value),
@@ -91,14 +95,15 @@ const handleAddDirectory = async () => {
             scanProgress.value = { current: 0, total: 0, current_file: '正在添加目录...' }
             
             try {
-                await videoStore.addDirectory(path)
+                const summary = await videoStore.addDirectory(path)
                 
                 // 扫描完成后更新提示
                 scanProgress.value = { 
                     current: 1, 
                     total: 1, 
-                    current_file: '目录添加并扫描完成' 
+                    current_file: `目录添加并扫描完成，${formatScanSummary(summary.success_count, summary.failed_count)}` 
                 }
+                window.alert(`目录扫描完成：${formatScanSummary(summary.success_count, summary.failed_count)}`)
             } finally {
                 isScanning.value = false
             }
@@ -126,7 +131,10 @@ const handleSyncDirectory = async (id: string) => {
     scanProgress.value = { current: 0, total: 0, current_file: '' }
     
     try {
-        await videoStore.syncDirectoryCount(id)
+        const summary = await videoStore.syncDirectoryCount(id)
+        if (summary) {
+            window.alert(`目录扫描完成：${formatScanSummary(summary.success_count, summary.failed_count)}`)
+        }
     } catch (e) {
         console.error('Failed to sync directory:', e)
     } finally {

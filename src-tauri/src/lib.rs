@@ -1,4 +1,7 @@
 // Tauri 命令入口 - https://tauri.app/develop/calling-rust/
+#[macro_use]
+mod logging;
+
 pub mod error;
 pub mod db;
 mod deep_link;
@@ -15,6 +18,7 @@ pub mod scanner;
 pub mod utils;
 
 use tauri::{AppHandle, Manager};
+use tauri_plugin_log::{RotationStrategy, Target, TargetKind, TimezoneStrategy};
 use tokio::sync::Mutex;
 
 async fn cleanup_before_exit(app: &AppHandle) {
@@ -96,6 +100,8 @@ async fn proxy_hls_request(
 // ==================== 应用入口 ====================
 
 pub fn run() {
+    logging::init_panic_hook();
+
     let mut builder = tauri::Builder::default();
 
     #[cfg(desktop)]
@@ -105,13 +111,28 @@ pub fn run() {
                 let _ = window.show();
                 let _ = window.set_focus();
             }
-            println!("[单实例] 新实例参数: {argv:?}");
+            log::info!("[app_lifecycle] event=single_instance_activated argv={:?}", argv);
         }));
 
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
 
     builder
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .clear_targets()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("javm".to_string()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                .rotation_strategy(RotationStrategy::KeepAll)
+                .timezone_strategy(TimezoneStrategy::UseLocal)
+                .max_file_size(5_000_000)
+                .build(),
+        )
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_localhost::Builder::new(1421).build())
         .plugin(tauri_plugin_opener::init())
@@ -183,7 +204,7 @@ pub fn run() {
                         }
                     }
                     None => {
-                        println!("应用设置读取失败，主窗口使用默认尺寸");
+                        log::warn!("[app_startup] event=load_settings_failed_using_default_window_size");
                     }
                 }
             }
@@ -243,6 +264,8 @@ pub fn run() {
             // 设置
             settings::commands::get_settings,
             settings::commands::save_settings,
+            settings::commands::get_log_directory,
+            settings::commands::export_logs,
             settings::commands::test_ai_api,
             settings::commands::recognize_designation_with_ai,
             // 更新

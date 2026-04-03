@@ -1,13 +1,13 @@
 //! 扫描相关的 Tauri 命令
 
 use crate::db::Database;
-use crate::scanner::{ScanProgress, ScannerService};
+use crate::scanner::{ScanProgress, ScanSummary, ScannerService};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 
 #[tauri::command]
-pub async fn scan_directory(app: AppHandle, path: String) -> Result<u32, String> {
+pub async fn scan_directory(app: AppHandle, path: String) -> Result<ScanSummary, String> {
     let db = Database::new(&app).map_err(|e| e.to_string())?;
     let scanner = ScannerService::new(db.clone());
     let app_clone = app.clone();
@@ -24,7 +24,7 @@ pub async fn scan_directory(app: AppHandle, path: String) -> Result<u32, String>
     let cover_handle = tokio::spawn(cover_dispatcher(app_for_cover, cover_rx, results_ref));
 
     // 扫描目录（process_file 发现无封面时通过 cover_tx 派发任务）
-    let count = scanner
+    let summary = scanner
         .scan_directory_async(
             &path,
             move |progress| {
@@ -37,7 +37,11 @@ pub async fn scan_directory(app: AppHandle, path: String) -> Result<u32, String>
     // cover_tx 已在 scan_directory_async 内被 move 并 drop → channel 关闭
     // 等待所有截帧任务完成
     if let Err(e) = cover_handle.await {
-        eprintln!("[自动封面] dispatcher 异常: {}", e);
+        log::error!(
+            "[auto_cover] event=dispatcher_join_failed path={} error={}",
+            path,
+            e
+        );
     }
 
     // 扫描事务已提交，批量更新封面路径到数据库
@@ -88,7 +92,7 @@ pub async fn scan_directory(app: AppHandle, path: String) -> Result<u32, String>
     // 发送扫描完成信号（null 进度）
     let _ = app_clone2.emit("scan-progress", Option::<ScanProgress>::None);
 
-    Ok(count)
+    Ok(summary)
 }
 
 // ============================================================

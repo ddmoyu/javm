@@ -166,7 +166,11 @@ fn move_optional_asset(source: Option<PathBuf>, target_dir: &Path, label: &str) 
     let file_name = match source.file_name() {
         Some(file_name) => file_name,
         None => {
-            eprintln!("移动{}失败: 无效的文件名 {:?}", label, source);
+            log::error!(
+                "[media_assets] event=move_optional_asset_invalid_filename label={} source={}",
+                label,
+                source.display()
+            );
             return None;
         }
     };
@@ -187,7 +191,13 @@ fn move_optional_asset(source: Option<PathBuf>, target_dir: &Path, label: &str) 
     match move_file(&source, &target) {
         Ok(()) => Some(target.to_string_lossy().to_string()),
         Err(error) => {
-            eprintln!("移动{}失败 {:?} -> {:?}: {}", label, source, target, error);
+            log::error!(
+                "[media_assets] event=move_optional_asset_failed label={} source={} target={} error={}",
+                label,
+                source.display(),
+                target.display(),
+                error
+            );
             None
         }
     }
@@ -213,7 +223,12 @@ fn move_matching_subtitle_files(video_path: &Path, target_dir: &Path) {
         };
         let target = target_dir.join(file_name);
         if let Err(error) = move_file(&candidate, &target) {
-            eprintln!("移动字幕失败 {:?} -> {:?}: {}", candidate, target, error);
+            log::error!(
+                "[media_assets] event=move_subtitle_failed source={} target={} error={}",
+                candidate.display(),
+                target.display(),
+                error
+            );
         }
     }
 }
@@ -371,9 +386,11 @@ fn rollback_rename_operations(completed: &[PendingRenameOperation]) {
         };
 
         if let Err(error) = rollback_result {
-            eprintln!(
-                "回滚重命名失败 {:?} <- {:?}: {}",
-                operation.source, operation.target, error
+            log::error!(
+                "[media_assets] event=rollback_rename_failed source={} target={} error={}",
+                operation.source.display(),
+                operation.target.display(),
+                error
             );
         }
     }
@@ -608,7 +625,12 @@ pub fn ensure_video_in_named_parent_dir(
     if current_nfo.exists() {
         let new_nfo = new_video_path.with_extension("nfo");
         if let Err(error) = move_file(&current_nfo, &new_nfo) {
-            eprintln!("移动 NFO 失败 {:?} -> {:?}: {}", current_nfo, new_nfo, error);
+            log::error!(
+                "[media_assets] event=move_nfo_failed source={} target={} error={}",
+                current_nfo.display(),
+                new_nfo.display(),
+                error
+            );
         }
     }
 
@@ -632,9 +654,11 @@ pub fn ensure_video_in_named_parent_dir(
     if extrafanart_dir.exists() && extrafanart_dir.is_dir() {
         let target_extrafanart_dir = target_dir.join(EXTRAFANART_DIR_NAME);
         if let Err(error) = move_dir(&extrafanart_dir, &target_extrafanart_dir) {
-            eprintln!(
-                "移动 extrafanart 目录失败 {:?} -> {:?}: {}",
-                extrafanart_dir, target_extrafanart_dir, error
+            log::error!(
+                "[media_assets] event=move_extrafanart_dir_failed source={} target={} error={}",
+                extrafanart_dir.display(),
+                target_extrafanart_dir.display(),
+                error
             );
         }
     }
@@ -745,7 +769,13 @@ pub async fn sync_extrafanart_from_urls(
 
         match crate::download::image::download_image(&client, trimmed, &save_path).await {
             Ok(path) => saved_paths.push(path),
-            Err(e) => eprintln!("下载 extrafanart 图片失败 #{} {}: {}", index, trimmed, e),
+            Err(e) => log::error!(
+                "[media_assets] event=download_extrafanart_failed index={} url={} save_path={} error={}",
+                index,
+                trimmed,
+                save_path.display(),
+                e
+            ),
         }
     }
 
@@ -852,8 +882,8 @@ pub fn rollback_files(
     if let Some(nfo) = nfo_path {
         if nfo.exists() {
             match fs::remove_file(nfo) {
-                Ok(_) => println!("回滚: 已删除 NFO 文件: {:?}", nfo),
-                Err(e) => eprintln!("回滚: 删除 NFO 文件失败 {:?}: {}", nfo, e),
+                Ok(_) => log::info!("[media_assets] event=rollback_nfo_deleted path={}", nfo.display()),
+                Err(e) => log::error!("[media_assets] event=rollback_nfo_delete_failed path={} error={}", nfo.display(), e),
             }
         }
     }
@@ -863,8 +893,8 @@ pub fn rollback_files(
             let cover_path_obj = Path::new(cover);
             if cover_path_obj.exists() {
                 match fs::remove_file(cover_path_obj) {
-                    Ok(_) => println!("回滚: 已删除封面图片: {}", cover),
-                    Err(e) => eprintln!("回滚: 删除封面图片失败 {}: {}", cover, e),
+                    Ok(_) => log::info!("[media_assets] event=rollback_cover_deleted path={}", cover),
+                    Err(e) => log::error!("[media_assets] event=rollback_cover_delete_failed path={} error={}", cover, e),
                 }
             }
         }
@@ -873,8 +903,8 @@ pub fn rollback_files(
     if let Some(thumbs) = thumbs_dir {
         if thumbs.exists() {
             match fs::remove_dir_all(thumbs) {
-                Ok(_) => println!("回滚: 已删除缩略图目录: {:?}", thumbs),
-                Err(e) => eprintln!("回滚: 删除缩略图目录失败 {:?}: {}", thumbs, e),
+                Ok(_) => log::info!("[media_assets] event=rollback_thumbs_deleted path={}", thumbs.display()),
+                Err(e) => log::error!("[media_assets] event=rollback_thumbs_delete_failed path={} error={}", thumbs.display(), e),
             }
         }
     }

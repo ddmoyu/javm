@@ -45,6 +45,8 @@ tokio-util = "0.7"
 thiserror = "2"
 sysinfo = "0.33"
 webclaw-http = { git = "https://github.com/0xMassi/webclaw-tls" }
+tauri-plugin-log = "2.8.0"
+log = "0.4.29"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"

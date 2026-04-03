@@ -35,6 +35,12 @@ pub struct ScanProgress {
     pub current_file: String,
 }
 
+#[derive(Clone, Debug, Default, serde::Serialize)]
+pub struct ScanSummary {
+    pub success_count: u32,
+    pub failed_count: u32,
+}
+
 /// 用于在扫描过程中向异步截帧 dispatcher 发送任务
 pub type CoverTaskSender = tokio::sync::mpsc::UnboundedSender<(String, String)>;
 
@@ -56,7 +62,7 @@ impl ScannerService {
         path: &str,
         progress_callback: F,
         cover_tx: Option<CoverTaskSender>,
-    ) -> Result<u32, String>
+    ) -> Result<ScanSummary, String>
     where
         F: Fn(ScanProgress) + Send + Sync + 'static,
     {
@@ -80,7 +86,7 @@ impl ScannerService {
         }
 
         if is_skipped_directory(root_path) {
-            return Ok(0);
+            return Ok(ScanSummary::default());
         }
 
         // 发送初始进度
@@ -104,14 +110,14 @@ impl ScannerService {
         let path_string = path.to_string();
         let progress_callback = std::sync::Arc::new(progress_callback);
 
-        let count = tauri::async_runtime::spawn_blocking(move || {
+        let summary = tauri::async_runtime::spawn_blocking(move || {
             // cover_tx 被 move 进来，scan 结束后自动 drop → 关闭 channel
             Self::scan_directory_blocking(&db, &path_string, total_files, progress_callback, cover_tx)
         })
         .await
         .map_err(|e| format!("扫描任务执行失败: {}", e))??;
 
-        Ok(count)
+        Ok(summary)
     }
 
     /// 阻塞式扫描（在 spawn_blocking 中运行）
@@ -121,7 +127,7 @@ impl ScannerService {
         total_files: u32,
         progress_callback: std::sync::Arc<F>,
         cover_tx: Option<CoverTaskSender>,
-    ) -> Result<u32, String>
+    ) -> Result<ScanSummary, String>
     where
         F: Fn(ScanProgress) + Send + Sync + 'static,
     {
@@ -143,7 +149,7 @@ impl ScannerService {
             .map_err(|e| format!("开启事务失败: {}", e))?;
 
         let mut current_count = 0u32;
-        let scanned_count = Self::scan_recursive(
+        let summary = Self::scan_recursive(
             root_path,
             &transaction,
             &mut existing_paths,
@@ -158,9 +164,18 @@ impl ScannerService {
         if !existing_paths.is_empty() {
             let missing: Vec<&str> = existing_paths.iter().map(|s| s.as_str()).collect();
             if let Err(e) = Database::batch_delete_videos_by_paths(&transaction, &missing) {
-                eprintln!("批量删除缺失文件记录失败: {}", e);
+                log::error!(
+                    "[scanner] event=cleanup_missing_records_failed root={} missing_count={} error={}",
+                    path,
+                    missing.len(),
+                    e
+                );
             } else {
-                println!("已清理 {} 条缺失文件记录", missing.len());
+                log::info!(
+                    "[scanner] event=cleanup_missing_records_succeeded root={} missing_count={}",
+                    path,
+                    missing.len()
+                );
             }
         }
 
@@ -168,7 +183,7 @@ impl ScannerService {
             .commit()
             .map_err(|e| format!("提交事务失败: {}", e))?;
 
-        Ok(scanned_count)
+        Ok(summary)
     }
 
     /// 同步递归扫描目录，处理每个视频文件
@@ -181,22 +196,26 @@ impl ScannerService {
         total: u32,
         progress_callback: &dyn Fn(ScanProgress),
         cover_tx: Option<&CoverTaskSender>,
-    ) -> Result<u32, String> {
+    ) -> Result<ScanSummary, String> {
         let entries = match std::fs::read_dir(dir) {
             Ok(e) => e,
             Err(e) => {
-                eprintln!("无法读取目录 '{}': {}", dir.display(), e);
-                return Ok(0);
+                log::error!(
+                    "[scanner] event=read_dir_failed dir={} error={}",
+                    dir.display(),
+                    e
+                );
+                return Ok(ScanSummary::default());
             }
         };
 
-        let mut count = 0u32;
+        let mut summary = ScanSummary::default();
 
         for entry in entries {
             let entry = match entry {
                 Ok(e) => e,
                 Err(e) => {
-                    eprintln!("读取目录项失败: {}", e);
+                    log::warn!("[scanner] event=read_dir_entry_failed dir={} error={}", dir.display(), e);
                     continue;
                 }
             };
@@ -214,20 +233,41 @@ impl ScannerService {
             }
 
             if path.is_dir() {
-                count +=
+                let child_summary =
                     Self::scan_recursive(&path, tx, existing, existing_map, current, total, progress_callback, cover_tx)?;
-            } else if Self::process_file(&path, tx, existing, existing_map, cover_tx)? {
-                count += 1;
-                *current += 1;
-                progress_callback(ScanProgress {
-                    current: *current,
-                    total,
-                    current_file: path.to_string_lossy().to_string(),
-                });
+                summary.success_count += child_summary.success_count;
+                summary.failed_count += child_summary.failed_count;
+            } else {
+                match Self::process_file(&path, tx, existing, existing_map, cover_tx) {
+                    Ok(true) => {
+                        summary.success_count += 1;
+                        *current += 1;
+                        progress_callback(ScanProgress {
+                            current: *current,
+                            total,
+                            current_file: path.to_string_lossy().to_string(),
+                        });
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        summary.failed_count += 1;
+                        *current += 1;
+                        log::error!(
+                            "[scanner] event=process_file_failed path={} error={}",
+                            path.display(),
+                            e
+                        );
+                        progress_callback(ScanProgress {
+                            current: *current,
+                            total,
+                            current_file: path.to_string_lossy().to_string(),
+                        });
+                    }
+                }
             }
         }
 
-        Ok(count)
+        Ok(summary)
     }
 
     /// 处理单个视频文件：提取元数据并写入数据库

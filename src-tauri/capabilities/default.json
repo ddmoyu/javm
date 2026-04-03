@@ -18,6 +18,7 @@
     "core:window:allow-close",
     "dialog:default",
     "fs:default",
+    "log:default",
     {
       "identifier": "fs:allow-read",
       "allow": [{ "path": "**" }]

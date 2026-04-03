@@ -638,9 +638,12 @@ pub(crate) fn ensure_video_in_own_dir_with_db(app: &tauri::AppHandle, video_id: 
         )
         .map_err(|e| e.to_string())?;
 
-        println!(
-            "[目录规范化] 已将视频迁移到同名目录: {}",
-            relocated.video_path
+        log::info!(
+            "[video_directory] event=normalized_to_named_parent video_id={} original_video_path={} video_path={} dir_path={}",
+            video_id,
+            relocated.original_video_path,
+            relocated.video_path,
+            relocated.dir_path
         );
 
         Ok(relocated.video_path)

@@ -23,6 +23,14 @@ import DuplicateVideosDialog from '@/components/DuplicateVideosDialog.vue'
 import RemoveAdsDialog from '@/components/RemoveAdsDialog.vue'
 import { toast } from 'vue-sonner'
 
+const formatScanSummary = (successCount: number, failedCount: number, failedDirectories = 0) => {
+  const parts = [`成功 ${successCount} 个`, `失败 ${failedCount} 个`]
+  if (failedDirectories > 0) {
+    parts.push(`${failedDirectories} 个目录未完成`)
+  }
+  return parts.join('，')
+}
+
 const videoStore = useVideoStore()
 const scrapeStore = useResourceScrapeStore()
 
@@ -71,7 +79,10 @@ const handleAddDirectory = async () => {
     const path = await selectDirectory()
     if (path) {
       isAddingDirectory.value = true
-      await videoStore.addDirectory(path)
+      const summary = await videoStore.addDirectory(path)
+      toast.success('目录扫描完成', {
+        description: formatScanSummary(summary.success_count, summary.failed_count),
+      })
       
       // 扫描进度通知由 AppLayout 全局管理
       isAddingDirectory.value = false
@@ -99,7 +110,10 @@ const handleRefreshAll = async () => {
       syncingIds.value.add(id)
     }
 
-    await videoStore.syncDirectoryCountBatch(ids)
+    const summary = await videoStore.syncDirectoryCountBatch(ids)
+    toast.success('目录刷新完成', {
+      description: formatScanSummary(summary.success_count, summary.failed_count, summary.failed_directories),
+    })
   } catch (e) {
     console.error('Failed to refresh all:', e)
     toast.error('刷新失败')
@@ -124,7 +138,12 @@ const handleRemoveDirectory = async (id: string) => {
 const handleSyncDirectory = async (id: string) => {
   syncingIds.value.add(id)
   try {
-    await videoStore.syncDirectoryCount(id)
+    const summary = await videoStore.syncDirectoryCount(id)
+    if (summary) {
+      toast.success('目录扫描完成', {
+        description: formatScanSummary(summary.success_count, summary.failed_count),
+      })
+    }
   } catch (e) {
     console.error('Failed to sync directory:', e)
     toast.error('同步失败')

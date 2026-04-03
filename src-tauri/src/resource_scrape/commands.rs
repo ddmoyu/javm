@@ -221,7 +221,11 @@ async fn proxy_preview_images_to_files(
             match proxy_image_to_file(client, trimmed).await {
                 Ok(local_path) => display_urls.push(local_path),
                 Err(e) => {
-                    println!("[搜索] 预览图代理失败: {}", e);
+                    log::warn!(
+                        "[scrape_search] event=preview_proxy_failed url={} error={}",
+                        trimmed,
+                        e
+                    );
                     display_urls.push(trimmed.to_string());
                 }
             }
@@ -271,15 +275,15 @@ pub async fn rs_search_resource(
         *guard = Some(token.clone());
     }
 
-    println!(
-        "[搜索] 开始搜索: {}, 数据源: {}",
+    log::info!(
+        "[scrape_search] event=search_started code={} source={}",
         code,
-        source.as_deref().unwrap_or("全部")
+        source.as_deref().unwrap_or("all")
     );
 
     analytics::record_search_designation(&app);
     let http_client = webclaw_client::create_client()?;
-    println!("[搜索] webclaw 客户端已就绪（Chrome TLS 指纹）");
+    log::info!("[scrape_search] event=http_client_ready fingerprint=chrome_tls");
 
     let app_settings = settings::get_settings(app.clone()).await.unwrap_or_default();
     let enabled_sites = settings::enabled_scrape_sites(&app_settings.scrape);
@@ -306,7 +310,11 @@ pub async fn rs_search_resource(
     };
 
     if search_sources.is_empty() {
-        println!("[搜索] 未找到可用数据源 {:?}，已启用网站: {:?}", source, enabled_site_ids);
+        log::warn!(
+            "[scrape_search] event=no_available_source requested_source={:?} enabled_sites={:?}",
+            source,
+            enabled_site_ids
+        );
         let _ = app.emit("search-done", ());
         return Ok(());
     }
@@ -314,7 +322,12 @@ pub async fn rs_search_resource(
     let total = search_sources.len();
     let max_concurrent = (app_settings.scrape.concurrent.max(1) as usize).min(total);
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
-    println!("[搜索] 最大并发数: {}，数据源总数: {}", max_concurrent, total);
+    log::info!(
+        "[scrape_search] event=dispatch_configured code={} max_concurrent={} source_count={}",
+        code,
+        max_concurrent,
+        total
+    );
 
     // 并发请求所有数据源（受 semaphore 限制）
     let mut handles = Vec::new();
@@ -341,7 +354,7 @@ pub async fn rs_search_resource(
 
             // 检查是否已取消
             if token.is_cancelled() {
-                println!("[搜索] {} 已取消，跳过", name);
+                log::info!("[scrape_search] event=source_skipped_cancelled source={}", name);
                 return;
             }
 
@@ -349,19 +362,24 @@ pub async fn rs_search_resource(
             let _permit = match semaphore.acquire().await {
                 Ok(permit) => permit,
                 Err(_) => {
-                    println!("[搜索] {} 信号量已关闭，跳过", name);
+                    log::warn!("[scrape_search] event=semaphore_closed source={}", name);
                     return;
                 }
             };
 
             // 获取许可后再次检查取消
             if token.is_cancelled() {
-                println!("[搜索] {} 已取消，跳过", name);
+                log::info!("[scrape_search] event=source_skipped_after_acquire source={}", name);
                 return;
             }
 
             let url = source.build_url(&code);
-            println!("[搜索] 请求数据源 {}: {}", name, url);
+            log::info!(
+                "[scrape_search] event=fetch_started source={} code={} url={}",
+                name,
+                code,
+                url
+            );
 
             let fetch_options = super::fetcher::FetchOptions {
                 webview_enabled: fetch_settings.webview_enabled,
@@ -374,29 +392,47 @@ pub async fn rs_search_resource(
                 Ok(html) => {
                     // 取消检查
                     if token.is_cancelled() {
-                        println!("[搜索] {} 已取消，丢弃结果", name);
+                        log::info!("[scrape_search] event=result_discarded_cancelled source={}", name);
                         return;
                     }
 
                     let final_url = url.clone();
-                    println!("[搜索] {} 最终URL: {}", name, final_url);
-                    println!("[搜索] {} 返回 {} 字符", name, html.len());
-                    println!("[搜索] {} 内容摘要: {}", name, preview_html(&html));
+                    log::info!(
+                        "[scrape_search] event=fetch_succeeded source={} final_url={} html_length={} preview={}",
+                        name,
+                        final_url,
+                        html.len(),
+                        preview_html(&html)
+                    );
 
                     // 检查是否需要二次请求详情页
                     let (parse_html, page_url) = if let Some(detail) =
                         source.extract_detail_url(&html, &code)
                     {
                         let detail = normalize_result_url(&detail, &final_url);
-                        println!("[搜索] {} 需要二次请求: {}", name, detail);
+                        log::info!(
+                            "[scrape_search] event=detail_fetch_started source={} detail_url={}",
+                            name,
+                            detail
+                        );
                         match fetcher.fetch(&app, &detail, &site, fetch_options).await {
                             Ok(dh) => {
-                                println!("[搜索] {} 详情页 {} 返回 {} 字符", name, detail, dh.len());
-                                println!("[搜索] {} 详情页内容摘要: {}", name, preview_html(&dh));
+                                log::info!(
+                                    "[scrape_search] event=detail_fetch_succeeded source={} detail_url={} html_length={} preview={}",
+                                    name,
+                                    detail,
+                                    dh.len(),
+                                    preview_html(&dh)
+                                );
                                 (dh, detail)
                             }
                             Err(e) => {
-                                println!("[搜索] {} 详情页请求失败: {}，回退到搜索页", name, e);
+                                log::warn!(
+                                    "[scrape_search] event=detail_fetch_failed source={} detail_url={} fallback=search_page error={}",
+                                    name,
+                                    detail,
+                                    e
+                                );
                                 (html, final_url.clone())
                             }
                         }
@@ -406,7 +442,11 @@ pub async fn rs_search_resource(
 
                     if let Some(mut result) = source.parse(&parse_html, &code) {
                         if !is_valid_search_result(&result) {
-                            println!("[搜索] {} 结果无效，已过滤: {}", name, result.title);
+                            log::warn!(
+                                "[scrape_search] event=result_filtered_invalid source={} title={}",
+                                name,
+                                result.title
+                            );
                         } else {
                         result.page_url = page_url.clone();
                         normalize_search_result_urls(&mut result, &page_url);
@@ -434,20 +474,30 @@ pub async fn rs_search_resource(
                                     result.cover_url = local_path;
                                 }
                                 Err(e) => {
-                                    println!("[搜索] {} 封面代理失败: {}", name, e);
+                                    log::warn!(
+                                        "[scrape_search] event=cover_proxy_failed source={} cover_url={} error={}",
+                                        name,
+                                        result.cover_url,
+                                        e
+                                    );
                                 }
                             }
                         }
-                        println!("[搜索] {} 解析成功: {}", name, result.title);
+                        log::info!(
+                            "[scrape_search] event=parse_succeeded source={} title={} page_url={}",
+                            name,
+                            result.title,
+                            page_url
+                        );
 
                         // 如果开启了翻译，先翻译再 emit 给前端
                         let mut result_to_emit = match crate::utils::ai_translator::translate_search_result(&app, &result).await {
                             Ok(translated) => {
-                                println!("[搜索] {} 已应用 AI 翻译", name);
+                                log::info!("[scrape_search] event=translation_applied source={}", name);
                                 translated
                             }
                             Err(e) => {
-                                println!("[搜索] {} AI 翻译跳过: {}", name, e);
+                                log::warn!("[scrape_search] event=translation_skipped source={} error={}", name, e);
                                 result
                             }
                         };
@@ -457,11 +507,11 @@ pub async fn rs_search_resource(
                         }
                         }
                     } else {
-                        println!("[搜索] {} 解析无结果", name);
+                        log::warn!("[scrape_search] event=parse_empty source={} code={}", name, code);
                     }
                 }
                 Err(e) => {
-                    println!("[搜索] {} 请求失败: {}", name, e);
+                    log::error!("[scrape_search] event=fetch_failed source={} code={} url={} error={}", name, code, url, e);
                 }
             }
         });
@@ -483,9 +533,9 @@ pub async fn rs_search_resource(
     }
 
     if token.is_cancelled() {
-        println!("[搜索] 搜索已被用户取消");
+        log::info!("[scrape_search] event=search_cancelled code={}", code);
     } else {
-        println!("[搜索] 全部完成（{} 个数据源）", total);
+        log::info!("[scrape_search] event=search_completed code={} source_count={}", code, total);
     }
     let _ = app.emit("search-done", ());
     Ok(())
@@ -497,7 +547,7 @@ pub async fn rs_cancel_search(
     app: AppHandle,
     search_cancel: tauri::State<'_, SearchCancelState>,
 ) -> Result<(), String> {
-    println!("[搜索] 收到取消搜索请求");
+    log::info!("[scrape_search] event=cancel_requested");
 
     // 取消令牌
     {
@@ -514,7 +564,7 @@ pub async fn rs_cancel_search(
     // 通知前端搜索已完成（停止 loading 状态）
     let _ = app.emit("search-done", ());
 
-    println!("[搜索] 搜索已取消，WebView 窗口已关闭");
+    log::info!("[scrape_search] event=cancel_completed webviews_closed=true");
     Ok(())
 }
 
@@ -764,9 +814,12 @@ pub(crate) fn prepare_video_for_scrape_save_with_target_title(
             )
             .map_err(|e| e.to_string())?;
 
-            println!(
-                "[刮削保存] 已按目标标题调整文件路径: {}",
-                relocated.video_path
+            log::info!(
+                "[scrape_save] event=renamed_with_target_title video_id={} original_video_path={} video_path={} dir_path={}",
+                video_id,
+                relocated.original_video_path,
+                relocated.video_path,
+                relocated.dir_path
             );
 
             return Ok(PreparedScrapeVideo {
@@ -796,9 +849,12 @@ pub(crate) fn prepare_video_for_scrape_save_with_target_title(
         )
         .map_err(|e| e.to_string())?;
 
-        println!(
-            "[刮削保存] 已将视频迁移到同名目录: {}",
-            relocated.video_path
+        log::info!(
+            "[scrape_save] event=normalized_to_named_parent video_id={} original_video_path={} video_path={} dir_path={}",
+            video_id,
+            relocated.original_video_path,
+            relocated.video_path,
+            relocated.dir_path
         );
 
         return Ok(PreparedScrapeVideo {
@@ -827,19 +883,22 @@ pub async fn rs_scrape_save(
     video_id: String,
     metadata: SearchResult,
 ) -> Result<ScrapeSaveResult, String> {
-    println!("[刮削保存] 开始保存 video_id={}", video_id);
-    println!(
-        "[刮削保存] metadata.code={}, metadata.title={}",
-        metadata.code, metadata.title
-    );
-    println!(
-        "[刮削保存] metadata.cover_url 长度={}, 前缀={}",
-        metadata.cover_url.len(),
-        if metadata.cover_url.len() > 50 {
-            &metadata.cover_url[..50]
-        } else {
-            &metadata.cover_url
-        }
+    let cover_url_type = if metadata.cover_url.starts_with("data:") {
+        "data_url"
+    } else if metadata.cover_url.starts_with("http") {
+        "http_url"
+    } else if metadata.cover_url.is_empty() {
+        "empty"
+    } else {
+        "unknown"
+    };
+    log::info!(
+        "[scrape_save] event=started video_id={} code={} title={} cover_url_type={} cover_url_length={}",
+        video_id,
+        metadata.code,
+        metadata.title,
+        cover_url_type,
+        metadata.cover_url.len()
     );
     let db = Database::new(&app).map_err(|e| e.to_string())?;
     let prepared_video = prepare_video_for_scrape_save_with_target_title(
@@ -848,16 +907,16 @@ pub async fn rs_scrape_save(
         metadata.target_title.as_deref(),
     )?;
     let video_path = prepared_video.video_path.clone();
-    println!("[刮削保存] video_path={}", video_path);
+    log::info!("[scrape_save] event=video_prepared video_id={} path={}", video_id, video_path);
 
     let mut scrape_meta = search_result_to_metadata(&metadata);
     match crate::utils::ai_translator::translate_scrape_metadata(&app, &scrape_meta).await {
         Ok(translated) => {
             scrape_meta = translated;
-            println!("[刮削保存] 已应用 AI 翻译（若命中日语/英语）");
+            log::info!("[scrape_save] event=translation_applied video_id={}", video_id);
         }
         Err(e) => {
-            println!("[刮削保存] AI 翻译跳过: {}", e);
+            log::warn!("[scrape_save] event=translation_skipped video_id={} error={}", video_id, e);
         }
     }
 
@@ -870,31 +929,27 @@ pub async fn rs_scrape_save(
 
     // 步骤 1: 下载封面（失败不中断）
     let local_cover_path = if !metadata.cover_url.is_empty() {
-        println!(
-            "[刮削保存] 开始下载封面, URL 类型: {}",
-            if metadata.cover_url.starts_with("data:") {
-                "data URL (base64)"
-            } else if metadata.cover_url.starts_with("http") {
-                "HTTP URL"
-            } else {
-                "未知"
-            }
+        log::info!(
+            "[scrape_save] event=cover_download_started video_id={} path={} cover_url_type={}",
+            video_id,
+            video_path,
+            cover_url_type
         );
         match crate::download::image::download_cover(&video_path, &metadata.cover_url, None).await {
             Ok(path) => {
                 result.cover_saved = true;
-                println!("[刮削保存] 封面下载成功: {}", path);
+                log::info!("[scrape_save] event=cover_download_succeeded video_id={} path={}", video_id, path);
                 path
             }
             Err(e) => {
                 let msg = format!("封面下载失败: {}", e);
-                println!("[刮削保存] {}", msg);
+                log::error!("[scrape_save] event=cover_download_failed video_id={} path={} error={}", video_id, video_path, e);
                 result.errors.push(msg);
                 prepared_video.poster.clone().unwrap_or_default()
             }
         }
     } else {
-        println!("[刮削保存] 无封面 URL，跳过下载");
+        log::info!("[scrape_save] event=cover_download_skipped video_id={} reason=empty_cover_url", video_id);
         prepared_video.poster.clone().unwrap_or_default()
     };
 
@@ -914,7 +969,7 @@ pub async fn rs_scrape_save(
         .await
         {
             let msg = format!("预览图下载失败: {}", e);
-            println!("[刮削保存] {}", msg);
+            log::error!("[scrape_save] event=extrafanart_sync_failed video_id={} path={} error={}", video_id, video_path, e);
             result.errors.push(msg);
         }
     }
@@ -924,11 +979,11 @@ pub async fn rs_scrape_save(
         match crate::media::assets::save_nfo_for_video(&video_path, &scrape_meta) {
             Ok(_) => {
                 result.nfo_saved = true;
-                println!("[刮削保存] NFO 生成成功");
+                log::info!("[scrape_save] event=nfo_saved video_id={} path={}", video_id, video_path);
             }
             Err(e) => {
                 let msg = format!("NFO 生成失败: {}", e);
-                println!("[刮削保存] {}", msg);
+                log::error!("[scrape_save] event=nfo_save_failed video_id={} path={} error={}", video_id, video_path, e);
                 result.errors.push(msg);
             }
         }
@@ -947,11 +1002,11 @@ pub async fn rs_scrape_save(
         {
             Ok(_) => {
                 result.db_updated = true;
-                println!("[刮削保存] 数据库更新成功");
+                log::info!("[scrape_save] event=db_updated video_id={} path={}", video_id, video_path);
             }
             Err(e) => {
                 let msg = format!("数据库更新失败: {}", e);
-                println!("[刮削保存] {}", msg);
+                log::error!("[scrape_save] event=db_update_failed video_id={} path={} error={}", video_id, video_path, e);
                 result.errors.push(msg);
             }
         }
@@ -959,6 +1014,14 @@ pub async fn rs_scrape_save(
 
     // 通知前端
     let _ = app.emit("scrape-save-done", &result);
+    log::info!(
+        "[scrape_save] event=completed video_id={} cover_saved={} nfo_saved={} db_updated={} error_count={}",
+        video_id,
+        result.cover_saved,
+        result.nfo_saved,
+        result.db_updated,
+        result.errors.len()
+    );
     Ok(result)
 }
 
@@ -1092,7 +1155,7 @@ pub async fn rs_start_task_queue(
     // 在后台启动队列处理
     tauri::async_runtime::spawn(async move {
         if let Err(e) = manager.start().await {
-            eprintln!("Queue processing error: {}", e);
+            log::error!("[scrape_queue] event=background_start_failed error={}", e);
             manager.set_running(false).await;
         }
     });
@@ -1241,10 +1304,7 @@ pub async fn rs_find_video_links(
         return Err("番号不能为空".to_string());
     }
     let site = site_id.unwrap_or_else(|| "missav".to_string());
-    println!(
-        "[rs_find_video_links] 打开 WebView 查找: {} (网站: {})",
-        code, site
-    );
+    log::info!("[video_finder] event=open_requested code={} site={}", code, site);
     analytics::record_search_resource_link(&app);
     super::video_finder::open_video_finder_webview(&app, &code, &site)
 }

@@ -375,12 +375,14 @@ export const useVideoStore = defineStore('video', () => {
             
             // 再调用扫描入库
             const { scanDirectory } = await import('@/lib/tauri')
-            await scanDirectory(path)
+            const summary = await scanDirectory(path)
 
             // 扫描完成后刷新视频列表
             await fetchVideos()
             // 再次刷新目录列表以更新统计信息
             await fetchDirectories()
+
+            return summary
         } catch (e) {
             console.error('Failed to scan directory:', e)
             throw e
@@ -408,12 +410,14 @@ export const useVideoStore = defineStore('video', () => {
 
         try {
             const { scanDirectory } = await import('@/lib/tauri')
-            const count = await scanDirectory(directory.path)
-            directory.videoCount = count
+            const summary = await scanDirectory(directory.path)
+            directory.videoCount = summary.success_count
             directory.updatedAt = new Date().toISOString()
             
             // 扫描后必须重新获取所有视频，因为可能有新视频加入
             await fetchVideos()
+
+            return summary
         } catch (e) {
             console.error('Failed to sync directory:', e)
             throw e
@@ -422,23 +426,39 @@ export const useVideoStore = defineStore('video', () => {
 
     async function syncDirectoryCountBatch(ids: string[]) {
         const dirs = ids.map(id => directories.value.find(d => d.id === id)).filter(Boolean)
-        if (dirs.length === 0) return
+        if (dirs.length === 0) {
+            return {
+                success_count: 0,
+                failed_count: 0,
+                failed_directories: 0,
+            }
+        }
 
         const { scanDirectory } = await import('@/lib/tauri')
+        const aggregate = {
+            success_count: 0,
+            failed_count: 0,
+            failed_directories: 0,
+        }
 
         // 并发扫描所有目录
         await Promise.allSettled(dirs.map(async (dir) => {
             try {
-                const count = await scanDirectory(dir!.path)
-                dir!.videoCount = count
+                const summary = await scanDirectory(dir!.path)
+                aggregate.success_count += summary.success_count
+                aggregate.failed_count += summary.failed_count
+                dir!.videoCount = summary.success_count
                 dir!.updatedAt = new Date().toISOString()
             } catch (e) {
+                aggregate.failed_directories += 1
                 console.error(`Failed to sync directory ${dir!.path}:`, e)
             }
         }))
 
         // 所有扫描完成后只刷新一次视频列表
         await fetchVideos()
+
+        return aggregate
     }
 
     return {

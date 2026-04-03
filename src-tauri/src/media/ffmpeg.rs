@@ -194,19 +194,26 @@ pub fn diagnose_video_at_time(video_path: &str, time: f64) {
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
             if !stderr.trim().is_empty() {
-                eprintln!(
-                    "[截图] 诊断: {:.2}s 附近 ffmpeg 警告: {}",
+                log::warn!(
+                    "[ffmpeg] event=diagnose_warning video_path={} time={:.2} stderr={}",
+                    video_path,
                     time,
                     stderr.trim()
                 );
             } else if !out.status.success() {
-                eprintln!(
-                    "[截图] 诊断: {:.2}s 附近数据不可读，文件可能截断或损坏",
+                log::error!(
+                    "[ffmpeg] event=diagnose_unreadable_segment video_path={} time={:.2}",
+                    video_path,
                     time
                 );
             }
         }
-        Err(e) => eprintln!("[截图] 诊断失败: {}", e),
+        Err(e) => log::error!(
+            "[ffmpeg] event=diagnose_failed video_path={} time={:.2} error={}",
+            video_path,
+            time,
+            e
+        ),
     }
 }
 
@@ -255,10 +262,22 @@ pub fn try_capture_single_frame(
                 return CaptureResult::Success;
             }
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("[截图] 帧 {} Fast 失败: {}", frame_idx, stderr.trim());
+            log::warn!(
+                "[ffmpeg] event=fast_capture_failed video_path={} frame_idx={} time={} stderr={}",
+                video_path,
+                frame_idx,
+                time_str,
+                stderr.trim()
+            );
         }
         Err(e) => {
-            eprintln!("[截图] 帧 {} Fast 超时: {}", frame_idx, e);
+            log::warn!(
+                "[ffmpeg] event=fast_capture_timeout video_path={} frame_idx={} time={} error={}",
+                video_path,
+                frame_idx,
+                time_str,
+                e
+            );
         }
     }
 
@@ -292,12 +311,24 @@ pub fn try_capture_single_frame(
                 return CaptureResult::Success;
             }
             let stderr = String::from_utf8_lossy(&output.stderr);
-            eprintln!("[截图] 帧 {} Slow 失败: {}", frame_idx, stderr.trim());
+            log::error!(
+                "[ffmpeg] event=slow_capture_failed video_path={} frame_idx={} time={} stderr={}",
+                video_path,
+                frame_idx,
+                time_str,
+                stderr.trim()
+            );
             diagnose_video_at_time(video_path, time);
             CaptureResult::Failed(format!("截图失败: {}", stderr.trim()))
         }
         Err(e) => {
-            eprintln!("[截图] 帧 {} Slow 超时: {}", frame_idx, e);
+            log::error!(
+                "[ffmpeg] event=slow_capture_timeout video_path={} frame_idx={} time={} error={}",
+                video_path,
+                frame_idx,
+                time_str,
+                e
+            );
             CaptureResult::TimedOut
         }
     }

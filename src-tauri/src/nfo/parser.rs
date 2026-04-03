@@ -52,7 +52,11 @@ pub fn parse_nfo(nfo_path: &Path, duration: &mut Option<i32>) -> Option<NfoData>
             }
         }
         Err(e) => {
-            eprintln!("读取 NFO 文件失败 '{}': {}", nfo_path.display(), e);
+            log::error!(
+                "[nfo_parser] event=read_failed path={} error={}",
+                nfo_path.display(),
+                e
+            );
             return None;
         }
     };
@@ -249,7 +253,11 @@ pub fn parse_nfo(nfo_path: &Path, duration: &mut Option<i32>) -> Option<NfoData>
             }
             Ok(Event::Eof) => break,
             Err(e) => {
-                eprintln!("解析 NFO 文件失败 '{}': {}", nfo_path.display(), e);
+                log::error!(
+                    "[nfo_parser] event=parse_failed path={} error={}",
+                    nfo_path.display(),
+                    e
+                );
                 return None;
             }
             _ => {}

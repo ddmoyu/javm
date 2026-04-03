@@ -42,8 +42,8 @@ impl Source for FreeJavBT {
 
         // HTTP 可能拿到广告页/错页；若整页 HTML 连目标番号都不包含，直接判为无效。
         if !html_upper.contains(&code_upper) {
-            println!(
-                "[freejavbt] 丢弃页面：HTML 不包含目标番号 {}",
+            log::warn!(
+                "[freejavbt] event=discard_page_missing_code code={}",
                 code_upper
             );
             return None;
@@ -160,8 +160,8 @@ impl Source for FreeJavBT {
                 .collect()
         );
 
-        println!(
-            "[freejavbt] code={} desc={} info_text={} title='{}' date='{}' duration='{}' director='{}' actors='{}' tags='{}' thumbs={}",
+        log::debug!(
+            "[freejavbt] event=parse_summary code={} has_desc={} has_info_text={} title={} premiered={} duration={} director={} actors={} tags={} thumbs={}",
             code,
             !desc.is_empty(),
             !info_text.is_empty(),
@@ -176,7 +176,7 @@ impl Source for FreeJavBT {
 
         // 至少要有标题或封面才算有效结果
         if title.is_empty() && cover_url.is_empty() {
-            println!("[freejavbt] 丢弃页面：标题和封面都为空");
+            log::warn!("[freejavbt] event=discard_page_empty_title_and_cover code={}", code);
             return None;
         }
 
@@ -187,7 +187,7 @@ impl Source for FreeJavBT {
             && actors.is_empty()
             && tags.is_empty()
         {
-            println!("[freejavbt] 丢弃页面：关键元数据全部为空");
+            log::warn!("[freejavbt] event=discard_page_missing_key_metadata code={}", code);
             return None;
         }
 

@@ -106,7 +106,12 @@ pub async fn save_captured_cover(
         let actual_video_path =
             crate::video::service::ensure_video_in_own_dir_with_db(&app, &video_id)
                 .unwrap_or_else(|e| {
-                    eprintln!("[目录规范化] 预检查失败，使用原路径: {}", e);
+                    log::warn!(
+                        "[media_capture] event=ensure_own_dir_failed_using_original_path video_id={} video_path={} error={}",
+                        video_id,
+                        video_path,
+                        e
+                    );
                     video_path.clone()
                 });
 
@@ -148,7 +153,12 @@ pub async fn save_captured_thumbs(
         let actual_video_path =
             crate::video::service::ensure_video_in_own_dir_with_db(&app, &video_id)
                 .unwrap_or_else(|e| {
-                    eprintln!("[目录规范化] 预检查失败，使用原路径: {}", e);
+                    log::warn!(
+                        "[media_capture] event=ensure_own_dir_failed_using_original_path video_id={} video_path={} error={}",
+                        video_id,
+                        video_path,
+                        e
+                    );
                     video_path.clone()
                 });
 

@@ -7,4 +7,4 @@ pub mod file_scanner;
 pub mod service;
 
 // 重新导出常用类型
-pub use service::{ScannerService, ScanProgress};
+pub use service::{ScannerService, ScanProgress, ScanSummary};

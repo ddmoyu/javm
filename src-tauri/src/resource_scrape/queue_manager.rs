@@ -56,11 +56,13 @@ impl TaskQueueManager {
         *is_running = running;
     }
 
-    /// 记录错误日志（仅输出到控制台）
+    /// 记录统一错误日志
     async fn log_error(&self, task_id: &str, error_type: &str, error_message: &str) {
-        eprintln!(
-            "[任务错误] Task ID: {}, 类型: {}, 信息: {}",
-            task_id, error_type, error_message
+        log::error!(
+            "[scrape_queue] event=task_error task_id={} error_type={} error={}",
+            task_id,
+            error_type,
+            error_message
         );
     }
 
@@ -68,13 +70,13 @@ impl TaskQueueManager {
     ///
     /// 按顺序处理任务，直到队列为空、被暂停或被停止。
     pub async fn start(&self) -> Result<(), String> {
-        println!("=== TaskQueueManager::start() 被调用 ===");
+        log::info!("[scrape_queue] event=start_requested");
 
         // 确认当前未在运行
         {
             let is_running = self.is_running.lock().await;
             if *is_running {
-                println!("=== 严重: start() 被调用但已在运行中！中止。 ===");
+                log::warn!("[scrape_queue] event=start_rejected reason=already_running");
                 return Err("Queue is already running".to_string());
             }
         }
@@ -92,7 +94,7 @@ impl TaskQueueManager {
             {
                 let is_stopped = self.is_stopped.lock().await;
                 if *is_stopped {
-                    println!("=== 队列被用户停止 ===");
+                    log::info!("[scrape_queue] event=queue_stopped_by_user");
                     self.emit_queue_status("stopped").await;
                     self.set_running(false).await;
                     return Ok(());
@@ -102,11 +104,11 @@ impl TaskQueueManager {
             let next_task = self.get_next_waiting_task_from_db()?;
 
             let Some(task_id) = next_task else {
-                println!("=== 没有等待中的任务 ===");
+                log::info!("[scrape_queue] event=no_waiting_task");
                 break;
             };
 
-            println!("=== 开始处理任务: {} ===", task_id);
+            log::info!("[scrape_queue] event=task_started task_id={}", task_id);
 
             {
                 let mut current = self.current_task_id.lock().await;
@@ -114,7 +116,7 @@ impl TaskQueueManager {
             }
 
             if let Err(e) = self.process_task(&task_id).await {
-                eprintln!("处理任务 {} 出错: {}", task_id, e);
+                log::error!("[scrape_queue] event=task_failed task_id={} error={}", task_id, e);
 
                 if e.contains("stopped") {
                     // 将已停止的任务重置为等待状态
@@ -146,7 +148,11 @@ impl TaskQueueManager {
                             "error": e
                         }),
                     ) {
-                        eprintln!("发送任务失败事件出错: {}", emit_err);
+                        log::error!(
+                            "[scrape_queue] event=emit_task_failed_event_failed task_id={} error={}",
+                            task_id,
+                            emit_err
+                        );
                     }
 
                     self.log_error(&task_id, "Task failed", &e).await;
@@ -169,7 +175,7 @@ impl TaskQueueManager {
             }
         }
 
-        println!("=== 队列处理完成 ===");
+        log::info!("[scrape_queue] event=queue_completed");
         self.emit_queue_status("completed").await;
         self.set_running(false).await;
         Ok(())
@@ -187,7 +193,7 @@ impl TaskQueueManager {
 
     /// 停止队列
     pub async fn stop(&self) {
-        println!("=== 收到停止请求 ===");
+        log::info!("[scrape_queue] event=stop_requested");
         let mut is_stopped = self.is_stopped.lock().await;
         *is_stopped = true;
     }
@@ -209,7 +215,7 @@ impl TaskQueueManager {
     /// 5. 使用 Source.parse() 解析元数据
     /// 6. 下载封面、生成 NFO、更新数据库
     async fn process_task(&self, task_id: &str) -> Result<(), String> {
-        println!("=== [任务 {}] process_task() 开始 ===", task_id);
+        log::info!("[scrape_queue] event=process_task_begin task_id={}", task_id);
 
         // 检查是否已停止
         if self.check_stop(task_id, 0).await? {
@@ -223,7 +229,7 @@ impl TaskQueueManager {
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("任务未找到: {}", task_id))?;
 
-        println!("=== [任务 {}] 找到任务，路径: {} ===", task_id, task.path);
+        log::info!("[scrape_queue] event=task_loaded task_id={} path={}", task_id, task.path);
 
         // 检查视频是否已刮削
         let detector = ScrapedVideoDetector::new(&self.db);
@@ -232,9 +238,10 @@ impl TaskQueueManager {
             .map_err(|e| format!("检查视频刮削状态失败: {}", e))?;
 
         if should_skip {
-            println!(
-                "=== [任务 {}] 跳过 - 视频已刮削: {} ===",
-                task_id, task.path
+            log::info!(
+                "[scrape_queue] event=task_skipped_already_scraped task_id={} path={}",
+                task_id,
+                task.path
             );
             // 从数据库删除该任务
             let conn = self.db.get_connection().map_err(|e| e.to_string())?;
@@ -252,7 +259,12 @@ impl TaskQueueManager {
 
         // 步骤 1: 从文件名提取番号（进度 1）
         let designation = self.extract_designation(&task.path)?;
-        println!("=== [任务 {}] 提取到番号: {} ===", task_id, designation);
+        log::info!(
+            "[scrape_queue] event=designation_extracted task_id={} path={} designation={}",
+            task_id,
+            task.path,
+            designation
+        );
         self.db
             .update_scrape_task_progress(task_id, 1)
             .map_err(|e| e.to_string())?;
@@ -273,10 +285,11 @@ impl TaskQueueManager {
         let site = active_site;
 
         let url = source.build_url(&designation);
-        println!(
-            "=== [任务 {}] 使用 {} 获取: {} ===",
+        log::info!(
+            "[scrape_queue] event=fetch_started task_id={} source={} designation={} url={}",
             task_id,
             source.name(),
+            designation,
             url
         );
 
@@ -296,13 +309,19 @@ impl TaskQueueManager {
             .await
             .map_err(|e| format!("获取页面失败: {}", e))?;
 
-        println!("=== [任务 {}] 获取到 {} 字符 HTML ===", task_id, html.len());
+        log::info!(
+            "[scrape_queue] event=fetch_succeeded task_id={} source={} html_length={}",
+            task_id,
+            source.name(),
+            html.len()
+        );
 
         // 检查是否需要二次请求详情页
         let parse_html = if let Some(detail_url) = source.extract_detail_url(&html, &designation) {
-            println!(
-                "=== [任务 {}] 需要二次请求详情页: {} ===",
-                task_id, detail_url
+            log::info!(
+                "[scrape_queue] event=detail_fetch_started task_id={} detail_url={}",
+                task_id,
+                detail_url
             );
             let detail_site = ResourceSite {
                 id: site.id.clone(),
@@ -316,13 +335,18 @@ impl TaskQueueManager {
                 .await
             {
                 Ok(dh) => {
-                    println!("=== [任务 {}] 详情页返回 {} 字符 ===", task_id, dh.len());
+                    log::info!(
+                        "[scrape_queue] event=detail_fetch_succeeded task_id={} html_length={}",
+                        task_id,
+                        dh.len()
+                    );
                     dh
                 }
                 Err(e) => {
-                    println!(
-                        "=== [任务 {}] 详情页请求失败: {}，回退到搜索页 ===",
-                        task_id, e
+                    log::warn!(
+                        "[scrape_queue] event=detail_fetch_failed task_id={} fallback=search_page error={}",
+                        task_id,
+                        e
                     );
                     html
                 }
@@ -336,9 +360,10 @@ impl TaskQueueManager {
             .parse(&parse_html, &designation)
             .ok_or_else(|| format!("解析元数据失败: 番号 {}", designation))?;
 
-        println!(
-            "=== [任务 {}] 解析成功: {} ===",
-            task_id, search_result.title
+        log::info!(
+            "[scrape_queue] event=parse_succeeded task_id={} title={}",
+            task_id,
+            search_result.title
         );
 
         // 将 SearchResult 转换为 ScrapeMetadata
@@ -346,10 +371,10 @@ impl TaskQueueManager {
         match crate::utils::ai_translator::translate_scrape_metadata(&self.app, &metadata).await {
             Ok(translated) => {
                 metadata = translated;
-                println!("=== [任务 {}] 已应用 AI 翻译（若命中日语/英语） ===", task_id);
+                log::info!("[scrape_queue] event=translation_applied task_id={}", task_id);
             }
             Err(e) => {
-                println!("=== [任务 {}] AI 翻译跳过: {} ===", task_id, e);
+                log::warn!("[scrape_queue] event=translation_skipped task_id={} error={}", task_id, e);
             }
         }
         let video_id = self.find_video_id_by_path(&task.path)?;
@@ -371,11 +396,15 @@ impl TaskQueueManager {
                 .await
             {
                 Ok(path) => {
-                    println!("=== [任务 {}] 封面下载成功: {} ===", task_id, path);
+                    log::info!(
+                        "[scrape_queue] event=cover_download_succeeded task_id={} path={}",
+                        task_id,
+                        path
+                    );
                     path
                 }
                 Err(e) => {
-                    eprintln!("下载封面失败: {}", e);
+                    log::error!("[scrape_queue] event=cover_download_failed task_id={} error={}", task_id, e);
                     prepared_video.poster.clone().unwrap_or_default()
                 }
             }
@@ -407,12 +436,17 @@ impl TaskQueueManager {
             )
             .await
             {
-                eprintln!("下载 extrafanart 预览图失败: {}", e);
+                log::error!(
+                    "[scrape_queue] event=extrafanart_sync_failed task_id={} path={} error={}",
+                    task_id,
+                    video_path,
+                    e
+                );
             }
         }
 
         if let Err(e) = self.save_nfo(&video_path, &metadata) {
-            eprintln!("保存 NFO 失败: {}", e);
+            log::error!("[scrape_queue] event=save_nfo_failed task_id={} path={} error={}", task_id, video_path, e);
         }
 
         self.db
@@ -435,10 +469,10 @@ impl TaskQueueManager {
             .await
         {
             Ok(_) => {
-                println!("=== [任务 {}] 数据库更新成功 ===", task_id);
+                log::info!("[scrape_queue] event=db_write_succeeded task_id={} video_id={}", task_id, video_id);
             }
             Err(e) => {
-                eprintln!("=== [任务 {}] 数据库更新失败: {} ===", task_id, e);
+                log::error!("[scrape_queue] event=db_write_failed task_id={} video_id={} error={}", task_id, video_id, e);
             }
         }
 
@@ -449,7 +483,7 @@ impl TaskQueueManager {
             .map_err(|e| e.to_string())?;
         self.emit_progress(task_id, 5).await;
 
-        println!("=== [任务 {}] process_task() 成功完成 ===", task_id);
+        log::info!("[scrape_queue] event=process_task_completed task_id={}", task_id);
         Ok(())
     }
 
@@ -481,7 +515,11 @@ impl TaskQueueManager {
         };
 
         if let Err(e) = self.app.emit("task-queue-status", payload) {
-            eprintln!("发送队列状态事件失败: {}", e);
+            log::error!(
+                "[scrape_queue] event=emit_queue_status_failed status={} error={}",
+                status,
+                e
+            );
         }
     }
 
@@ -505,9 +543,10 @@ impl TaskQueueManager {
     async fn check_stop(&self, task_id: &str, current_progress: i32) -> Result<bool, String> {
         let is_stopped = self.is_stopped.lock().await;
         if *is_stopped {
-            println!(
-                "=== [任务 {}] 队列在进度 {} 处停止 ===",
-                task_id, current_progress
+            log::info!(
+                "[scrape_queue] event=task_stop_detected task_id={} progress={}",
+                task_id,
+                current_progress
             );
             return Ok(true);
         }

@@ -71,20 +71,33 @@ impl Database {
                     .unwrap_or(0);
 
                 if version < DB_SCHEMA_VERSION {
-                    println!(
-                        "检测到旧版本数据库 (schema_version={}), 清空重建",
-                        version
+                    log::warn!(
+                        "[db] event=legacy_schema_detected db_path={} schema_version={} target_schema_version={}",
+                        self.path.display(),
+                        version,
+                        DB_SCHEMA_VERSION
                     );
                     drop(conn); // 关闭连接后再删除文件
                     if let Err(e) = fs::remove_file(&self.path) {
-                        eprintln!("删除旧数据库失败: {}", e);
+                        log::error!(
+                            "[db] event=legacy_db_delete_failed db_path={} error={}",
+                            self.path.display(),
+                            e
+                        );
                     } else {
-                        println!("已删除旧版本数据库，将重新初始化");
+                        log::info!(
+                            "[db] event=legacy_db_deleted db_path={} action=reinitialize",
+                            self.path.display()
+                        );
                     }
                 }
             }
             Err(e) => {
-                eprintln!("打开数据库检查版本失败: {}，尝试删除重建", e);
+                log::error!(
+                    "[db] event=open_for_schema_check_failed db_path={} action=delete_and_rebuild error={}",
+                    self.path.display(),
+                    e
+                );
                 let _ = fs::remove_file(&self.path);
             }
         }
@@ -92,9 +105,9 @@ impl Database {
 
     /// 初始化数据库表结构
     pub fn init(&self) -> Result<()> {
-        println!("Initializing database at: {:?}", self.path);
+        log::info!("[db] event=init_started db_path={}", self.path.display());
         let conn = self.get_connection()?;
-        println!("Database connection established");
+        log::info!("[db] event=connection_established db_path={}", self.path.display());
 
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 
@@ -129,7 +142,7 @@ impl Database {
         )?;
 
         // 2. 视频主表
-        println!("Creating videos table...");
+    log::info!("[db] event=create_videos_table_started");
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS videos (
@@ -162,7 +175,7 @@ impl Database {
             )",
             [],
         )?;
-        println!("Videos table created successfully");
+        log::info!("[db] event=create_videos_table_succeeded");
 
         // 3. 关联表
         conn.execute(
@@ -195,7 +208,7 @@ impl Database {
 
         // 4. 下载表
         // 状态码: 0=排队 1=准备 2=下载中 3=合并 4=刮削中 5=暂停 6=完成 7=失败 8=重试 9=取消
-        println!("Creating downloads table...");
+        log::info!("[db] event=create_downloads_table_started");
         conn.execute(
             "CREATE TABLE IF NOT EXISTS downloads (
                 id TEXT PRIMARY KEY,
@@ -220,7 +233,7 @@ impl Database {
             )",
             [],
         )?;
-        println!("Downloads table created successfully");
+        log::info!("[db] event=create_downloads_table_succeeded");
 
         // 5. 刮削任务表
         conn.execute(
@@ -272,6 +285,12 @@ impl Database {
 
         // 标记当前数据库 schema 版本
         conn.pragma_update(None, "user_version", DB_SCHEMA_VERSION)?;
+
+        log::info!(
+            "[db] event=init_completed db_path={} schema_version={}",
+            self.path.display(),
+            DB_SCHEMA_VERSION
+        );
 
         Ok(())
     }

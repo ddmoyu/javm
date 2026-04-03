@@ -297,14 +297,26 @@ impl Fetcher {
 
             // 检测窗口是否被用户手动关闭
             if app.get_webview_window(window.label()).is_none() {
-                println!("[WebView 获取] 窗口已被用户关闭，跳过该数据源");
+                log::warn!(
+                    "[scrape_fetch] event=webview_closed_by_user site={} url={} label={}",
+                    site.id,
+                    url,
+                    window.label()
+                );
                 cleanup_webview_fetch_without_window(app, window.label(), listener_id, cf_listener_id, cf_state_listener_id, "failed");
                 return Err("WebView 窗口已被用户关闭".to_string());
             }
 
             if let Err(e) = window.eval(&js) {
                 if attempt % 20 == 0 {
-                    println!("[WebView 获取] eval 失败 (第 {} 次): {}", attempt, e);
+                    log::warn!(
+                        "[scrape_fetch] event=webview_eval_failed site={} url={} label={} attempt={} error={}",
+                        site.id,
+                        url,
+                        window.label(),
+                        attempt,
+                        e
+                    );
                 }
                 continue;
             }
@@ -374,8 +386,8 @@ impl Fetcher {
         site: &ResourceSite,
         options: FetchOptions,
     ) -> Result<String, String> {
-        println!(
-            "[获取] {} webclaw ({}) webview_fallback={} visible={}",
+        log::info!(
+            "[scrape_fetch] event=fetch_started site={} url={} webview_fallback={} visible={}",
             site.name,
             url,
             options.webview_fallback_enabled,
@@ -386,9 +398,10 @@ impl Fetcher {
             Ok(html) => {
                 // webclaw 成功拿到响应，检查是否是 CF 验证页或错页
                 if cf_detection::is_cloudflare_challenge_html(&html) {
-                    println!(
-                        "[获取] {} webclaw 命中 CF 验证页，回退 WebView",
+                    log::warn!(
+                        "[scrape_fetch] event=http_cf_challenge site={} url={} action=fallback_webview",
                         site.name,
+                        url,
                     );
                     if options.webview_fallback_enabled {
                         Self::fetch_webview(
@@ -402,9 +415,10 @@ impl Fetcher {
                         Err("Cloudflare 验证页，WebView 回退未启用".to_string())
                     }
                 } else if should_retry_with_webview(url, &html) {
-                    println!(
-                        "[获取] {} webclaw 内容疑似错页，回退 WebView",
+                    log::warn!(
+                        "[scrape_fetch] event=http_suspected_wrong_page site={} url={} action=fallback_webview",
                         site.name,
+                        url,
                     );
                     if options.webview_fallback_enabled {
                         match Self::fetch_webview(
@@ -416,9 +430,11 @@ impl Fetcher {
                         ).await {
                             Ok(webview_html) => Ok(webview_html),
                             Err(e) => {
-                                println!(
-                                    "[获取] {} WebView 也失败，使用 webclaw 内容: {}",
-                                    site.name, e
+                                log::warn!(
+                                    "[scrape_fetch] event=webview_fallback_failed_use_http site={} url={} error={}",
+                                    site.name,
+                                    url,
+                                    e
                                 );
                                 Ok(html)
                             }
@@ -433,15 +449,19 @@ impl Fetcher {
             Err(err) => {
                 // HTTP 4xx：资源不存在，WebView 重试无意义
                 if is_http_client_error(&err) {
-                    println!(
-                        "[获取] {} HTTP 客户端错误，跳过 WebView: {}",
-                        site.name, err
+                    log::warn!(
+                        "[scrape_fetch] event=http_client_error site={} url={} action=skip_webview error={}",
+                        site.name,
+                        url,
+                        err
                     );
                     Err(err)
                 } else if options.webview_fallback_enabled {
-                    println!(
-                        "[获取] {} webclaw 失败，回退 WebView: {}",
-                        site.name, err
+                    log::warn!(
+                        "[scrape_fetch] event=http_failed_fallback_webview site={} url={} error={}",
+                        site.name,
+                        url,
+                        err
                     );
                     Self::fetch_webview(
                         app,

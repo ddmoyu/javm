@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
+use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tauri::Manager;
 
@@ -51,6 +53,325 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
     }
 
     Ok(())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportLogsResult {
+    pub export_path: String,
+    pub file_count: u32,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogDirectoryInfo {
+    pub log_dir: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ExportDiagnosticInfo {
+    exported_at: String,
+    app_version: String,
+    os: String,
+    cpu_arch: String,
+    source_log_dir: String,
+    exported_file_count: u32,
+    recent_issue_summaries: Vec<DiagnosticLogSummary>,
+    event_issue_stats: Vec<DiagnosticEventIssueStat>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticLogSummary {
+    level: String,
+    source_file: String,
+    message: String,
+}
+
+#[derive(Debug, Clone)]
+struct DiagnosticIssueEntry {
+    level: String,
+    source_file: String,
+    message: String,
+    event: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticEventIssueStat {
+    event: String,
+    total_count: u32,
+    error_count: u32,
+    warn_count: u32,
+    latest_source_file: String,
+    latest_message: String,
+}
+
+#[tauri::command]
+pub async fn get_log_directory(app: AppHandle) -> Result<LogDirectoryInfo, String> {
+    let log_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| format!("获取日志目录失败: {}", e))?;
+
+    Ok(LogDirectoryInfo {
+        log_dir: log_dir.to_string_lossy().to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn export_logs(app: AppHandle, destination_dir: String) -> Result<ExportLogsResult, String> {
+    let trimmed = destination_dir.trim();
+    if trimmed.is_empty() {
+        return Err("导出目录不能为空".to_string());
+    }
+
+    let destination_root = PathBuf::from(trimmed);
+    if !destination_root.exists() {
+        fs::create_dir_all(&destination_root).map_err(|e| format!("创建导出目录失败: {}", e))?;
+    }
+
+    let source_dir = app
+        .path()
+        .app_log_dir()
+        .map_err(|e| format!("获取日志目录失败: {}", e))?;
+
+    if !source_dir.exists() {
+        return Err("当前还没有可导出的日志文件".to_string());
+    }
+
+    let source_dir = source_dir
+        .canonicalize()
+        .unwrap_or(source_dir);
+    let destination_root = destination_root
+        .canonicalize()
+        .unwrap_or(destination_root);
+
+    if destination_root.starts_with(&source_dir) {
+        return Err("导出目录不能位于日志目录内部".to_string());
+    }
+
+    log::logger().flush();
+
+    let export_dir = destination_root.join(format!(
+        "javm-logs-{}",
+        chrono::Local::now().format("%Y%m%d-%H%M%S")
+    ));
+    fs::create_dir_all(&export_dir).map_err(|e| format!("创建日志导出目录失败: {}", e))?;
+
+    let file_count = copy_log_dir(&source_dir, &export_dir)?;
+    if file_count == 0 {
+        let _ = fs::remove_dir_all(&export_dir);
+        return Err("当前还没有可导出的日志文件".to_string());
+    }
+
+    write_export_diagnostic(&app, &source_dir, &export_dir, file_count)?;
+
+    log::info!(
+        "[日志] 已导出 {} 个日志文件到 {}",
+        file_count,
+        export_dir.display()
+    );
+
+    Ok(ExportLogsResult {
+        export_path: export_dir.to_string_lossy().to_string(),
+        file_count,
+    })
+}
+
+fn copy_log_dir(source_dir: &Path, target_dir: &Path) -> Result<u32, String> {
+    let entries = fs::read_dir(source_dir).map_err(|e| format!("读取日志目录失败: {}", e))?;
+    let mut file_count = 0u32;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取日志目录项失败: {}", e))?;
+        let path = entry.path();
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("读取日志文件元数据失败: {}", e))?;
+        let target_path = target_dir.join(entry.file_name());
+
+        if metadata.is_dir() {
+            fs::create_dir_all(&target_path).map_err(|e| format!("创建子日志目录失败: {}", e))?;
+            file_count += copy_log_dir(&path, &target_path)?;
+        } else if metadata.is_file() {
+            fs::copy(&path, &target_path).map_err(|e| {
+                format!(
+                    "复制日志文件失败 '{}' -> '{}': {}",
+                    path.display(),
+                    target_path.display(),
+                    e
+                )
+            })?;
+            file_count += 1;
+        }
+    }
+
+    Ok(file_count)
+}
+
+fn write_export_diagnostic(
+    app: &AppHandle,
+    source_dir: &Path,
+    export_dir: &Path,
+    file_count: u32,
+) -> Result<(), String> {
+    let issue_entries = collect_issue_entries(export_dir)?;
+    let recent_issue_summaries = build_recent_issue_summaries(&issue_entries, 50);
+    let event_issue_stats = build_event_issue_stats(&issue_entries, 20);
+
+    let diagnostic = ExportDiagnosticInfo {
+        exported_at: chrono::Local::now().to_rfc3339(),
+        app_version: app.package_info().version.to_string(),
+        os: std::env::consts::OS.to_string(),
+        cpu_arch: std::env::consts::ARCH.to_string(),
+        source_log_dir: source_dir.to_string_lossy().to_string(),
+        exported_file_count: file_count,
+        recent_issue_summaries,
+        event_issue_stats,
+    };
+
+    let content = serde_json::to_string_pretty(&diagnostic)
+        .map_err(|e| format!("序列化日志诊断信息失败: {}", e))?;
+    fs::write(export_dir.join("diagnostic.json"), content)
+        .map_err(|e| format!("写入日志诊断信息失败: {}", e))?;
+
+    Ok(())
+}
+
+fn collect_issue_entries(log_dir: &Path) -> Result<Vec<DiagnosticIssueEntry>, String> {
+    let mut files = Vec::new();
+    collect_log_files(log_dir, &mut files)?;
+
+    files.sort_by_key(|path| {
+        path.metadata()
+            .and_then(|metadata| metadata.modified())
+            .ok()
+    });
+
+    let mut entries = Vec::new();
+    for file in files {
+        let relative_path = file
+            .strip_prefix(log_dir)
+            .unwrap_or(&file)
+            .to_string_lossy()
+            .to_string();
+
+        let content = fs::read(&file)
+            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+            .map_err(|e| format!("读取日志文件失败 '{}': {}", file.display(), e))?;
+
+        for line in content.lines() {
+            let Some(level) = extract_issue_level(line) else {
+                continue;
+            };
+
+            entries.push(DiagnosticIssueEntry {
+                level: level.to_string(),
+                source_file: relative_path.clone(),
+                message: line.trim().to_string(),
+                event: extract_event_name(line),
+            });
+        }
+    }
+
+    Ok(entries)
+}
+
+fn build_recent_issue_summaries(entries: &[DiagnosticIssueEntry], limit: usize) -> Vec<DiagnosticLogSummary> {
+    let start = entries.len().saturating_sub(limit);
+    entries[start..]
+        .iter()
+        .map(|entry| DiagnosticLogSummary {
+            level: entry.level.clone(),
+            source_file: entry.source_file.clone(),
+            message: entry.message.clone(),
+        })
+        .collect()
+}
+
+fn build_event_issue_stats(entries: &[DiagnosticIssueEntry], limit: usize) -> Vec<DiagnosticEventIssueStat> {
+    let mut grouped: HashMap<&str, DiagnosticEventIssueStat> = HashMap::new();
+
+    for entry in entries {
+        let Some(event) = entry.event.as_deref() else {
+            continue;
+        };
+
+        let stat = grouped.entry(event).or_insert_with(|| DiagnosticEventIssueStat {
+            event: event.to_string(),
+            total_count: 0,
+            error_count: 0,
+            warn_count: 0,
+            latest_source_file: entry.source_file.clone(),
+            latest_message: entry.message.clone(),
+        });
+
+        stat.total_count += 1;
+        if entry.level == "error" {
+            stat.error_count += 1;
+        } else if entry.level == "warn" {
+            stat.warn_count += 1;
+        }
+        stat.latest_source_file = entry.source_file.clone();
+        stat.latest_message = entry.message.clone();
+    }
+
+    let mut stats: Vec<DiagnosticEventIssueStat> = grouped.into_values().collect();
+    stats.sort_by(|left, right| {
+        right
+            .total_count
+            .cmp(&left.total_count)
+            .then_with(|| right.error_count.cmp(&left.error_count))
+            .then_with(|| left.event.cmp(&right.event))
+    });
+    stats.truncate(limit);
+    stats
+}
+
+fn collect_log_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), String> {
+    let entries = fs::read_dir(dir).map_err(|e| format!("读取日志目录失败: {}", e))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("读取日志目录项失败: {}", e))?;
+        let path = entry.path();
+        let metadata = entry
+            .metadata()
+            .map_err(|e| format!("读取日志文件元数据失败: {}", e))?;
+
+        if metadata.is_dir() {
+            collect_log_files(&path, files)?;
+        } else if metadata.is_file() {
+            files.push(path);
+        }
+    }
+
+    Ok(())
+}
+
+fn extract_issue_level(line: &str) -> Option<&'static str> {
+    if line.contains("[ERROR]") {
+        Some("error")
+    } else if line.contains("[WARN]") {
+        Some("warn")
+    } else {
+        None
+    }
+}
+
+fn extract_event_name(line: &str) -> Option<String> {
+    let start = line.find("event=")? + "event=".len();
+    let rest = &line[start..];
+    let end = rest
+        .find(|character: char| character.is_whitespace())
+        .unwrap_or(rest.len());
+    let event = &rest[..end];
+    if event.is_empty() {
+        None
+    } else {
+        Some(event.to_string())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

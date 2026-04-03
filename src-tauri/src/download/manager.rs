@@ -235,12 +235,21 @@ async fn trigger_post_download_processing(app: tauri::AppHandle, task: &Download
     };
 
     let file_path_str = target_file.to_string_lossy().to_string();
-    println!("[PostDownload] Triggering for: {}", file_path_str);
+    log::info!(
+        "[post_download] event=triggered task_id={} path={}",
+        task.id,
+        file_path_str
+    );
 
     let designation = match extract_designation_from_path(&file_path_str) {
         Ok(value) => Some(value),
         Err(e) => {
-            println!("[PostDownload] 未识别到番号，回退截图封面: {}", e);
+            log::warn!(
+                "[post_download] event=designation_missing task_id={} path={} fallback=capture_cover reason={}",
+                task.id,
+                file_path_str,
+                e
+            );
             None
         }
     };
@@ -249,7 +258,12 @@ async fn trigger_post_download_processing(app: tauri::AppHandle, task: &Download
         match crate::settings::get_settings(app.clone()).await {
             Ok(settings) => settings.download.auto_scrape,
             Err(e) => {
-                println!("[PostDownload] 读取设置失败，跳过自动刮削: {}", e);
+                log::warn!(
+                    "[post_download] event=load_settings_failed task_id={} path={} action=skip_auto_scrape error={}",
+                    task.id,
+                    file_path_str,
+                    e
+                );
                 false
             }
         }
@@ -264,7 +278,12 @@ async fn trigger_post_download_processing(app: tauri::AppHandle, task: &Download
     let db = match crate::db::Database::new(&app) {
         Ok(db) => db,
         Err(e) => {
-            println!("[PostDownload] Database::new failed: {}", e);
+            log::error!(
+                "[post_download] event=db_init_failed task_id={} path={} error={}",
+                task.id,
+                file_path_str,
+                e
+            );
             return;
         }
     };
@@ -272,7 +291,11 @@ async fn trigger_post_download_processing(app: tauri::AppHandle, task: &Download
     // 检查是否已刮削
     if let Ok(scraped) = db.is_video_completely_scraped(&file_path_str) {
         if scraped {
-            println!("[PostDownload] Video already scraped: {}", file_path_str);
+            log::info!(
+                "[post_download] event=already_scraped task_id={} path={}",
+                task.id,
+                file_path_str
+            );
             return;
         }
     }
@@ -326,7 +349,12 @@ async fn trigger_post_download_processing(app: tauri::AppHandle, task: &Download
             match perform_scrape(&app_clone, &file_path).await {
                 Ok(_) => {}
                 Err(e) => {
-                    println!("[PostDownload] 自动刮削失败，回退截图封面: {}", e);
+                    log::warn!(
+                        "[post_download] event=auto_scrape_failed task_id={} path={} fallback=capture_cover error={}",
+                        task_id,
+                        file_path,
+                        e
+                    );
                     capture_cover_fallback = true;
                 }
             }
@@ -334,7 +362,12 @@ async fn trigger_post_download_processing(app: tauri::AppHandle, task: &Download
 
         if capture_cover_fallback {
             if let Err(e) = capture_cover_as_fallback(&app_clone, &file_path).await {
-                println!("[PostDownload] 截图封面失败: {}", e);
+                log::error!(
+                    "[post_download] event=capture_cover_failed task_id={} path={} error={}",
+                    task_id,
+                    file_path,
+                    e
+                );
             }
         }
 
@@ -396,7 +429,11 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
 
     // 1. 提取番号
     let designation = extract_designation_from_path(video_path)?;
-    println!("[AutoScrape] 提取到番号: {}", designation);
+    log::info!(
+        "[auto_scrape] event=designation_extracted path={} designation={}",
+        video_path,
+        designation
+    );
 
     // 2. 获取元数据
     let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
@@ -408,7 +445,13 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         .ok_or_else(|| format!("未找到默认刮削网站解析器: {}", site.id))?;
 
     let url = source.build_url(&designation);
-    println!("[AutoScrape] 使用 {} 获取: {}", source.name(), url);
+    log::info!(
+        "[auto_scrape] event=fetch_started path={} source={} designation={} url={}",
+        video_path,
+        source.name(),
+        designation,
+        url
+    );
 
     // 创建 Fetcher 获取 HTML
     let http_client = webclaw_client::create_client()?;
@@ -430,12 +473,21 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         .await
         .map_err(|e| format!("获取页面失败: {}", e))?;
 
-    println!("[AutoScrape] 获取到 {} 字符 HTML", html.len());
+    log::info!(
+        "[auto_scrape] event=fetch_succeeded path={} source={} html_length={}",
+        video_path,
+        source.name(),
+        html.len()
+    );
 
     // 检查是否需要二次请求详情页
     let parse_html = if let Some(detail_url) = source.extract_detail_url(&html, &designation) {
         let detail_url_string = detail_url.to_string();
-        println!("[AutoScrape] 需要二次请求详情页: {}", detail_url_string);
+        log::info!(
+            "[auto_scrape] event=detail_fetch_started path={} detail_url={}",
+            video_path,
+            detail_url_string
+        );
         let detail_site = ResourceSite {
             id: site.id.clone(),
             name: site.name.clone(),
@@ -458,11 +510,19 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
             .await
         {
             Ok(dh) => {
-                println!("[AutoScrape] 详情页返回 {} 字符", dh.len());
+                log::info!(
+                    "[auto_scrape] event=detail_fetch_succeeded path={} html_length={}",
+                    video_path,
+                    dh.len()
+                );
                 dh
             }
             Err(e) => {
-                println!("[AutoScrape] 详情页请求失败: {}，回退到搜索页", e);
+                log::warn!(
+                    "[auto_scrape] event=detail_fetch_failed path={} fallback=search_page error={}",
+                    video_path,
+                    e
+                );
                 html
             }
         }
@@ -475,7 +535,11 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         .parse(&parse_html, &designation)
         .ok_or_else(|| format!("解析元数据失败: 番号 {}", designation))?;
 
-    println!("[AutoScrape] 解析成功: {}", search_result.title);
+    log::info!(
+        "[auto_scrape] event=parse_succeeded path={} title={}",
+        video_path,
+        search_result.title
+    );
 
     // 将 SearchResult 转换为 ScrapeMetadata
     let metadata = crate::resource_scrape::commands::search_result_to_metadata(&search_result);
@@ -484,11 +548,19 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
     let local_cover_path = if !metadata.poster_url.is_empty() {
         match crate::download::image::download_cover(video_path, &metadata.poster_url, None).await {
             Ok(path) => {
-                println!("[AutoScrape] 封面下载成功: {}", path);
+                log::info!(
+                    "[auto_scrape] event=cover_download_succeeded path={} cover_path={}",
+                    video_path,
+                    path
+                );
                 path
             }
             Err(e) => {
-                println!("[AutoScrape] 封面下载失败: {}", e);
+                log::error!(
+                    "[auto_scrape] event=cover_download_failed path={} error={}",
+                    video_path,
+                    e
+                );
                 String::new()
             }
         }
@@ -511,15 +583,23 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         )
         .await
         {
-            println!("[AutoScrape] extrafanart 下载失败: {}", e);
+            log::error!(
+                "[auto_scrape] event=extrafanart_sync_failed path={} error={}",
+                video_path,
+                e
+            );
         }
     }
 
     // 5. 保存 NFO 文件
     if let Err(e) = save_nfo_for_video(video_path, &metadata) {
-        println!("[AutoScrape] NFO 保存失败: {}", e);
+        log::error!(
+            "[auto_scrape] event=save_nfo_failed path={} error={}",
+            video_path,
+            e
+        );
     } else {
-        println!("[AutoScrape] NFO 保存成功");
+        log::info!("[auto_scrape] event=save_nfo_succeeded path={}", video_path);
     }
 
     // 6. 写入数据库
@@ -537,7 +617,7 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         )
         .await?;
 
-    println!("[AutoScrape] 数据库更新成功");
+    log::info!("[auto_scrape] event=db_write_succeeded path={}", video_path);
     Ok(())
 }
 
@@ -673,7 +753,11 @@ async fn update_download_status_completed(app: &tauri::AppHandle, task_id: &str)
     let db = match crate::db::Database::new(app) {
         Ok(db) => db,
         Err(e) => {
-            println!("[Download] Database::new failed: {}", e);
+            log::error!(
+                "[download] event=db_init_failed_during_complete task_id={} error={}",
+                task_id,
+                e
+            );
             return;
         }
     };

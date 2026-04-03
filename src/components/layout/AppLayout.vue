@@ -42,10 +42,6 @@ watch(scanProgress, (newProgress) => {
   } else if (scanToastId.value) {
     toast.dismiss(scanToastId.value)
     scanToastId.value = null
-    toast.success('扫描完成', {
-      description: '视频文件扫描已完成',
-      duration: 2000
-    })
   }
 })
 </script>

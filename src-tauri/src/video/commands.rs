@@ -403,7 +403,11 @@ pub async fn move_video_file(app: AppHandle, db: State<'_, crate::db::Database>,
 pub async fn update_video(app: AppHandle, db: State<'_, crate::db::Database>, id: String, data: VideoUpdatePayload) -> AppResult<VideoUpdateResult> {
     // 确保视频在独立的同名目录中（避免重命名时影响其他视频的资源）
     if let Err(e) = ensure_video_in_own_dir_with_db(&app, &id) {
-        eprintln!("[更新视频] 目录规范化失败: {}", e);
+        log::warn!(
+            "[video_update] event=ensure_own_dir_failed video_id={} error={}",
+            id,
+            e
+        );
     }
 
     let mut conn = db.get_connection()?;
@@ -636,9 +640,11 @@ pub async fn find_ad_videos(
     let keywords = keywords.unwrap_or(settings.ad_filter.keywords);
     let exclude_keywords = exclude_keywords.unwrap_or(settings.ad_filter.exclude_keywords);
 
-    println!(
-        "[find_ad_videos] 开始查找广告视频，关键词: {:?}, 排除关键词: {:?}, 检查重复: {}",
-        keywords, exclude_keywords, check_duplicate
+    log::info!(
+        "[ad_video_scan] event=start keywords={:?} exclude_keywords={:?} check_duplicate={}",
+        keywords,
+        exclude_keywords,
+        check_duplicate
     );
 
     let conn = db.get_connection()?;
@@ -665,7 +671,10 @@ pub async fn find_ad_videos(
             video_list.push((id, path, size));
         }
 
-        println!("[find_ad_videos] 找到 {} 个视频", video_list.len());
+        log::info!(
+            "[ad_video_scan] event=loaded_videos total={}",
+            video_list.len()
+        );
 
         // 第二步：统计文件名出现次数（在所有视频中统计）
         let mut filename_count: HashMap<String, Vec<String>> = HashMap::new();
@@ -729,7 +738,10 @@ pub async fn find_ad_videos(
             }
         }
 
-        println!("[find_ad_videos] 找到 {} 个疑似广告视频", ad_videos.len());
+        log::info!(
+            "[ad_video_scan] event=completed suspicious_total={}",
+            ad_videos.len()
+        );
         Ok(ad_videos)
     })
     .await
@@ -806,7 +818,12 @@ pub async fn delete_videos(
             };
 
             if let Err(e) = result {
-                eprintln!("删除视频 {} 失败: {}", id, e);
+                log::error!(
+                    "[video_delete] event=batch_delete_failed video_id={} delete_scrape_data_only={} error={}",
+                    id,
+                    delete_scrape_data_only,
+                    e
+                );
             }
         }
 

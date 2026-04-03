@@ -689,15 +689,22 @@ async fn upload_payloads(
             Ok(resp) => {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();
-                eprintln!(
-                    "[analytics] Supabase upload failed ({}): {}",
+                log::error!(
+                    "[analytics] event=supabase_upload_failed user_id={} stat_date={} status={} error_body={}",
+                    row.user_id,
+                    row.stat_date,
                     status.as_u16(),
                     body
                 );
                 failed += 1;
             }
             Err(e) => {
-                eprintln!("[analytics] Supabase upload request failed: {}", e);
+                log::error!(
+                    "[analytics] event=supabase_upload_request_failed user_id={} stat_date={} error={}",
+                    row.user_id,
+                    row.stat_date,
+                    e
+                );
                 failed += 1;
             }
         }
@@ -746,7 +753,7 @@ pub fn record_play_video(app: &AppHandle) {
     if let Err(e) = apply_counter(app, |conn, user_id| {
         upsert_today_delta(app, conn, user_id, None, 0, 1, 0, 0, 0, 0)
     }) {
-        eprintln!("[analytics] record_play_video failed: {}", e);
+        log::error!("[analytics] event=record_play_video_failed error={}", e);
     }
 }
 
@@ -754,7 +761,7 @@ pub fn record_download_completed(app: &AppHandle) {
     if let Err(e) = apply_counter(app, |conn, user_id| {
         upsert_today_delta(app, conn, user_id, None, 0, 0, 1, 0, 0, 0)
     }) {
-        eprintln!("[analytics] record_download_completed failed: {}", e);
+        log::error!("[analytics] event=record_download_completed_failed error={}", e);
     }
 }
 
@@ -762,7 +769,7 @@ pub fn record_search_designation(app: &AppHandle) {
     if let Err(e) = apply_counter(app, |conn, user_id| {
         upsert_today_delta(app, conn, user_id, None, 0, 0, 0, 0, 1, 0)
     }) {
-        eprintln!("[analytics] record_search_designation failed: {}", e);
+        log::error!("[analytics] event=record_search_designation_failed error={}", e);
     }
 }
 
@@ -770,7 +777,7 @@ pub fn record_search_resource_link(app: &AppHandle) {
     if let Err(e) = apply_counter(app, |conn, user_id| {
         upsert_today_delta(app, conn, user_id, None, 0, 0, 0, 0, 0, 1)
     }) {
-        eprintln!("[analytics] record_search_resource_link failed: {}", e);
+        log::error!("[analytics] event=record_search_resource_link_failed error={}", e);
     }
 }
 

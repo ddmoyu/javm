@@ -132,7 +132,12 @@ impl DesignationRecognizer {
                 let position = captures.get(0).map(|m| m.start()).unwrap_or(0);
                 
                 #[cfg(test)]
-                println!("Found candidate: {} (priority: {}, position: {})", designation, priority, position);
+                log::debug!(
+                    "[designation] event=test_candidate_found designation={} priority={} position={}",
+                    designation,
+                    priority,
+                    position
+                );
                 
                 candidates.push((designation, *priority, position));
             }
@@ -148,7 +153,11 @@ impl DesignationRecognizer {
             let is_valid = self.is_valid_designation(designation);
             
             #[cfg(test)]
-            println!("Validating {}: {}", designation, is_valid);
+            log::debug!(
+                "[designation] event=test_candidate_validated designation={} is_valid={}",
+                designation,
+                is_valid
+            );
             
             is_valid
         });
@@ -408,7 +417,11 @@ JAV番号的常见格式包括：
                 }
                 Err(e) => {
                     // AI 识别失败，继续到下一步
-                    eprintln!("AI recognition failed: {}", e);
+                    log::warn!(
+                        "[designation] event=ai_recognition_failed title={} error={}",
+                        title,
+                        e
+                    );
                 }
             }
         }

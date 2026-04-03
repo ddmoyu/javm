@@ -10,7 +10,12 @@ async function tauriInvoke<T>(command: string, args?: Record<string, unknown>) {
     if (!isTauriRuntime()) {
         throw new Error('Tauri runtime unavailable')
     }
-    return invoke<T>(command, args)
+    try {
+        return await invoke<T>(command, args)
+    } catch (error) {
+        console.error(`[tauri:${command}] 调用失败`, error, args)
+        throw error
+    }
 }
 
 export function isTsVideoPath(path: string): boolean {
@@ -20,8 +25,13 @@ export function isTsVideoPath(path: string): boolean {
 // ============ 瑙嗛鐩稿叧 ============
 
 /** 鎵弿鐩綍 */
-export async function scanDirectory(path: string): Promise<number> {
-    return tauriInvoke<number>('scan_directory', { path })
+export interface ScanSummary {
+    success_count: number
+    failed_count: number
+}
+
+export async function scanDirectory(path: string): Promise<ScanSummary> {
+    return tauriInvoke<ScanSummary>('scan_directory', { path })
 }
 
 /** 娣诲姞鐩綍鍒版暟鎹簱 */
@@ -269,6 +279,23 @@ export async function getSettings(): Promise<AppSettings> {
 /** 淇濆瓨搴旂敤璁剧疆 */
 export async function saveSettings(settings: AppSettings): Promise<void> {
     return tauriInvoke('save_settings', { settings })
+}
+
+export interface ExportLogsResult {
+    exportPath: string
+    fileCount: number
+}
+
+export interface LogDirectoryInfo {
+    logDir: string
+}
+
+export async function getLogDirectory(): Promise<LogDirectoryInfo> {
+    return tauriInvoke<LogDirectoryInfo>('get_log_directory')
+}
+
+export async function exportLogs(destinationDir: string): Promise<ExportLogsResult> {
+    return tauriInvoke<ExportLogsResult>('export_logs', { destinationDir })
 }
 
 export async function checkAppUpdate(): Promise<AppUpdateInfo> {

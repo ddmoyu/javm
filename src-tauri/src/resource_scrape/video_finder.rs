@@ -352,11 +352,14 @@ const INTERCEPT_JS: &str = r#"
 /// 创建可见的 WebView 窗口访问指定视频网站，
 /// 注入 JS 拦截网络请求，捕获视频链接通过事件推送给前端。
 pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> Result<(), String> {
+    let code_owned = code.to_string();
     let site_id_string = site_id.to_string();
     let url_str = build_site_url(site_id, code)?;
-    println!(
-        "[video_finder] 打开 WebView: {} (网站: {})",
-        url_str, site_id_string
+    log::info!(
+        "[video_finder] event=open_requested code={} site={} url={}",
+        code,
+        site_id_string,
+        url_str
     );
 
     let parsed_url: url::Url = url_str
@@ -444,9 +447,16 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
             if was_active && saw_cf_for_listener.swap(false, Ordering::Relaxed) {
                 let _ = window_for_listener.hide();
                 if let Err(err) = window_for_listener.navigate(target_url_for_listener.clone()) {
-                    eprintln!("[video_finder] CF 通过后重新加载目标页失败: {}", err);
+                    log::error!(
+                        "[video_finder] event=cf_reload_failed site={} error={}",
+                        site_id_string,
+                        err
+                    );
                 } else {
-                    println!("[video_finder] CF 验证通过，重新加载目标页以捕获视频链接");
+                    log::info!(
+                        "[video_finder] event=cf_reload_succeeded site={} action=resume_capture",
+                        site_id_string
+                    );
                     fast_inject_cycles_for_listener.store(40, Ordering::Relaxed);
                 }
             }
@@ -456,25 +466,41 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
     // 页面加载后注入拦截脚本
     let window_clone = window.clone();
     let app_clone = app.clone();
+    let code_for_task = code_owned.clone();
     tokio::spawn(async move {
         let started_at = Instant::now();
         let mut quick_inject_rounds: u64 = 0;
 
         loop {
             if started_at.elapsed().as_secs() >= FINDER_MAX_RUNTIME_SECS {
-                println!("[video_finder] 超过最大运行时长，停止监听视频链接");
+                log::warn!(
+                    "[video_finder] event=max_runtime_reached site={} code={} runtime_secs={}",
+                    site_id_owned,
+                    code_for_task,
+                    FINDER_MAX_RUNTIME_SECS
+                );
                 break;
             }
 
             // 检查窗口是否还存在
             if app_clone.get_webview_window(VIDEO_FINDER_LABEL).is_none() {
-                println!("[video_finder] WebView 窗口已关闭，停止注入");
+                log::info!(
+                    "[video_finder] event=window_closed_stop_inject site={} code={}",
+                    site_id_owned,
+                    code_for_task
+                );
                 break;
             }
 
             if let Err(e) = window_clone.eval(&combined_js) {
                 if quick_inject_rounds % 20 == 0 {
-                    println!("[video_finder] 注入脚本失败 (第 {} 次): {}", quick_inject_rounds, e);
+                    log::warn!(
+                        "[video_finder] event=inject_failed site={} code={} attempt={} error={}",
+                        site_id_owned,
+                        code_for_task,
+                        quick_inject_rounds,
+                        e
+                    );
                 }
             }
 
@@ -513,6 +539,7 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
 
 /// 关闭视频查找 WebView 窗口
 pub fn close_video_finder_webview(app: &AppHandle) -> Result<(), String> {
+    log::info!("[video_finder] event=close_requested");
     webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", None, 0);
     if let Some(window) = app.get_webview_window(VIDEO_FINDER_LABEL) {
         window.close().map_err(|e| format!("关闭窗口失败: {}", e))?;
