@@ -114,6 +114,15 @@ const saveMainWindowPosition = () => {
 }
 
 onMounted(async () => {
+  // 主窗口初始隐藏（tauri.conf.json visible:false），挂载后立即显示，
+  // 规避启动白屏与位置跳动。
+  // 注意：窗口隐藏时 document 处于 hidden 状态，requestAnimationFrame 不会触发，
+  // 绝不能用 rAF 来延迟 show()，否则窗口永远不显示，只能等 Rust 兜底定时器。
+  const mainWin = getCurrentWindow()
+  if (mainWin.label === 'main') {
+    mainWin.show().catch((e) => console.error('[startup] 显示主窗口失败', String(e)))
+  }
+
   await settingsStore.loadSettings()
 
   try {

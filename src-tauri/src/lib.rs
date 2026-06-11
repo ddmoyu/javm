@@ -207,6 +207,19 @@ pub fn run() {
                         log::warn!("[app_startup] event=load_settings_failed_using_default_window_size");
                     }
                 }
+
+                // 兜底：窗口初始隐藏，正常由前端首屏渲染完成后显示；
+                // 若前端异常在若干秒内未显示，则强制显示，避免出现无窗口的幽灵进程。
+                // 兜底：正常由前端首屏挂载后显示窗口；若前端异常在 4 秒内未显示，
+                // 则强制显示，避免出现无窗口的幽灵进程。
+                let fallback_window = main_window.clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                    if !fallback_window.is_visible().unwrap_or(false) {
+                        log::warn!("[startup] event=fallback_show_fired note=前端显示窗口失败，已由兜底显示");
+                        let _ = fallback_window.show();
+                    }
+                });
             }
 
             // 初始化截图取消令牌管理
