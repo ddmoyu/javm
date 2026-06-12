@@ -11,7 +11,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use javm_lib::resource_scrape::fingerprint_client;
-use javm_lib::resource_scrape::sources::{all_sources, Source};
+use javm_lib::resource_scrape::sources::{all_sources};
 use javm_lib::resource_scrape::types::SearchResult;
 use wreq_util::Emulation;
 

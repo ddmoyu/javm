@@ -79,6 +79,7 @@ const isSaving = ref(false)
 const isScraping = ref(false)
 const hasScrapedData = ref(false) // 标记是否刮削了新数据
 const aiRecognizing = ref(false) // AI识别番号状态
+const probingDuration = ref(false) // 探测时长状态
 const captureCoverDialogOpen = ref(false) // 截取封面对话框状态
 const captureThumbsDialogOpen = ref(false) // 截取预览图对话框状态
 const showDeleteConfirm = ref(false) // 删除确认对话框状态
@@ -321,6 +322,33 @@ const durationFormatted = computed({
         }
     }
 })
+
+/** 使用 ffmpeg 探测视频文件的实际时长并自动保存 */
+const probeDuration = async () => {
+    if (!props.video || probingDuration.value) return
+    const videoPath = currentVideoPath.value
+    if (!videoPath) {
+        toast.error('视频路径为空')
+        return
+    }
+    probingDuration.value = true
+    try {
+        const durationSeconds = await invoke<number>('probe_video_duration', { videoPath })
+        const rounded = Math.round(durationSeconds)
+        formData.value.duration = rounded
+        isDirty.value = true
+        // 自动保存到数据库
+        await updateVideo(props.video.id, { duration: rounded })
+        // 更新 store 中的视频数据
+        videoStore.updateVideo(props.video.id, { duration: rounded })
+        toast.success(`时长已更新为 ${durationFormatted.value}`)
+    } catch (e) {
+        console.error('探测时长失败:', e)
+        toast.error('探测时长失败: ' + String(e))
+    } finally {
+        probingDuration.value = false
+    }
+}
 
 const handlePlay = async () => {
     if (props.video) {
@@ -985,8 +1013,16 @@ const downloadLongScreenshot = async () => {
 
                                 <div class="space-y-1">
                                     <Label class="text-[10px] text-muted-foreground uppercase tracking-wider">时长</Label>
-                                    <Input type="text" v-model="durationFormatted" class="h-8 text-sm"
-                                        placeholder="00:00:00" />
+                                    <div class="flex gap-2">
+                                        <Input type="text" v-model="durationFormatted" class="h-8 text-sm flex-1"
+                                            placeholder="00:00:00" />
+                                        <Button type="button" variant="outline" size="icon" class="h-8 w-8 shrink-0"
+                                            :disabled="probingDuration || !currentVideoPath"
+                                            @click="probeDuration" title="使用 FFmpeg 探测实际时长">
+                                            <Loader2 v-if="probingDuration" class="size-4 animate-spin" />
+                                            <RefreshCw v-else class="size-4" />
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 <div class="space-y-1">

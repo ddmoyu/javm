@@ -308,3 +308,18 @@ pub async fn clear_thumbs(db: State<'_, Database>, video_path: String) -> AppRes
     .await
     .map_err(|e| AppError::TaskJoin(e.to_string()))?
 }
+
+/// 使用 ffmpeg 探测视频文件的实际时长（秒）
+#[tauri::command]
+pub async fn probe_video_duration(video_path: String) -> AppResult<f64> {
+    tokio::task::spawn_blocking(move || {
+        let path = std::path::Path::new(&video_path);
+        if !path.exists() {
+            return Err(AppError::Business("视频文件不存在".to_string()));
+        }
+        super::ffmpeg::get_video_duration(&video_path)
+            .map_err(|e| AppError::Business(e))
+    })
+    .await
+    .map_err(|e| AppError::TaskJoin(e.to_string()))?
+}

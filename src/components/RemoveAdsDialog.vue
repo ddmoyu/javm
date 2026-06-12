@@ -402,13 +402,13 @@ const handleOpenDirectory = async (path: string) => {
       <DialogHeader>
         <DialogTitle>添加过滤关键词</DialogTitle>
         <DialogDescription>
-          每行一个关键词，文件名包含这些关键词的视频将被标记为广告
+          每行一个关键词，路径、文件名或标题包含这些关键词的视频将被标记为广告
         </DialogDescription>
       </DialogHeader>
       
       <Textarea
         v-model="keywordText"
-        placeholder="输入关键词，每行一个&#10;例如：&#10;广告&#10;宣传片&#10;预告"
+        placeholder="输入关键词，每行一个&#10;例如：&#10;全網網黃國&#10;广告&#10;宣传片"
         class="min-h-[200px] font-mono"
       />
       
@@ -425,7 +425,7 @@ const handleOpenDirectory = async (path: string) => {
       <DialogHeader>
         <DialogTitle>排除关键词</DialogTitle>
         <DialogDescription>
-          每行一个关键词，文件名包含这些关键词的视频将不会出现在广告列表中
+          每行一个关键词，路径、文件名或标题包含这些关键词的视频将不会出现在广告列表中
         </DialogDescription>
       </DialogHeader>
       

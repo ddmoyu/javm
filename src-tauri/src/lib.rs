@@ -288,6 +288,7 @@ pub fn run() {
             media::commands::resolve_video_preview_images,
             media::commands::delete_thumb,
             media::commands::clear_thumbs,
+            media::commands::probe_video_duration,
             // 扫描
             scanner::commands::scan_directory,
             // 设置
