@@ -383,13 +383,37 @@ fn build_system_prompt(target_language: &str) -> String {
 	)
 }
 
-async fn call_provider(provider: &SettingsAIProvider, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
+/// 进程级共享翻译 Client：复用连接池/keep-alive，避免每个结果、每个队列任务
+/// 都重建 Client（并发刮削时尤为浪费）。按当前代理设置缓存，代理变更时自动重建。
+fn shared_translation_client() -> Result<wreq::Client, String> {
+	use std::sync::RwLock;
+	static SHARED: RwLock<Option<(Option<url::Url>, wreq::Client)>> = RwLock::new(None);
+
+	let current_proxy = crate::utils::proxy::get_proxy_url();
+
+	// 快路径：代理未变则直接复用
+	if let Ok(guard) = SHARED.read() {
+		if let Some((proxy, client)) = guard.as_ref() {
+			if *proxy == current_proxy {
+				return Ok(client.clone());
+			}
+		}
+	}
+
+	// 慢路径：重建并缓存
 	let client = crate::utils::proxy::apply_proxy_auto(
 		wreq::Client::builder().timeout(std::time::Duration::from_secs(40)),
-	)
-	.map_err(|e| e.to_string())?
+	)?
 	.build()
 	.map_err(|e| e.to_string())?;
+	if let Ok(mut guard) = SHARED.write() {
+		*guard = Some((current_proxy, client.clone()));
+	}
+	Ok(client)
+}
+
+async fn call_provider(provider: &SettingsAIProvider, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
+	let client = shared_translation_client()?;
 
 	let default_endpoint = match provider.provider.as_str() {
 		"openai" => Some("https://api.openai.com/v1".to_string()),
