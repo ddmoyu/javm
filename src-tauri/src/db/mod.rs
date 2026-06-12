@@ -42,7 +42,7 @@ impl Database {
     {
         let db_path = self.path.clone();
         tokio::task::spawn_blocking(move || {
-            let conn = Connection::open(&db_path)?;
+            let conn = Self::open_tuned(&db_path)?;
             f(conn)
         })
         .await
@@ -50,7 +50,16 @@ impl Database {
     }
 
     pub fn get_connection(&self) -> Result<Connection> {
-        Connection::open(&self.path)
+        Self::open_tuned(&self.path)
+    }
+
+    /// 打开连接并应用并发调优：5 秒忙等避免并发写时 SQLITE_BUSY 立即失败，
+    /// WAL 模式提升读写并发（WAL 是数据库级持久设置，设一次即生效）。
+    fn open_tuned(path: &std::path::Path) -> Result<Connection> {
+        let conn = Connection::open(path)?;
+        conn.busy_timeout(std::time::Duration::from_secs(5))?;
+        conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+        Ok(conn)
     }
 
     /// 获取数据库路径
