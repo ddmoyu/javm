@@ -384,9 +384,11 @@ fn extract_date_pattern(text: &str) -> Option<String> {
             && bytes.get(i+4) == Some(&b'-')
             && bytes.get(i+7) == Some(&b'-')
         {
-            let candidate = &text[i..i+10];
-            if candidate.chars().all(|c| c.is_ascii_digit() || c == '-') {
-                return Some(candidate.to_string());
+            // 用 get 避免 i+10 落在多字节字符中间导致 panic（外部 HTML 不可信）
+            if let Some(candidate) = text.get(i..i+10) {
+                if candidate.chars().all(|c| c.is_ascii_digit() || c == '-') {
+                    return Some(candidate.to_string());
+                }
             }
         }
     }

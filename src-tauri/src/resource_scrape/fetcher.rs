@@ -221,13 +221,21 @@ impl Fetcher {
 
         let pool = app.state::<WebviewPoolState>();
         let lease = pool.acquire(&site.id, max_webview_windows).await;
-        let window = get_or_create_webview_window(
+        // 窗口创建失败必须释放已占用的槽位，否则该站点槽位永久 in_use，
+        // 后续请求在 acquire 处无限挂起，拖死整个站点的刮削。
+        let window = match get_or_create_webview_window(
             app,
             url,
             &lease.label,
             &site.name,
             lease.evicted_label.as_deref(),
-        )?;
+        ) {
+            Ok(w) => w,
+            Err(e) => {
+                pool.release(&lease.label);
+                return Err(e);
+            }
+        };
         let effective_show_webview = should_keep_webview_visible(show_webview);
         webview_support::sync_window_visibility(&window, effective_show_webview);
         let snapshot = pool.update_cf_state(window.label(), false);
