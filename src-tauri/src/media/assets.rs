@@ -752,32 +752,46 @@ pub async fn sync_extrafanart_from_urls(
     let extrafanart_dir = extrafanart_dir_for_video(video_path)?;
     fs::create_dir_all(&extrafanart_dir).map_err(|e| format!("创建 extrafanart 目录失败: {}", e))?;
 
-    let client = crate::resource_scrape::fingerprint_client::create_client()?;
+    let client = std::sync::Arc::new(crate::resource_scrape::fingerprint_client::shared_client()?);
+    // 有界并发下载预览图（原先串行逐张，10-20 张时是主要耗时）
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+    let mut handles = Vec::new();
 
-    let mut saved_paths = Vec::new();
     for (index, url) in images {
-        let trimmed = url.trim();
+        let trimmed = url.trim().to_string();
         if trimmed.is_empty() {
             continue;
         }
-
         let save_path = extrafanart_dir.join(format!("fanart{}.jpg", index));
-        if save_path.exists() {
-            saved_paths.push(save_path.to_string_lossy().to_string());
-            continue;
-        }
+        let client = client.clone();
+        let sem = semaphore.clone();
+        handles.push(tokio::spawn(async move {
+            if save_path.exists() {
+                return Some((index, save_path.to_string_lossy().to_string()));
+            }
+            let _permit = sem.acquire_owned().await.ok()?;
+            match crate::download::image::download_image(&client, &trimmed, &save_path).await {
+                Ok(path) => Some((index, path)),
+                Err(e) => {
+                    log::error!(
+                        "[media_assets] event=download_extrafanart_failed index={} url={} error={}",
+                        index, trimmed, e
+                    );
+                    None
+                }
+            }
+        }));
+    }
 
-        match crate::download::image::download_image(&client, trimmed, &save_path).await {
-            Ok(path) => saved_paths.push(path),
-            Err(e) => log::error!(
-                "[media_assets] event=download_extrafanart_failed index={} url={} save_path={} error={}",
-                index,
-                trimmed,
-                save_path.display(),
-                e
-            ),
+    // 收集结果并按 index 恢复顺序
+    let mut indexed: Vec<(usize, String)> = Vec::new();
+    for handle in handles {
+        if let Ok(Some(pair)) = handle.await {
+            indexed.push(pair);
         }
     }
+    indexed.sort_by_key(|(i, _)| *i);
+    let saved_paths = indexed.into_iter().map(|(_, p)| p).collect();
 
     Ok(saved_paths)
 }
