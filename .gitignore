@@ -30,6 +30,7 @@ src-tauri/bin/*
 
 # Reasonix 本地状态（会话主题、缓存）
 .reasonix/
+reasonix.toml
 
 # CodeGraph 代码索引数据库（机器本地生成）
 .codegraph/
