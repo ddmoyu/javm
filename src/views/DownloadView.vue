@@ -7,15 +7,7 @@ import { Button } from '@/components/ui/button'
 import BatchDownloadDialog from '@/components/BatchDownloadDialog.vue'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -492,6 +484,24 @@ const stopResize = () => {
   document.removeEventListener('mouseup', stopResize)
 }
 
+// ============ 虚拟滚动 ============
+// 仅渲染可视行，避免上千条任务时为每行实例化 ContextMenu/Tooltip 造成卡顿与内存暴涨
+const tableContainerRef = ref<HTMLElement>()
+const ROW_HEIGHT = 52
+
+const rowVirtualizer = useVirtualizer({
+  get count() { return sortedTasks.value.length },
+  getScrollElement: () => tableContainerRef.value ?? null,
+  estimateSize: () => ROW_HEIGHT,
+  overscan: 8,
+})
+const virtualRows = computed(() => rowVirtualizer.value.getVirtualItems())
+const totalHeight = computed(() => rowVirtualizer.value.getTotalSize())
+// 列宽合计：表头与表体按同一宽度排布，超出容器时整体横向滚动（保留列宽拖拽体验）
+const totalColumnsWidth = computed(() =>
+  Object.values(columnWidths.value).reduce((sum, w) => sum + w, 0)
+)
+
 </script>
 
 <template>
@@ -546,174 +556,182 @@ const stopResize = () => {
       </div>
     </div>
 
-    <!-- 下载表格 -->
-    <ScrollArea class="min-h-0 flex-1">
-      <Table class="table-fixed">
-        <TableHeader class="sticky top-0 z-10 bg-background">
-          <TableRow class="hover:bg-transparent">
-            <TableHead :style="{ width: `${columnWidths.checkbox}px` }" class="relative">
-              <input ref="selectAllCheckbox" type="checkbox" :checked="isAllSelected" @change="handleSelectAll"
-                class="size-4 rounded border" />
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown="startResize($event, 'checkbox')"></div>
-            </TableHead>
-            <TableHead :style="{ width: `${columnWidths.filename}px` }"
-              class="cursor-pointer select-none hover:bg-muted/50 relative" @click="toggleSort('filename')">
-              <div class="flex items-center gap-1">
-                文件名
-                <component :is="getSortIcon('filename')" class="size-4 text-muted-foreground" />
-              </div>
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown.stop="startResize($event, 'filename')"></div>
-            </TableHead>
-            <TableHead :style="{ width: `${columnWidths.url}px` }" class="relative">
-              下载链接
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown="startResize($event, 'url')"></div>
-            </TableHead>
-            <TableHead :style="{ width: `${columnWidths.status}px` }"
-              class="cursor-pointer select-none hover:bg-muted/50 relative" @click="toggleSort('status')">
-              <div class="flex items-center gap-1">
-                状态
-                <component :is="getSortIcon('status')" class="size-4 text-muted-foreground" />
-              </div>
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown.stop="startResize($event, 'status')"></div>
-            </TableHead>
-            <TableHead :style="{ width: `${columnWidths.speed}px` }"
-              class="cursor-pointer select-none hover:bg-muted/50 relative" @click="toggleSort('speed')">
-              <div class="flex items-center gap-1">
-                速度
-                <component :is="getSortIcon('speed')" class="size-4 text-muted-foreground" />
-              </div>
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown.stop="startResize($event, 'speed')"></div>
-            </TableHead>
-            <TableHead :style="{ width: `${columnWidths.progress}px` }"
-              class="cursor-pointer select-none hover:bg-muted/50 relative" @click="toggleSort('progress')">
-              <div class="flex items-center gap-1">
-                进度
-                <component :is="getSortIcon('progress')" class="size-4 text-muted-foreground" />
-              </div>
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown.stop="startResize($event, 'progress')"></div>
-            </TableHead>
-            <TableHead :style="{ width: `${columnWidths.total}px` }"
-              class="cursor-pointer select-none hover:bg-muted/50 relative" @click="toggleSort('total')">
-              <div class="flex items-center gap-1">
-                大小
-                <component :is="getSortIcon('total')" class="size-4 text-muted-foreground" />
-              </div>
-              <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
-                @mousedown.stop="startResize($event, 'total')"></div>
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          <ContextMenu v-for="task in sortedTasks" :key="task.id">
+    <!-- 下载表格（虚拟滚动：仅渲染可视行） -->
+    <TooltipProvider>
+      <div ref="tableContainerRef" class="download-scroll min-h-0 flex-1 overflow-auto">
+        <!-- 表头（粘顶，与表体按 columnWidths 对齐） -->
+        <div
+          class="sticky top-0 z-10 flex items-center border-b bg-background text-sm font-medium text-muted-foreground"
+          :style="{ width: `${totalColumnsWidth}px` }"
+        >
+          <div :style="{ width: `${columnWidths.checkbox}px` }" class="relative shrink-0 px-4 py-2">
+            <input ref="selectAllCheckbox" type="checkbox" :checked="isAllSelected" @change="handleSelectAll"
+              class="size-4 rounded border" />
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown="startResize($event, 'checkbox')"></div>
+          </div>
+          <div :style="{ width: `${columnWidths.filename}px` }"
+            class="relative shrink-0 cursor-pointer select-none px-4 py-2 hover:bg-muted/50" @click="toggleSort('filename')">
+            <div class="flex items-center gap-1">
+              文件名
+              <component :is="getSortIcon('filename')" class="size-4 text-muted-foreground" />
+            </div>
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown.stop="startResize($event, 'filename')"></div>
+          </div>
+          <div :style="{ width: `${columnWidths.url}px` }" class="relative shrink-0 px-4 py-2">
+            下载链接
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown="startResize($event, 'url')"></div>
+          </div>
+          <div :style="{ width: `${columnWidths.status}px` }"
+            class="relative shrink-0 cursor-pointer select-none px-4 py-2 hover:bg-muted/50" @click="toggleSort('status')">
+            <div class="flex items-center gap-1">
+              状态
+              <component :is="getSortIcon('status')" class="size-4 text-muted-foreground" />
+            </div>
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown.stop="startResize($event, 'status')"></div>
+          </div>
+          <div :style="{ width: `${columnWidths.speed}px` }"
+            class="relative shrink-0 cursor-pointer select-none px-4 py-2 hover:bg-muted/50" @click="toggleSort('speed')">
+            <div class="flex items-center gap-1">
+              速度
+              <component :is="getSortIcon('speed')" class="size-4 text-muted-foreground" />
+            </div>
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown.stop="startResize($event, 'speed')"></div>
+          </div>
+          <div :style="{ width: `${columnWidths.progress}px` }"
+            class="relative shrink-0 cursor-pointer select-none px-4 py-2 hover:bg-muted/50" @click="toggleSort('progress')">
+            <div class="flex items-center gap-1">
+              进度
+              <component :is="getSortIcon('progress')" class="size-4 text-muted-foreground" />
+            </div>
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown.stop="startResize($event, 'progress')"></div>
+          </div>
+          <div :style="{ width: `${columnWidths.total}px` }"
+            class="relative shrink-0 cursor-pointer select-none px-4 py-2 hover:bg-muted/50" @click="toggleSort('total')">
+            <div class="flex items-center gap-1">
+              大小
+              <component :is="getSortIcon('total')" class="size-4 text-muted-foreground" />
+            </div>
+            <div class="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/50"
+              @mousedown.stop="startResize($event, 'total')"></div>
+          </div>
+        </div>
+
+        <!-- 空状态 -->
+        <div v-if="downloadStore.tasks.length === 0"
+          class="flex h-32 items-center justify-center text-muted-foreground">
+          暂无下载任务
+        </div>
+
+        <!-- 虚拟化表体 -->
+        <div v-else :style="{ height: `${totalHeight}px`, width: `${totalColumnsWidth}px`, position: 'relative' }">
+          <ContextMenu v-for="virtualRow in virtualRows" :key="sortedTasks[virtualRow.index].id">
             <ContextMenuTrigger as-child>
-              <TableRow :class="{ 'bg-muted/50': downloadStore.selectedIds.includes(task.id) }" data-context-menu>
-                <TableCell :style="{ width: `${columnWidths.checkbox}px` }" class="text-sm">
-                  <input type="checkbox" :checked="downloadStore.selectedIds.includes(task.id)"
-                    @change="downloadStore.toggleSelect(task.id)" class="size-4 rounded border" />
-                </TableCell>
-                <TableCell :style="{ width: `${columnWidths.filename}px` }" class="font-medium text-sm overflow-hidden">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <div class="truncate cursor-help">{{ task.filename }}</div>
-                      </TooltipTrigger>
-                      <TooltipContent class="max-w-md break-all">
-                        <p>{{ task.filename }}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableCell>
-                <TableCell :style="{ width: `${columnWidths.url}px` }"
-                  class="text-muted-foreground text-xs overflow-hidden">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger as-child>
-                        <div class="truncate cursor-help">{{ task.url }}</div>
-                      </TooltipTrigger>
-                      <TooltipContent class="max-w-lg break-all">
-                        <p>{{ task.url }}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </TableCell>
-                <TableCell :style="{ width: `${columnWidths.status}px` }" class="text-sm">
-                  <Badge :variant="DOWNLOAD_STATUS_VARIANT[task.status]">
-                    {{ DOWNLOAD_STATUS_TEXT[task.status] }}
+              <div
+                data-context-menu
+                :style="{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }"
+                :class="['flex items-center border-b transition-colors hover:bg-muted/50', { 'bg-muted/50': downloadStore.selectedIds.includes(sortedTasks[virtualRow.index].id) }]"
+              >
+                <div :style="{ width: `${columnWidths.checkbox}px` }" class="shrink-0 px-4 text-sm">
+                  <input type="checkbox" :checked="downloadStore.selectedIds.includes(sortedTasks[virtualRow.index].id)"
+                    @change="downloadStore.toggleSelect(sortedTasks[virtualRow.index].id)" class="size-4 rounded border" />
+                </div>
+                <div :style="{ width: `${columnWidths.filename}px` }" class="shrink-0 overflow-hidden px-4 font-medium text-sm">
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <div class="truncate cursor-help">{{ sortedTasks[virtualRow.index].filename }}</div>
+                    </TooltipTrigger>
+                    <TooltipContent class="max-w-md break-all">
+                      <p>{{ sortedTasks[virtualRow.index].filename }}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div :style="{ width: `${columnWidths.url}px` }" class="shrink-0 overflow-hidden px-4 text-muted-foreground text-xs">
+                  <Tooltip>
+                    <TooltipTrigger as-child>
+                      <div class="truncate cursor-help">{{ sortedTasks[virtualRow.index].url }}</div>
+                    </TooltipTrigger>
+                    <TooltipContent class="max-w-lg break-all">
+                      <p>{{ sortedTasks[virtualRow.index].url }}</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <div :style="{ width: `${columnWidths.status}px` }" class="shrink-0 px-4 text-sm">
+                  <Badge :variant="DOWNLOAD_STATUS_VARIANT[sortedTasks[virtualRow.index].status]">
+                    {{ DOWNLOAD_STATUS_TEXT[sortedTasks[virtualRow.index].status] }}
                   </Badge>
-                </TableCell>
-                <TableCell :style="{ width: `${columnWidths.speed}px` }" class="tabular-nums text-sm whitespace-nowrap">
-                  {{ (task.status === 'downloading' && task.speed > 0) ? formatSpeed(task.speed) : '-' }}
-                </TableCell>
-                <TableCell :style="{ width: `${columnWidths.progress}px` }" class="text-sm">
+                </div>
+                <div :style="{ width: `${columnWidths.speed}px` }" class="shrink-0 px-4 tabular-nums text-sm whitespace-nowrap">
+                  {{ (sortedTasks[virtualRow.index].status === 'downloading' && sortedTasks[virtualRow.index].speed > 0) ? formatSpeed(sortedTasks[virtualRow.index].speed) : '-' }}
+                </div>
+                <div :style="{ width: `${columnWidths.progress}px` }" class="shrink-0 px-4 text-sm">
                   <div class="flex items-center gap-2">
-                    <Progress :model-value="task.progress" class="h-2 w-24" />
-                    <span class="text-xs text-muted-foreground w-12 tabular-nums">
-                      {{ formatProgress(task.progress) }}
+                    <Progress :model-value="sortedTasks[virtualRow.index].progress" class="h-2 w-24" />
+                    <span class="w-12 text-xs text-muted-foreground tabular-nums">
+                      {{ formatProgress(sortedTasks[virtualRow.index].progress) }}
                     </span>
                   </div>
-                </TableCell>
-                <TableCell :style="{ width: `${columnWidths.total}px` }"
-                  class="text-muted-foreground tabular-nums text-sm whitespace-nowrap">
-                  {{ formatFileSize(task.total) }}
-                </TableCell>
-              </TableRow>
+                </div>
+                <div :style="{ width: `${columnWidths.total}px` }" class="shrink-0 px-4 text-muted-foreground tabular-nums text-sm whitespace-nowrap">
+                  {{ formatFileSize(sortedTasks[virtualRow.index].total) }}
+                </div>
+              </div>
             </ContextMenuTrigger>
             <ContextMenuContent>
-              <ContextMenuItem :disabled="task.status !== 'completed'" @click="handleOpenFile(task)">
+              <ContextMenuItem :disabled="sortedTasks[virtualRow.index].status !== 'completed'" @click="handleOpenFile(sortedTasks[virtualRow.index])">
                 <FileVideo class="mr-2 size-4" />
                 打开
               </ContextMenuItem>
-              <ContextMenuItem @click="handleOpenFolder(task)">
+              <ContextMenuItem @click="handleOpenFolder(sortedTasks[virtualRow.index])">
                 <FolderOpen class="mr-2 size-4" />
                 打开目录
               </ContextMenuItem>
               <ContextMenuSeparator />
-              <ContextMenuItem @click="handleOpenRenameDialog(task)">
+              <ContextMenuItem @click="handleOpenRenameDialog(sortedTasks[virtualRow.index])">
                 <Edit class="mr-2 size-4" />
                 重命名
               </ContextMenuItem>
-              <ContextMenuItem :disabled="task.status === 'completed'" @click="handleOpenChangePathDialog(task)">
+              <ContextMenuItem :disabled="sortedTasks[virtualRow.index].status === 'completed'" @click="handleOpenChangePathDialog(sortedTasks[virtualRow.index])">
                 <FolderSync class="mr-2 size-4" />
                 修改保存路径
               </ContextMenuItem>
-              <ContextMenuItem @click="handleCopyUrl(task)">
+              <ContextMenuItem @click="handleCopyUrl(sortedTasks[virtualRow.index])">
                 <Copy class="mr-2 size-4" />
                 复制下载链接
               </ContextMenuItem>
               <ContextMenuSeparator />
               <ContextMenuItem
-                :disabled="task.status !== 'downloading' && task.status !== 'preparing' && task.status !== 'merging'"
-                @click="handleStop(task.id)" class="text-destructive">
+                :disabled="sortedTasks[virtualRow.index].status !== 'downloading' && sortedTasks[virtualRow.index].status !== 'preparing' && sortedTasks[virtualRow.index].status !== 'merging'"
+                @click="handleStop(sortedTasks[virtualRow.index].id)" class="text-destructive">
                 <StopCircle class="mr-2 size-4" />
                 停止任务
               </ContextMenuItem>
-              <ContextMenuItem @click="handleRedownload(task.id)">
+              <ContextMenuItem @click="handleRedownload(sortedTasks[virtualRow.index].id)">
                 <RotateCcw class="mr-2 size-4" />
                 重新下载
               </ContextMenuItem>
               <ContextMenuSeparator />
-              <ContextMenuItem @click="handleDelete(task.id)" class="text-destructive">
+              <ContextMenuItem @click="handleDelete(sortedTasks[virtualRow.index].id)" class="text-destructive">
                 <Trash2 class="mr-2 size-4" />
                 删除任务
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
-
-          <!-- 空状态 -->
-          <TableRow v-if="downloadStore.tasks.length === 0" class="hover:bg-transparent">
-            <TableCell colspan="7" class="h-32 text-center text-muted-foreground">
-              暂无下载任务
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-    </ScrollArea>
+        </div>
+      </div>
+    </TooltipProvider>
 
     <!-- 重命名对话框 -->
     <Dialog v-model:open="showRenameDialog">
@@ -771,3 +789,40 @@ const stopResize = () => {
     </Dialog>
   </div>
 </template>
+
+<style scoped>
+/* shadcn 风格滚动条（替代原 ScrollArea 的样式） */
+.download-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.download-scroll:hover {
+  scrollbar-color: hsl(0 0% 20%) transparent;
+}
+
+.download-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.download-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.download-scroll::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.2s;
+}
+
+.download-scroll:hover::-webkit-scrollbar-thumb {
+  background-color: hsl(0 0% 20%);
+}
+
+.download-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(0 0% 30%);
+}
+</style>
