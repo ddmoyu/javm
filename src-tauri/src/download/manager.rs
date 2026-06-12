@@ -31,6 +31,18 @@ pub struct DownloadProgress {
     pub status: i32,
 }
 
+/// 保留字符串末尾不超过 max 字节（按字符边界截断），用于限长捕获 stderr。
+fn keep_tail(s: &str, max: usize) -> String {
+    if s.len() <= max {
+        return s.to_string();
+    }
+    let mut start = s.len() - max;
+    while start < s.len() && !s.is_char_boundary(start) {
+        start += 1;
+    }
+    s[start..].to_string()
+}
+
 fn strip_ansi_escape_codes(line: &str) -> String {
     static ANSI_ESCAPE_REGEX: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
     let re = ANSI_ESCAPE_REGEX.get_or_init(|| {
@@ -906,7 +918,10 @@ pub(crate) async fn execute_download(
         }
     };
 
-    if let Some(stderr) = stderr {
+    // 捕获 stderr 文本用于失败时的错误信息（限长，保留末尾），并保留任务句柄避免泄漏
+    let stderr_buf = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+    let stderr_handle = stderr.map(|stderr| {
+        let buf = stderr_buf.clone();
         tokio::spawn(async move {
             let mut reader = BufReader::new(stderr);
             let mut pending = String::new();
@@ -914,19 +929,22 @@ pub(crate) async fn execute_download(
 
             loop {
                 let bytes_read = match reader.read(&mut buffer).await {
-                    Ok(bytes_read) => bytes_read,
-                    Err(_) => break,
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
                 };
 
-                if bytes_read == 0 {
-                    break;
-                }
-
-                pending.push_str(&String::from_utf8_lossy(&buffer[..bytes_read]));
+                let chunk = String::from_utf8_lossy(&buffer[..bytes_read]);
+                pending.push_str(&chunk);
                 let _ = collect_output_segments(&mut pending);
+
+                let mut guard = buf.lock().await;
+                guard.push_str(&chunk);
+                if guard.len() > 32_000 {
+                    *guard = keep_tail(&guard, 16_000);
+                }
             }
-        });
-    }
+        })
+    });
 
     // 保存最后的下载信息
     let mut last_total = 0u64;
@@ -1031,15 +1049,19 @@ pub(crate) async fn execute_download(
         }
     }
 
-    // 等待进程结束
+    // 等待进程结束（stdout/stderr 已被 take，用 wait 仅取退出状态）
     let status = {
         let mut child_guard = child_arc.lock().await;
-        if let Some(child) = child_guard.take() {
-            child.wait_with_output().await.map_err(|e| e.to_string())?
+        if let Some(mut child) = child_guard.take() {
+            child.wait().await.map_err(|e| e.to_string())?
         } else {
             return Err("Child process not available".to_string());
         }
     };
+    // 等 stderr 读取任务收尾，确保失败时错误文本采集完整
+    if let Some(handle) = stderr_handle {
+        let _ = handle.await;
+    }
 
     // 清理进程句柄
     if let Some(manager) = app.try_state::<DownloadManager>() {
@@ -1047,7 +1069,7 @@ pub(crate) async fn execute_download(
         processes.remove(&task.id);
     }
 
-    if status.status.success() {
+    if status.success() {
         let final_bytes = if last_downloaded > 0 {
             last_downloaded
         } else {
@@ -1076,14 +1098,15 @@ pub(crate) async fn execute_download(
 
         Ok(())
     } else {
-        let stderr_output = strip_ansi_escape_codes(String::from_utf8_lossy(&status.stderr).trim());
-        let stdout_output = strip_ansi_escape_codes(String::from_utf8_lossy(&status.stdout).trim());
+        let captured = {
+            let guard = stderr_buf.lock().await;
+            strip_ansi_escape_codes(guard.trim())
+        };
+        let stderr_output = keep_tail(captured.trim(), 2_000);
         let error_message = if !stderr_output.is_empty() {
             format!("下载器退出失败: {}", stderr_output)
-        } else if !stdout_output.is_empty() {
-            format!("下载器退出失败: {}", stdout_output)
         } else {
-            format!("下载器退出失败，exit_code={:?}", status.status.code())
+            format!("下载器退出失败，exit_code={:?}", status.code())
         };
 
         if let Ok(conn) = db.get_connection() {

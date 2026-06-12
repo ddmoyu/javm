@@ -33,10 +33,8 @@ pub async fn download_image(
         return Err("下载的数据为空".to_string());
     }
 
-    let mut file =
-        std::fs::File::create(save_path).map_err(|e| format!("创建文件失败: {}", e))?;
-
-    std::io::Write::write_all(&mut file, &bytes)
+    tokio::fs::write(save_path, &bytes)
+        .await
         .map_err(|e| format!("写入文件失败: {}", e))?;
 
     Ok(save_path.to_string_lossy().to_string())
