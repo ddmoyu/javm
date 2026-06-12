@@ -137,9 +137,22 @@ async fn cover_dispatcher(
 
             let vid = video_id.clone();
             let vpath = video_path.clone();
+            // 复用扫描时已写入数据库的时长，避免重复 ffmpeg 探测
+            let db = crate::db::Database::new(&app).ok();
+            let vid_for_db = vid.clone();
 
             let result = tokio::task::spawn_blocking(move || {
-                let duration = crate::media::ffmpeg::get_video_duration(&vpath)?;
+                let duration = match db
+                    .as_ref()
+                    .and_then(|d| d.get_connection().ok())
+                    .and_then(|conn| {
+                        crate::db::Database::get_video_duration(&conn, &vid_for_db)
+                            .ok()
+                            .flatten()
+                    }) {
+                    Some(secs) if secs > 0 => secs as f64,
+                    _ => crate::media::ffmpeg::get_video_duration(&vpath)?,
+                };
                 if duration <= 0.0 {
                     return Err("视频时长为 0".to_string());
                 }

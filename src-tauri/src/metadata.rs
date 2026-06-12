@@ -1,7 +1,7 @@
 use nom_exif::{EntryValue, MediaParser, MediaSource, TrackInfo, TrackInfoTag};
 use std::path::Path;
 
-use crate::media::ffmpeg::{get_video_duration, get_video_resolution};
+use crate::media::ffmpeg::probe_video_info;
 
 pub struct VideoMetadata {
     pub duration: Option<u64>, // Duration in seconds
@@ -70,14 +70,16 @@ pub fn extract_metadata(path: &Path) -> Result<VideoMetadata, String> {
 
     let path_str = path.to_string_lossy();
 
-    if metadata.duration.is_none() {
-        if let Ok(duration) = get_video_duration(path_str.as_ref()) {
-            metadata.duration = Some(duration.round() as u64);
-        }
-    }
+    // 时长或分辨率任一缺失，就用一次 ffmpeg 探测同时补齐两者（避免两次进程）
+    if metadata.duration.is_none() || metadata.width.is_none() || metadata.height.is_none() {
+        let (probed_duration, probed_resolution) = probe_video_info(path_str.as_ref());
 
-    if metadata.width.is_none() || metadata.height.is_none() {
-        if let Ok((width, height)) = get_video_resolution(path_str.as_ref()) {
+        if metadata.duration.is_none() {
+            if let Some(duration) = probed_duration {
+                metadata.duration = Some(duration.round() as u64);
+            }
+        }
+        if let Some((width, height)) = probed_resolution {
             if metadata.width.is_none() {
                 metadata.width = Some(width as u64);
             }

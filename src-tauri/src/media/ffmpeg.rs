@@ -494,13 +494,13 @@ pub async fn capture_random_frames_streaming(
 ///
 /// 使用 `ffmpeg -i` 解析 stderr 中的 `Duration: HH:MM:SS.ss` 行，
 /// 无需依赖 ffprobe。
-pub fn get_video_duration(video_path: &str) -> Result<f64, String> {
+/// 运行 `ffmpeg -i <path> -hide_banner` 并返回其 stderr（视频流信息均在 stderr）。
+/// ffmpeg -i 无输出文件会返回非零退出码，属正常行为。
+fn ffmpeg_info_stderr(video_path: &str) -> String {
     let mut cmd = Command::new(ffmpeg_path());
     cmd.args(&["-i", video_path, "-hide_banner"]);
     hide_console_window(&mut cmd);
 
-    // ffmpeg -i 无输出文件会返回非零退出码，这是正常行为
-    // Duration 信息在 stderr 中
     let output = run_ffmpeg_command(&mut cmd, std::time::Duration::from_secs(10))
         .unwrap_or_else(|_| {
             // 兜底：直接执行不带超时包装
@@ -517,8 +517,21 @@ pub fn get_video_duration(video_path: &str) -> Result<f64, String> {
                 })
         });
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    parse_duration_from_ffmpeg_output(&stderr)
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+/// 一次 `ffmpeg -i` 同时探测时长与分辨率（解析同一份 stderr），
+/// 避免对同一文件分别启动两次 ffmpeg。
+pub fn probe_video_info(video_path: &str) -> (Option<f64>, Option<(u32, u32)>) {
+    let stderr = ffmpeg_info_stderr(video_path);
+    (
+        parse_duration_from_ffmpeg_output(&stderr).ok(),
+        parse_resolution_from_ffmpeg_output(&stderr).ok(),
+    )
+}
+
+pub fn get_video_duration(video_path: &str) -> Result<f64, String> {
+    parse_duration_from_ffmpeg_output(&ffmpeg_info_stderr(video_path))
 }
 
 /// 获取视频分辨率（宽, 高），带 10 秒超时
@@ -526,27 +539,7 @@ pub fn get_video_duration(video_path: &str) -> Result<f64, String> {
 /// 使用 `ffmpeg -i` 解析视频流信息中的 `1920x1080` 片段，
 /// 作为 `nom-exif` 失败时的兜底方案。
 pub fn get_video_resolution(video_path: &str) -> Result<(u32, u32), String> {
-    let mut cmd = Command::new(ffmpeg_path());
-    cmd.args(&["-i", video_path, "-hide_banner"]);
-    hide_console_window(&mut cmd);
-
-    let output = run_ffmpeg_command(&mut cmd, std::time::Duration::from_secs(10))
-        .unwrap_or_else(|_| {
-            let mut cmd2 = Command::new(ffmpeg_path());
-            cmd2.args(&["-i", video_path, "-hide_banner"]);
-            hide_console_window(&mut cmd2);
-            cmd2.stdout(std::process::Stdio::piped())
-                .stderr(std::process::Stdio::piped())
-                .output()
-                .unwrap_or_else(|_| std::process::Output {
-                    status: std::process::ExitStatus::default(),
-                    stdout: Vec::new(),
-                    stderr: Vec::new(),
-                })
-        });
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    parse_resolution_from_ffmpeg_output(&stderr)
+    parse_resolution_from_ffmpeg_output(&ffmpeg_info_stderr(video_path))
 }
 
 /// 从 ffmpeg 输出中解析 `Duration: HH:MM:SS.ss` 格式的时长
@@ -567,8 +560,9 @@ fn parse_duration_from_ffmpeg_output(output: &str) -> Result<f64, String> {
 
 /// 从 ffmpeg 输出中解析视频流分辨率
 fn parse_resolution_from_ffmpeg_output(output: &str) -> Result<(u32, u32), String> {
-    let resolution_re = Regex::new(r"(?P<width>\d{2,5})x(?P<height>\d{2,5})")
-        .map_err(|e| format!("创建分辨率正则失败: {}", e))?;
+    static RESOLUTION_RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+    let resolution_re = RESOLUTION_RE
+        .get_or_init(|| Regex::new(r"(?P<width>\d{2,5})x(?P<height>\d{2,5})").unwrap());
 
     for line in output.lines() {
         let trimmed = line.trim();
