@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tauri::Manager;
 
-use super::encryption::{encrypt_settings, decrypt_settings};
+use super::encryption::{obfuscate_settings, deobfuscate_settings};
 use super::{AppSettings, normalize_scrape_settings, get_settings_path};
 
 #[tauri::command]
@@ -31,7 +31,7 @@ pub async fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
     };
 
     // 解密API Key
-    decrypt_settings(&mut settings);
+    deobfuscate_settings(&mut settings);
     normalize_scrape_settings(&mut settings.scrape);
 
     Ok(settings)
@@ -47,7 +47,7 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
     }
 
     // 加密API Key后再保存
-    encrypt_settings(&mut settings);
+    obfuscate_settings(&mut settings);
     normalize_scrape_settings(&mut settings.scrape);
 
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;

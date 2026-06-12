@@ -269,7 +269,7 @@ pub struct AIProvider {
     pub provider: String,
     pub name: String,
     #[serde(rename = "apiKey")]
-    pub api_key: String, // 存储时已加密
+    pub api_key: String, // 存储时混淆（非真正加密，见 encryption.rs 警示）
     pub endpoint: Option<String>,
     pub model: String,
     pub priority: u32,
