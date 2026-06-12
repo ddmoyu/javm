@@ -1194,7 +1194,7 @@ pub async fn rs_stop_scrape_task(
     // 如果是当前运行的任务，停止队列
     let state = queue_state.manager.lock().await;
     if let Some(manager) = state.as_ref() {
-        if manager.current_task().await == Some(task_id) {
+        if manager.is_task_running(&task_id).await {
             manager.stop().await;
         }
     }

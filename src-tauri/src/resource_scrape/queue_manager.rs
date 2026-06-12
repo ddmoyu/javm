@@ -28,7 +28,8 @@ use tokio::sync::Mutex;
 pub struct TaskQueueManager {
     app: AppHandle,
     db: Database,
-    current_task_id: Arc<Mutex<Option<String>>>,
+    /// 当前在途（正在处理）的任务 ID 集合，支持任务级并发
+    in_flight: Arc<Mutex<std::collections::HashSet<String>>>,
     is_running: Arc<Mutex<bool>>,
     is_stopped: Arc<Mutex<bool>>,
 }
@@ -40,7 +41,7 @@ impl TaskQueueManager {
         Ok(Self {
             app,
             db,
-            current_task_id: Arc::new(Mutex::new(None)),
+            in_flight: Arc::new(Mutex::new(std::collections::HashSet::new())),
             is_running: Arc::new(Mutex::new(false)),
             is_stopped: Arc::new(Mutex::new(false)),
         })
@@ -68,7 +69,10 @@ impl TaskQueueManager {
 
     /// 启动队列处理
     ///
-    /// 按顺序处理任务，直到队列为空、被暂停或被停止。
+    /// 任务级有界并发：同时最多处理 `scrape.concurrent` 个任务，
+    /// 直到队列为空或被停止。任务的网络抓取/翻译/下载等 I/O 延迟得以重叠。
+    /// 每个任务前先原子认领（置为运行中），避免并发循环重复取到同一任务；
+    /// 视频表与任务表的 path 均为唯一，故并发任务必然作用于不同视频，无写冲突。
     pub async fn start(&self) -> Result<(), String> {
         log::info!("[scrape_queue] event=start_requested");
 
@@ -89,96 +93,113 @@ impl TaskQueueManager {
             *is_stopped = false;
         }
 
+        // 并发度取自设置（1~10），为 1 时等价于串行
+        let concurrent = {
+            let settings = crate::settings::get_settings(self.app.clone())
+                .await
+                .unwrap_or_default();
+            (settings.scrape.concurrent.max(1) as usize).clamp(1, 10)
+        };
+        log::info!("[scrape_queue] event=concurrency_configured concurrent={}", concurrent);
+
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrent));
+        let mut set: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+
         loop {
-            // 处理下一个任务前检查是否已停止
-            {
-                let is_stopped = self.is_stopped.lock().await;
-                if *is_stopped {
-                    log::info!("[scrape_queue] event=queue_stopped_by_user");
-                    self.emit_queue_status("stopped").await;
-                    self.set_running(false).await;
-                    return Ok(());
-                }
+            if *self.is_stopped.lock().await {
+                break;
             }
 
-            let next_task = self.get_next_waiting_task_from_db()?;
+            // 先抢占一个并发槽位，避免提前把过多任务标记为运行中
+            let Ok(permit) = semaphore.clone().acquire_owned().await else {
+                break;
+            };
 
-            let Some(task_id) = next_task else {
-                log::info!("[scrape_queue] event=no_waiting_task");
+            // 等待槽位期间可能已被停止，再次确认
+            if *self.is_stopped.lock().await {
+                drop(permit);
+                break;
+            }
+
+            let Some(task_id) = self.claim_next_task().await? else {
+                drop(permit);
                 break;
             };
 
             log::info!("[scrape_queue] event=task_started task_id={}", task_id);
+            self.in_flight.lock().await.insert(task_id.clone());
 
-            {
-                let mut current = self.current_task_id.lock().await;
-                *current = Some(task_id.clone());
-            }
+            let this = self.clone();
+            set.spawn(async move {
+                let _permit = permit;
+                this.run_one_task(task_id).await;
+            });
+        }
 
-            if let Err(e) = self.process_task(&task_id).await {
-                log::error!("[scrape_queue] event=task_failed task_id={} error={}", task_id, e);
+        // 等待所有在途任务结束
+        while set.join_next().await.is_some() {}
 
-                if e.contains("stopped") {
-                    // 将已停止的任务重置为等待状态
-                    let _ = self
-                        .db
-                        .update_scrape_task_status(&task_id, ScrapeStatus::Waiting, Some(0))
-                        .await;
+        if *self.is_stopped.lock().await {
+            log::info!("[scrape_queue] event=queue_stopped_by_user");
+            self.emit_queue_status("stopped").await;
+        } else {
+            log::info!("[scrape_queue] event=queue_completed");
+            self.emit_queue_status("completed").await;
+        }
+        self.set_running(false).await;
+        Ok(())
+    }
 
-                    {
-                        let mut current = self.current_task_id.lock().await;
-                        *current = None;
-                    }
+    /// 原子认领下一个等待任务：取出后立即置为运行中，
+    /// 避免并发循环在下一轮 `get_next_waiting_task_from_db` 时重复取到它。
+    async fn claim_next_task(&self) -> Result<Option<String>, String> {
+        let Some(task_id) = self.get_next_waiting_task_from_db()? else {
+            log::info!("[scrape_queue] event=no_waiting_task");
+            return Ok(None);
+        };
+        self.db
+            .update_scrape_task_status(&task_id, ScrapeStatus::Running, Some(0))
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(Some(task_id))
+    }
 
-                    self.emit_queue_status("stopped").await;
-                    self.set_running(false).await;
-                    return Ok(());
-                } else {
-                    // 更新任务状态为失败
-                    let _ = self
-                        .db
-                        .update_scrape_task_status(&task_id, ScrapeStatus::Failed, None)
-                        .await;
+    /// 执行单个任务并处理其结果（供并发驱动）。
+    async fn run_one_task(&self, task_id: String) {
+        if let Err(e) = self.process_task(&task_id).await {
+            log::error!("[scrape_queue] event=task_failed task_id={} error={}", task_id, e);
 
-                    // 发送失败事件到前端
-                    if let Err(emit_err) = self.app.emit(
-                        "scrape-task-failed",
-                        serde_json::json!({
-                            "task_id": task_id,
-                            "error": e
-                        }),
-                    ) {
-                        log::error!(
-                            "[scrape_queue] event=emit_task_failed_event_failed task_id={} error={}",
-                            task_id,
-                            emit_err
-                        );
-                    }
+            if e.contains("stopped") {
+                // 被停止的任务重置为等待状态，便于下次重跑
+                let _ = self
+                    .db
+                    .update_scrape_task_status(&task_id, ScrapeStatus::Waiting, Some(0))
+                    .await;
+            } else {
+                let _ = self
+                    .db
+                    .update_scrape_task_status(&task_id, ScrapeStatus::Failed, None)
+                    .await;
 
-                    self.log_error(&task_id, "Task failed", &e).await;
+                if let Err(emit_err) = self.app.emit(
+                    "scrape-task-failed",
+                    serde_json::json!({
+                        "task_id": task_id,
+                        "error": e
+                    }),
+                ) {
+                    log::error!(
+                        "[scrape_queue] event=emit_task_failed_event_failed task_id={} error={}",
+                        task_id,
+                        emit_err
+                    );
                 }
-            }
 
-            {
-                let mut current = self.current_task_id.lock().await;
-                *current = None;
-            }
-
-            // 任务完成后检查是否已停止
-            {
-                let is_stopped = self.is_stopped.lock().await;
-                if *is_stopped {
-                    self.emit_queue_status("stopped").await;
-                    self.set_running(false).await;
-                    return Ok(());
-                }
+                self.log_error(&task_id, "Task failed", &e).await;
             }
         }
 
-        log::info!("[scrape_queue] event=queue_completed");
-        self.emit_queue_status("completed").await;
-        self.set_running(false).await;
-        Ok(())
+        self.in_flight.lock().await.remove(&task_id);
     }
 
     /// 从数据库获取下一个等待中的任务（按创建时间倒序）
@@ -198,10 +219,9 @@ impl TaskQueueManager {
         *is_stopped = true;
     }
 
-    /// 获取当前正在处理的任务 ID
-    pub async fn current_task(&self) -> Option<String> {
-        let current = self.current_task_id.lock().await;
-        current.clone()
+    /// 判断指定任务当前是否在途（正在处理）
+    pub async fn is_task_running(&self, task_id: &str) -> bool {
+        self.in_flight.lock().await.contains(task_id)
     }
 
     /// 处理单个任务
