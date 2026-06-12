@@ -207,34 +207,54 @@ async fn proxy_preview_images_to_files(
     thumbs: &[String],
     _referer: &str,
 ) -> (Vec<String>, Option<Vec<String>>) {
-    let mut display_urls = Vec::with_capacity(thumbs.len());
-    let mut remote_urls = Vec::with_capacity(thumbs.len());
-    let mut has_remote_urls = false;
+    // 先过滤空白、定下输出顺序，并标记每个条目是否为远程 http(s)
+    let entries: Vec<(String, bool)> = thumbs
+        .iter()
+        .filter_map(|thumb| {
+            let trimmed = thumb.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
+            let is_remote = trimmed.starts_with("http://") || trimmed.starts_with("https://");
+            Some((trimmed.to_string(), is_remote))
+        })
+        .collect();
 
-    for thumb in thumbs {
-        let trimmed = thumb.trim();
-        if trimmed.is_empty() {
+    let has_remote_urls = entries.iter().any(|(_, is_remote)| *is_remote);
+    let remote_urls: Vec<String> = entries.iter().map(|(url, _)| url.clone()).collect();
+    // display 默认与 remote 对齐（回退为原 URL/原值），仅成功代理的远程图按 idx 覆盖，
+    // 保证两向量长度与顺序始终一致，不受并发完成顺序影响。
+    let mut display_urls: Vec<String> = remote_urls.clone();
+
+    // 有界并发代理下载远程图（原先串行逐张，10-20 张预览时是主要耗时）
+    let client = std::sync::Arc::new(client.clone());
+    let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+    let mut handles = Vec::new();
+    for (idx, (url, is_remote)) in entries.into_iter().enumerate() {
+        if !is_remote {
             continue;
         }
-
-        if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-            has_remote_urls = true;
-            remote_urls.push(trimmed.to_string());
-
-            match proxy_image_to_file(client, trimmed).await {
-                Ok(local_path) => display_urls.push(local_path),
+        let client = client.clone();
+        let sem = semaphore.clone();
+        handles.push(tokio::spawn(async move {
+            let _permit = sem.acquire_owned().await.ok()?;
+            match proxy_image_to_file(client.as_ref(), &url).await {
+                Ok(local_path) => Some((idx, local_path)),
                 Err(e) => {
                     log::warn!(
                         "[scrape_search] event=preview_proxy_failed url={} error={}",
-                        trimmed,
+                        url,
                         e
                     );
-                    display_urls.push(trimmed.to_string());
+                    None
                 }
             }
-        } else {
-            display_urls.push(trimmed.to_string());
-            remote_urls.push(trimmed.to_string());
+        }));
+    }
+
+    for handle in handles {
+        if let Ok(Some((idx, local_path))) = handle.await {
+            display_urls[idx] = local_path;
         }
     }
 
