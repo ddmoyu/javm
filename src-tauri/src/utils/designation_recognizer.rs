@@ -307,13 +307,7 @@ JAV番号的常见格式包括：
             .map_err(|e| format!("Failed to parse Claude response: {}", e))?;
 
         if let Some(content) = result["content"][0]["text"].as_str() {
-            let designation = content.trim();
-            if designation.to_lowercase().contains("未找到")
-                || designation.to_lowercase().contains("not found")
-            {
-                return Err("AI could not identify designation".to_string());
-            }
-            return Ok(designation.to_uppercase());
+            return self.normalize_ai_designation(content);
         }
 
         Err("Invalid Claude API response format".to_string())
@@ -358,16 +352,40 @@ JAV番号的常见格式包括：
             .map_err(|e| format!("Failed to parse OpenAI response: {}", e))?;
 
         if let Some(content) = result["choices"][0]["message"]["content"].as_str() {
-            let designation = content.trim();
-            if designation.to_lowercase().contains("未找到")
-                || designation.to_lowercase().contains("not found")
-            {
-                return Err("AI could not identify designation".to_string());
-            }
-            return Ok(designation.to_uppercase());
+            return self.normalize_ai_designation(content);
         }
 
         Err("Invalid OpenAI API response format".to_string())
+    }
+
+    /// 校验并规范化 AI 返回的番号
+    ///
+    /// AI 可能返回一句话、换行或多个番号，此处复用与正则识别相同的校验规则：
+    /// 1. 先判断是否为"未找到/not found"
+    /// 2. 直接用 `is_valid_designation` 校验 trim 后的结果
+    /// 3. 校验不通过时，用正则从 AI 回复里再抽取一次番号
+    /// 4. 仍失败则返回"未识别"错误（与"未找到"相同的处理）
+    fn normalize_ai_designation(&self, content: &str) -> Result<String, String> {
+        let designation = content.trim();
+
+        if designation.to_lowercase().contains("未找到")
+            || designation.to_lowercase().contains("not found")
+        {
+            return Err("AI could not identify designation".to_string());
+        }
+
+        // 直接校验 AI 返回的整段内容
+        let upper = designation.to_uppercase();
+        if self.is_valid_designation(&upper) {
+            return Ok(upper);
+        }
+
+        // 校验不通过，尝试用正则从 AI 回复里再抽取一次番号
+        if let Some(extracted) = self.recognize_with_regex(designation) {
+            return Ok(extracted);
+        }
+
+        Err("AI could not identify designation".to_string())
     }
 
     /// 组合识别方法（先正则后 AI）

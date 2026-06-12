@@ -263,8 +263,9 @@ pub async fn resolve_video_preview_images(
 /// 删除单个预览图文件
 #[tauri::command]
 pub async fn delete_thumb(db: State<'_, Database>, thumb_path: String) -> AppResult<()> {
-    let conn = db.get_connection()?;
+    let db = db.inner().clone();
     tokio::task::spawn_blocking(move || {
+        let conn = db.get_connection()?;
         let p = std::path::Path::new(&thumb_path);
         crate::video::service::validate_path_within_managed_dirs(&conn, p)?;
         if p.exists() {
@@ -278,8 +279,9 @@ pub async fn delete_thumb(db: State<'_, Database>, thumb_path: String) -> AppRes
 
 #[tauri::command]
 pub async fn clear_thumbs(db: State<'_, Database>, video_path: String) -> AppResult<()> {
-    let conn = db.get_connection()?;
+    let db = db.inner().clone();
     tokio::task::spawn_blocking(move || {
+        let conn = db.get_connection()?;
         let video_path_obj = std::path::Path::new(&video_path);
         crate::video::service::validate_path_within_managed_dirs(&conn, video_path_obj)?;
         let extrafanart_dir = crate::media::assets::extrafanart_dir_for_video(video_path_obj)

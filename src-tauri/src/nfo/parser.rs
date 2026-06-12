@@ -164,7 +164,9 @@ pub fn parse_nfo(nfo_path: &Path, duration: &mut Option<i32>) -> Option<NfoData>
                         }
                         // 番号从 uniqueid 标签获取
                         "uniqueid" | "num" => {
-                            local_id = Some(text);
+                            if local_id.is_none() {
+                                local_id = Some(text);
+                            }
                         }
                         "studio" if studio.is_none() => {
                             studio = Some(text);
