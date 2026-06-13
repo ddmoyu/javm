@@ -145,18 +145,30 @@ const handleVideoPlay = async (video: Video) => {
   }
 }
 
-const applySavedScrollPosition = async () => {
-  await nextTick()
+// 恢复滚动并以容器真实 scrollTop 同步虚拟化基准，保证两者一致
+const restoreScrollAndSync = () => {
   const container = containerRef.value
   if (!container) {
     return
   }
 
-  if (container.scrollTop !== savedScrollTop.value) {
+  if (savedScrollTop.value > 0 && container.scrollTop !== savedScrollTop.value) {
     container.scrollTop = savedScrollTop.value
   }
 
+  // 关键：scrollTop.value 必须取自容器实际滚动值，否则虚拟化按错误偏移渲染，
+  // 行被放到视口之外，表现为切回后空白、需手动滚动才显示
   scrollTop.value = container.scrollTop
+}
+
+// KeepAlive 切回时用双 rAF：第一帧等本帧布局（totalHeight 等）落地后恢复滚动，
+// 第二帧再兜底同步一次（此时 ResizeObserver 已更新容器尺寸），避免 nextTick 微任务
+// 早于布局/尺寸测量导致基准读到旧值。
+const applySavedScrollPosition = () => {
+  requestAnimationFrame(() => {
+    restoreScrollAndSync()
+    requestAnimationFrame(restoreScrollAndSync)
+  })
 }
 
 const syncLayout = async () => {
@@ -176,11 +188,17 @@ watch([() => props.items.length, columns, () => props.viewMode, containerWidth, 
 
 // KeepAlive 重新激活后同步滚动和容器尺寸，避免隐藏期间恢复为空白
 onActivated(() => {
-  void applySavedScrollPosition()
+  applySavedScrollPosition()
 })
 
 onDeactivated(() => {
-  savedScrollTop.value = containerRef.value?.scrollTop ?? savedScrollTop.value
+  // 注意：KeepAlive 停用时，Vue 已先把本组件 DOM 移入分离容器，此刻 container.scrollTop
+  // 多半已被重置为 0。若用它覆盖 savedScrollTop 会把真实滚动进度清零（切回即丢失）。
+  // 实际滚动位置已由 handleScroll 持续记录，这里仅在仍能读到有效值时才更新。
+  const current = containerRef.value?.scrollTop ?? 0
+  if (current > 0) {
+    savedScrollTop.value = current
+  }
 })
 
 defineExpose({
