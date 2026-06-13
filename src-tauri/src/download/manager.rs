@@ -245,17 +245,29 @@ impl DownloadManager {
 
                         let app_next = app_state.clone();
                         let manager_clone = (*manager_state).clone();
-                        tokio::spawn(async move {
-                            manager_clone.schedule_next(app_next).await;
-                        });
+                        // 释放名额后尽量填满所有空闲并发槽（而非只补一个），
+                        // 避免空闲槽位闲置、并发数达不到设置值。
+                        manager_clone.pump(app_next);
                     }
                 });
 
                 let mut active = manager.active_tasks.lock().await;
                 active.insert(task_id_for_map.clone(), handle);
-            } else {
             }
         })
+    }
+
+    /// 按当前可用并发名额派发等量调度器，尽快填满空闲并发槽。
+    /// 多次调用安全：多余调度器在队列为空或无可用名额时空转即返回。
+    pub fn pump(&self, app: tauri::AppHandle) {
+        let available = self.semaphore.available_permits();
+        for _ in 0..available {
+            let manager = self.clone();
+            let app = app.clone();
+            tokio::spawn(async move {
+                manager.schedule_next(app).await;
+            });
+        }
     }
 }
 
@@ -872,7 +884,17 @@ fn configure_download_process(cmd: &mut tokio::process::Command) {
 }
 
 #[cfg(not(windows))]
-fn configure_download_process(_: &mut tokio::process::Command) {}
+fn configure_download_process(cmd: &mut tokio::process::Command) {
+    // 让下载器成为独立进程组组长（pgid = 子进程 pid），停止时可用
+    // kill -<pgid> 杀掉它派生的 ffmpeg 等子进程，对齐 Windows 的 taskkill /T。
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.as_std_mut().process_group(0);
+    }
+    #[cfg(not(unix))]
+    let _ = cmd;
+}
 
 async fn terminate_child_process(child: &mut tokio::process::Child) -> Result<(), String> {
     #[cfg(windows)]
@@ -888,6 +910,25 @@ async fn terminate_child_process(child: &mut tokio::process::Child) -> Result<()
                     return Ok(());
                 }
                 Ok(_) | Err(_) => {
+                    // 回退到直接结束主进程
+                }
+            }
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        // 下载器以独立进程组启动（见 configure_download_process），
+        // 用 kill -KILL -<pgid> 杀掉整组，连同其派生的 ffmpeg 等子进程。
+        if let Some(pid) = child.id() {
+            let mut cmd = tokio::process::Command::new("kill");
+            cmd.args(["-KILL", &format!("-{}", pid)]);
+            match cmd.status().await {
+                Ok(status) if status.success() => {
+                    let _ = child.wait().await;
+                    return Ok(());
+                }
+                _ => {
                     // 回退到直接结束主进程
                 }
             }

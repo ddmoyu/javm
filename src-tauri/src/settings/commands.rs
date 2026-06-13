@@ -64,6 +64,8 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
         manager
             .set_max_concurrent(settings.download.concurrent.max(1) as usize)
             .await;
+        // 并发数可能被调高，主动填满空闲并发槽，让排队中的任务立即开始
+        manager.pump(app.clone());
     }
 
     Ok(())
