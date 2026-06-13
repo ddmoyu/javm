@@ -152,28 +152,47 @@ jobs:
         timeout-minutes: 5
         run: |
           $repo = '${{ github.repository }}'
-          $releaseId = '${{ needs.prepare_release.outputs.release_id }}'
+          $tag = "${{ github.ref_name }}"
 
-          if ([string]::IsNullOrWhiteSpace($releaseId)) {
-            Write-Host '缺少 release_id，跳过资产清理。'
-            exit 0
-          }
-
-          Write-Host "正在清理 release $releaseId 的资产..."
+          Write-Host "检查 release $tag 是否存在..."
           
           try {
+            $releaseJson = gh api "repos/$repo/releases/tags/$tag" 2>$null
+            
+            if ([string]::IsNullOrWhiteSpace($releaseJson)) {
+              Write-Host 'Release 不存在，跳过清理。'
+              exit 0
+            }
+            
+            $release = $releaseJson | ConvertFrom-Json
+            $releaseId = $release.id
+            
+            if ([string]::IsNullOrWhiteSpace($releaseId)) {
+              Write-Host '无法获取 release ID，跳过清理。'
+              exit 0
+            }
+            
+            Write-Host "找到 release ID: $releaseId，检查资产..."
+            
             $assetsJson = gh api "repos/$repo/releases/$releaseId/assets" 2>$null
+            
+            if ([string]::IsNullOrWhiteSpace($assetsJson)) {
+              Write-Host 'API 返回空响应，跳过清理。'
+              exit 0
+            }
+            
             $assets = $assetsJson | ConvertFrom-Json
             
-            if ($assets -and $assets.Count -gt 0) {
-              foreach ($asset in $assets) {
-                if ($asset.id -and $asset.name) {
-                  Write-Host "删除资产: $($asset.name) (ID: $($asset.id))"
-                  gh api --method DELETE "repos/$repo/releases/$releaseId/assets/$($asset.id)" 2>$null
-                }
-              }
-            } else {
+            if ($null -eq $assets -or $assets.Count -eq 0) {
               Write-Host '该 release 没有已存在的资产。'
+              exit 0
+            }
+            
+            foreach ($asset in $assets) {
+              if ($asset.id -and $asset.name) {
+                Write-Host "删除资产: $($asset.name) (ID: $($asset.id))"
+                gh api --method DELETE "repos/$repo/releases/$releaseId/assets/$($asset.id)" 2>$null
+              }
             }
           } catch {
             Write-Host "清理资产时出现异常（可忽略）: $_"
