@@ -156,12 +156,15 @@ impl DownloadManager {
             }
         }
 
-        // 3. 取消 tokio 任务
-        {
+        // 3. 取消 tokio 任务，并等待其真正结束，确保所占并发名额(permit)被释放，
+        //    这样调用方随后 pump() 时能看到这个空出来的并发槽。
+        let handle = {
             let mut active = self.active_tasks.lock().await;
-            if let Some(handle) = active.remove(task_id) {
-                handle.abort();
-            }
+            active.remove(task_id)
+        };
+        if let Some(handle) = handle {
+            handle.abort();
+            let _ = handle.await;
         }
 
         Ok(())

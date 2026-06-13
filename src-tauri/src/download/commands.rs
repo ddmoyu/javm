@@ -497,6 +497,13 @@ fn extract_filename_from_url(url: &str) -> Option<String> {
 
 #[tauri::command]
 pub async fn pause_download_task(app: AppHandle, task_id: String) -> Result<(), String> {
+    // 暂停必须真正停止下载进程并释放并发名额（保留 .tmp 分片以便续传），
+    // 否则只改状态、进程仍在下，最终会翻成"已完成"覆盖暂停状态。
+    if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {
+        let _ = manager.stop_task(&task_id).await;
+        manager.pump(app.clone());
+    }
+
     let db = Database::new(&app).map_err(|e| e.to_string())?;
     let conn = db.get_connection().map_err(|e| e.to_string())?;
 
@@ -561,6 +568,13 @@ pub async fn resume_download_task(app: AppHandle, task_id: String) -> Result<(),
 
 #[tauri::command]
 pub async fn cancel_download_task(app: AppHandle, task_id: String) -> Result<(), String> {
+    // 取消必须真正停止下载进程并释放并发名额，否则只改状态、进程仍在下，
+    // 最终会翻成"已完成"覆盖取消状态。
+    if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {
+        let _ = manager.stop_task(&task_id).await;
+        manager.pump(app.clone());
+    }
+
     let db = Database::new(&app).map_err(|e| e.to_string())?;
     let conn = db.get_connection().map_err(|e| e.to_string())?;
 
@@ -580,6 +594,8 @@ pub async fn cancel_download_task(app: AppHandle, task_id: String) -> Result<(),
 pub async fn stop_download_task(app: AppHandle, task_id: String) -> Result<(), String> {
     if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {
         manager.stop_task(&task_id).await?;
+        // 停止释放了一个并发名额，立即把排队任务顶上，避免空槽闲置
+        manager.pump(app.clone());
     }
 
     let db = Database::new(&app).map_err(|e| e.to_string())?;
@@ -656,6 +672,8 @@ pub async fn delete_download_task(app: AppHandle, task_id: String) -> Result<(),
     // 否则删除仅移除 DB 记录，下载进程变孤儿继续运行，且占用目录导致无法删除。
     if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {
         let _ = manager.stop_task(&task_id).await;
+        // 删除运行中的任务同样释放了并发名额，顶上排队任务
+        manager.pump(app.clone());
     }
 
     let db = Database::new(&app).map_err(|e| e.to_string())?;
@@ -701,14 +719,7 @@ pub async fn delete_download_task(app: AppHandle, task_id: String) -> Result<(),
 /// 重命名进行中（下载中/合并中/失败重试）的任务时，把工作目录（含 .tmp 分片）
 /// 从旧文件名目录整体迁移到新文件名目录，使下载器可基于已下载分片续传，避免清零重下。
 /// 返回 Ok(true) 表示已迁移（旧目录存在且移动成功），Ok(false) 表示无需迁移。
-fn move_inprogress_download_dir(
-    save_path: &str,
-    old_filename: &str,
-    new_filename: &str,
-) -> Result<bool, String> {
-    let old_dir = crate::download::resolve_task_save_dir(save_path, Some(old_filename));
-    let new_dir = crate::download::resolve_task_save_dir(save_path, Some(new_filename));
-
+fn move_work_dir(old_dir: &std::path::Path, new_dir: &std::path::Path) -> Result<bool, String> {
     if old_dir == new_dir || !old_dir.exists() {
         return Ok(false);
     }
@@ -718,9 +729,9 @@ fn move_inprogress_download_dir(
     }
     // 目标目录若已存在（如同名旧任务的残留），先清理以便整体迁移
     if new_dir.exists() {
-        std::fs::remove_dir_all(&new_dir).map_err(|e| format!("清理目标目录失败: {}", e))?;
+        std::fs::remove_dir_all(new_dir).map_err(|e| format!("清理目标目录失败: {}", e))?;
     }
-    std::fs::rename(&old_dir, &new_dir).map_err(|e| {
+    std::fs::rename(old_dir, new_dir).map_err(|e| {
         format!(
             "迁移下载目录失败: {} -> {}: {}",
             old_dir.display(),
@@ -729,6 +740,16 @@ fn move_inprogress_download_dir(
         )
     })?;
     Ok(true)
+}
+
+fn move_inprogress_download_dir(
+    save_path: &str,
+    old_filename: &str,
+    new_filename: &str,
+) -> Result<bool, String> {
+    let old_dir = crate::download::resolve_task_save_dir(save_path, Some(old_filename));
+    let new_dir = crate::download::resolve_task_save_dir(save_path, Some(new_filename));
+    move_work_dir(&old_dir, &new_dir)
 }
 
 #[tauri::command]
@@ -912,26 +933,68 @@ pub async fn change_download_save_path(
             return Err("已完成的任务无法修改保存路径".to_string());
         }
         2 | 3 | 7 => {
-            // Downloading, Merging, Retrying: stop, reset, rename, and enqueue
+            // 下载中/合并中/失败重试：先停止旧进程
             if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {
                 let _ = manager.stop_task(&task_id).await;
             }
 
-            conn.execute(
-                "UPDATE downloads SET save_path = ?, status = 0, downloaded_bytes = 0, progress = 0, error_message = NULL, updated_at = datetime('now') WHERE id = ?",
-                rusqlite::params![new_save_path, task_id],
-            )
-            .map_err(|e| e.to_string())?;
+            // 把工作目录（含 .tmp 分片）迁到新 save_path 下的同名目录以保留进度，
+            // 迁移失败（被占用/不存在）则回退为重新下载。
+            let preserved = match filename.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+                Some(name) => {
+                    let old_dir = crate::download::resolve_task_save_dir(&old_save_path, Some(name));
+                    let new_dir = crate::download::resolve_task_save_dir(&new_save_path, Some(name));
+                    move_work_dir(&old_dir, &new_dir).unwrap_or_else(|e| {
+                        log::warn!(
+                            "[download] event=change_path_move_dir_failed task_id={} action=restart_fresh error={}",
+                            task_id,
+                            e
+                        );
+                        false
+                    })
+                }
+                None => false,
+            };
+
+            if preserved {
+                conn.execute(
+                    "UPDATE downloads SET save_path = ?, status = 0, error_message = NULL, updated_at = datetime('now') WHERE id = ?",
+                    rusqlite::params![new_save_path, task_id],
+                )
+                .map_err(|e| e.to_string())?;
+            } else {
+                conn.execute(
+                    "UPDATE downloads SET save_path = ?, status = 0, downloaded_bytes = 0, progress = 0, error_message = NULL, updated_at = datetime('now') WHERE id = ?",
+                    rusqlite::params![new_save_path, task_id],
+                )
+                .map_err(|e| e.to_string())?;
+            }
 
             app.emit("download-task-path-changed", &task_id)
                 .map_err(|e| e.to_string())?;
 
+            let (downloaded, total, progress): (u64, u64, f64) = if preserved {
+                conn.query_row(
+                    "SELECT downloaded_bytes, total_bytes, progress FROM downloads WHERE id = ?",
+                    [&task_id],
+                    |row| {
+                        Ok((
+                            row.get::<_, i64>(0).unwrap_or(0) as u64,
+                            row.get::<_, Option<i64>>(1)?.unwrap_or(0) as u64,
+                            row.get::<_, Option<f64>>(2)?.unwrap_or(0.0),
+                        ))
+                    },
+                )
+                .unwrap_or((0, 0, 0.0))
+            } else {
+                (0, 0, 0.0)
+            };
             let progress_payload = crate::download::manager::DownloadProgress {
                 task_id: task_id.clone(),
-                progress: 0.0,
+                progress,
                 speed: 0,
-                downloaded: 0,
-                total: 0,
+                downloaded,
+                total,
                 status: 0,
             };
             app.emit("download-progress", &progress_payload).ok();
