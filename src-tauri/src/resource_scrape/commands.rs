@@ -125,7 +125,8 @@ fn is_valid_search_result(result: &SearchResult) -> bool {
 }
 
 fn compute_search_result_detail_score(result: &SearchResult) -> i32 {
-    let has_previews = !result.thumbs.is_empty();
+    let preview_count = result.thumbs.len();
+    let has_previews = preview_count > 0;
     let mut score = 0;
 
     if has_text(&result.title) {
@@ -146,8 +147,10 @@ fn compute_search_result_detail_score(result: &SearchResult) -> i32 {
     if has_text(&result.cover_url) || has_text(&result.poster_url) {
         score += 10;
     }
+    // 预览图：有预览给基础分，再按数量递增（更多预览图更详细），封顶 24 分。
+    // 1 张=13，2 张=14 …… 12 张及以上=24。让预览更丰富的数据源得分更高。
     if has_previews {
-        score += 24;
+        score += 12 + (preview_count.min(12) as i32);
     }
     if has_text(&result.director) {
         score += 6;

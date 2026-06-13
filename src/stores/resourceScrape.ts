@@ -35,6 +35,13 @@ interface BackendSearchResult {
 }
 
 function sortResourceResults(items: ResourceItem[]): ResourceItem[] {
+    // 各数据源的累计得分（含用户手动选用带来的偏好加分），用作同等详细时的排序依据
+    const settingsStore = useSettingsStore()
+    const sourceScore = new Map<string, number>()
+    for (const s of settingsStore.settings.scrape.sites ?? []) {
+        sourceScore.set(s.id, s.avgScore ?? 0)
+    }
+
     return [...items].sort((left, right) => {
         const scoreDiff = (right.detailScore ?? 0) - (left.detailScore ?? 0)
         if (scoreDiff !== 0) return scoreDiff
@@ -44,6 +51,10 @@ function sortResourceResults(items: ResourceItem[]): ResourceItem[] {
 
         const ratingDiff = (right.rating ?? 0) - (left.rating ?? 0)
         if (ratingDiff !== 0) return ratingDiff
+
+        // 详细度相同时，历史得分更高、被用户更常选用的数据源结果排前面
+        const srcDiff = (sourceScore.get(right.source ?? '') ?? 0) - (sourceScore.get(left.source ?? '') ?? 0)
+        if (srcDiff !== 0) return srcDiff
 
         return (left.source ?? '').localeCompare(right.source ?? '', 'zh-CN')
     })
@@ -216,6 +227,34 @@ function accumulateSourceScores(searchResults: ResourceItem[]) {
     if (changed) {
         settingsStore.updateSettings({
             scrape: { ...settingsStore.settings.scrape, sites: updatedSites }
+        })
+    }
+}
+
+/**
+ * 用户手动选用某数据源的结果保存时，给该源加一点偏好分（封顶 100）。
+ * 这样被用户更常选用的数据源得分更高、排名/默认优先级更靠前。
+ */
+function boostSelectedSourceScore(sourceId: string | undefined, boost = 4) {
+    const id = sourceId?.trim()
+    if (!id) return
+    const settingsStore = useSettingsStore()
+    const sites = settingsStore.settings.scrape.sites
+    if (!sites?.length) return
+
+    let changed = false
+    const updated = sites.map(site => {
+        if (site.id !== id) return site
+        const prev = site.avgScore ?? 0
+        const next = Math.min(100, prev + boost)
+        if (next === prev) return site
+        changed = true
+        return { ...site, avgScore: next, scrapeCount: site.scrapeCount ?? 0 }
+    })
+
+    if (changed) {
+        settingsStore.updateSettings({
+            scrape: { ...settingsStore.settings.scrape, sites: updated }
         })
     }
 }
@@ -399,6 +438,8 @@ export const useResourceScrapeStore = defineStore('resourceScrape', () => {
     async function scrapeSave(videoId: string, metadata: ResourceItem) {
         try {
             await invoke('rs_scrape_save', { videoId, metadata })
+            // 手动选用并保存即视为对该数据源的偏好，给它加一点分
+            boostSelectedSourceScore(metadata.source)
             toast.success('刮削保存成功', {
                 description: `视频 ${videoId} 的元数据已保存`
             })
