@@ -298,6 +298,8 @@ onMounted(async () => {
 })
 
 // 刮削设置
+// 默认刮削网站的特殊取值：自动选择丰富度得分最高的数据源（与后端 AUTO_HIGHEST_SCORE_SITE 对应）
+const AUTO_SCRAPE_SITE = '__auto_highest_score__'
 const enabledScrapeSites = computed(() => {
   return (localSettings.value.scrape.sites || []).filter(site => site.enabled)
 })
@@ -315,7 +317,8 @@ const ensureValidDefaultScrapeSite = () => {
     return false
   }
 
-  if (!enabled.some(site => site.id === localSettings.value.scrape.defaultSite)) {
+  if (localSettings.value.scrape.defaultSite !== AUTO_SCRAPE_SITE
+    && !enabled.some(site => site.id === localSettings.value.scrape.defaultSite)) {
     localSettings.value.scrape.defaultSite = enabled[0].id
   }
 
@@ -745,7 +748,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
                 <div class="flex items-center justify-between">
                   <div>
                     <p class="font-medium">默认刮削网站</p>
-                    <p class="text-sm text-muted-foreground">详情刮削、自动刮削和任务队列优先使用这个已启用的网站</p>
+                    <p class="text-sm text-muted-foreground">详情刮削、自动刮削和任务队列优先使用此网站；选「自动（最高分）」则用累计得分最高的数据源</p>
                   </div>
                   <Select :model-value="localSettings.scrape.defaultSite"
                     @update:model-value="(v) => { localSettings.scrape.defaultSite = String(v); saveScrapeSettings() }">
@@ -753,6 +756,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem :value="AUTO_SCRAPE_SITE">自动（最高分）</SelectItem>
                       <SelectItem v-for="site in enabledScrapeSites"
                         :key="site.id" :value="site.id">
                         {{ site.name }}
