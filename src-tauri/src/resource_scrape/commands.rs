@@ -1333,7 +1333,12 @@ pub async fn rs_find_video_links(
     let site = site_id.unwrap_or_else(|| "missav".to_string());
     log::info!("[video_finder] event=open_requested code={} site={}", code, site);
     analytics::record_search_resource_link(&app);
-    super::video_finder::open_video_finder_webview(&app, &code, &site)
+    // 复用"HTTP 失败回退 WebView"开关：关闭时即使遇到 CF 也不弹窗
+    let show_on_cf = settings::get_settings(app.clone())
+        .await
+        .map(|s| settings::resolve_scrape_fetch_settings(&s.scrape).webview_fallback_enabled)
+        .unwrap_or(true);
+    super::video_finder::open_video_finder_webview(&app, &code, &site, show_on_cf)
 }
 
 /// 关闭视频查找 WebView 窗口
@@ -1342,10 +1347,160 @@ pub async fn rs_close_video_finder(app: AppHandle) -> Result<(), String> {
     super::video_finder::close_video_finder_webview(&app)
 }
 
-/// 获取支持的视频网站列表
+/// 获取启用的下载源（资源链接站点），按下载成功次数从高到低排序
 #[tauri::command]
-pub async fn rs_get_video_sites() -> Result<Vec<super::video_finder::VideoSite>, String> {
-    Ok(super::video_finder::get_video_sites())
+pub async fn rs_get_video_sites(app: AppHandle) -> Result<Vec<super::video_finder::VideoSite>, String> {
+    let settings = crate::settings::get_settings(app).await?;
+    let mut sources: Vec<_> = settings
+        .download
+        .sources
+        .into_iter()
+        .filter(|s| s.enabled)
+        .collect();
+    sources.sort_by(|a, b| b.success_count.cmp(&a.success_count));
+    Ok(sources
+        .into_iter()
+        .map(|s| super::video_finder::VideoSite {
+            id: s.id,
+            name: s.name,
+            url_template: s.url_template,
+        })
+        .collect())
+}
+
+/// HLS 链接分析结果：用于从一堆捕获到的 m3u8 中识别真实正片（时长最长/分辨率最高）
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HlsInfo {
+    /// 总时长（秒）；0 表示无法确定（直播/解析失败）
+    pub duration_secs: f64,
+    pub width: u32,
+    pub height: u32,
+    /// 是否主播放列表（含多清晰度变体）
+    pub is_master: bool,
+    /// 是否点播完整视频（含 #EXT-X-ENDLIST）
+    pub is_vod: bool,
+}
+
+/// 累加媒体播放列表中所有 #EXTINF 时长
+fn sum_extinf(text: &str) -> f64 {
+    text.lines()
+        .filter_map(|l| l.trim().strip_prefix("#EXTINF:"))
+        .filter_map(|rest| rest.split(',').next())
+        .filter_map(|n| n.trim().parse::<f64>().ok())
+        .sum()
+}
+
+/// 解析 #EXT-X-STREAM-INF 行的 BANDWIDTH 与 RESOLUTION
+fn parse_stream_inf(attrs: &str) -> (u64, u32, u32) {
+    let (mut bandwidth, mut w, mut h) = (0u64, 0u32, 0u32);
+    for part in attrs.split(',') {
+        let p = part.trim();
+        if let Some(v) = p.strip_prefix("BANDWIDTH=") {
+            bandwidth = v.trim().parse().unwrap_or(0);
+        } else if let Some(v) = p.strip_prefix("RESOLUTION=") {
+            if let Some((ws, hs)) = v.trim().split_once('x') {
+                w = ws.trim().parse().unwrap_or(0);
+                h = hs.trim().parse().unwrap_or(0);
+            }
+        }
+    }
+    (bandwidth, w, h)
+}
+
+/// 从 URL 推断分辨率（如 1280x720 或 720p），作为媒体列表无 RESOLUTION 时的回退
+fn parse_resolution_from_url(url: &str) -> (u32, u32) {
+    static RES_WXH: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"(\d{3,4})x(\d{3,4})").unwrap());
+    static RES_P: std::sync::LazyLock<regex::Regex> =
+        std::sync::LazyLock::new(|| regex::Regex::new(r"(\d{3,4})p").unwrap());
+    if let Some(c) = RES_WXH.captures(url) {
+        return (
+            c[1].parse().unwrap_or(0),
+            c[2].parse().unwrap_or(0),
+        );
+    }
+    if let Some(c) = RES_P.captures(url) {
+        return (0, c[1].parse().unwrap_or(0));
+    }
+    (0, 0)
+}
+
+/// 将变体相对路径解析为绝对 URL（相对 m3u8 所在目录）
+fn resolve_relative_url(base: &str, uri: &str) -> String {
+    if uri.starts_with("http://") || uri.starts_with("https://") {
+        return uri.to_string();
+    }
+    match base.rfind('/') {
+        Some(i) => format!("{}/{}", &base[..i], uri.trim_start_matches('/')),
+        None => uri.to_string(),
+    }
+}
+
+/// 抓取并分析单个 m3u8：主列表挑最高码率变体二次抓取求时长，媒体列表直接累加 #EXTINF。
+/// 用于在资源链接界面识别"真实正片"（时长最长、分辨率最高）。
+/// 带 12s 超时抓取 m3u8 文本，避免个别 CDN 不响应时长时间卡在"分析中"
+async fn analyze_fetch(client: &wreq::Client, url: &str) -> Result<String, String> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(12),
+        crate::resource_scrape::fingerprint_client::fetch_html(client, url),
+    )
+    .await
+    .map_err(|_| "分析请求超时".to_string())?
+}
+
+#[tauri::command]
+pub async fn rs_analyze_hls(url: String) -> Result<HlsInfo, String> {
+    let client = crate::resource_scrape::fingerprint_client::shared_client()?;
+    let text = analyze_fetch(&client, &url).await?;
+
+    if text.contains("#EXT-X-STREAM-INF") {
+        // 主列表：选码率最高的变体，二次抓取算时长
+        let lines: Vec<&str> = text.lines().collect();
+        let mut best: Option<(u64, u32, u32, String)> = None;
+        for (i, line) in lines.iter().enumerate() {
+            if let Some(attrs) = line.trim().strip_prefix("#EXT-X-STREAM-INF:") {
+                let (bw, w, h) = parse_stream_inf(attrs);
+                let uri = lines[i + 1..]
+                    .iter()
+                    .map(|x| x.trim())
+                    .find(|x| !x.is_empty() && !x.starts_with('#'))
+                    .unwrap_or("");
+                if !uri.is_empty() {
+                    let better = best.as_ref().map(|(b, ..)| bw > *b).unwrap_or(true);
+                    if better {
+                        best = Some((bw, w, h, uri.to_string()));
+                    }
+                }
+            }
+        }
+
+        if let Some((_, w, h, uri)) = best {
+            let variant_url = resolve_relative_url(&url, &uri);
+            let vtext = analyze_fetch(&client, &variant_url).await.unwrap_or_default();
+            let (rw, rh) = if w > 0 && h > 0 { (w, h) } else { parse_resolution_from_url(&url) };
+            return Ok(HlsInfo {
+                duration_secs: sum_extinf(&vtext),
+                width: rw,
+                height: rh,
+                is_master: true,
+                is_vod: vtext.contains("#EXT-X-ENDLIST"),
+            });
+        }
+
+        let (w, h) = parse_resolution_from_url(&url);
+        return Ok(HlsInfo { duration_secs: 0.0, width: w, height: h, is_master: true, is_vod: false });
+    }
+
+    // 媒体播放列表
+    let (w, h) = parse_resolution_from_url(&url);
+    Ok(HlsInfo {
+        duration_secs: sum_extinf(&text),
+        width: w,
+        height: h,
+        is_master: false,
+        is_vod: text.contains("#EXT-X-ENDLIST"),
+    })
 }
 
 // ==================== 资源链接下载查重 ====================

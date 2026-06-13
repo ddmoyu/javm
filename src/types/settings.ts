@@ -62,6 +62,16 @@ export interface GeneralSettings {
     coverClickToPlay: boolean
 }
 
+/** 下载源（资源链接视频站） */
+export interface DownloadSource {
+    id: string
+    name: string
+    urlTemplate: string
+    enabled: boolean
+    /** 下载成功累计次数：越高排名越靠前 */
+    successCount: number
+}
+
 /** 下载设置 */
 export interface DownloadSettings {
     savePath: string
@@ -71,6 +81,7 @@ export interface DownloadSettings {
     downloaderPriority: string[]
     tools?: DownloaderTool[]
     autoScrape: boolean
+    sources: DownloadSource[]
 }
 
 /** 资源网站配置 */
@@ -169,6 +180,7 @@ export const defaultSettings: AppSettings = {
             },
         ],
         autoScrape: true,
+        sources: [],
     },
     scrape: {
         concurrent: 5,

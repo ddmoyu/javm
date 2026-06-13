@@ -47,6 +47,8 @@ export interface DownloadTask {
     createdAt: string
     startedAt?: string
     completedAt?: string
+    /** 下载链接来源站点 id（资源链接添加时记录，用于下载源成功评分） */
+    sourceSite?: string
 }
 
 /** 下载进度事件 */

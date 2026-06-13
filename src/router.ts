@@ -33,7 +33,7 @@ const router = createRouter({
             name: 'resource-scrape',
             component: () => import('@/views/ResourceScrapeView.vue'),
             meta: {
-                title: '资源刮削',
+                title: '刮削',
             },
         },
         {

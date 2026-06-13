@@ -6,7 +6,7 @@ use tauri::AppHandle;
 use tauri::Manager;
 
 use super::encryption::{obfuscate_settings, deobfuscate_settings};
-use super::{AppSettings, get_settings_path, normalize_ad_filter_settings, normalize_scrape_settings};
+use super::{AppSettings, get_settings_path, normalize_ad_filter_settings, normalize_download_settings, normalize_scrape_settings};
 
 #[tauri::command]
 pub async fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
@@ -34,6 +34,7 @@ pub async fn get_settings(app: AppHandle) -> Result<AppSettings, String> {
     deobfuscate_settings(&mut settings);
     normalize_ad_filter_settings(&mut settings.ad_filter);
     normalize_scrape_settings(&mut settings.scrape);
+    normalize_download_settings(&mut settings.download);
 
     Ok(settings)
 }
@@ -51,6 +52,7 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
     obfuscate_settings(&mut settings);
     normalize_ad_filter_settings(&mut settings.ad_filter);
     normalize_scrape_settings(&mut settings.scrape);
+    normalize_download_settings(&mut settings.download);
 
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
     fs::write(&path, &content).map_err(|e| e.to_string())?;

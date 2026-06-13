@@ -80,6 +80,8 @@ pub fn listen_cf_visibility(
     site: &super::sources::ResourceSite,
     event_name: &str,
     frontend_event_name: Option<&str>,
+    // 遇到 CF 时是否弹出窗口让用户验证；关闭时即使检测到 CF 也保持隐藏
+    show_on_cf: bool,
 ) -> tauri::EventId {
     let window = (*window).clone();
     let app_handle = app.clone();
@@ -120,8 +122,10 @@ pub fn listen_cf_visibility(
                     );
                 }
                 (previous, true) if previous != Some(true) => {
-                    // CF 验证触发时自动显示 WebView 窗口
-                    sync_window_visibility(&window, true);
+                    // CF 验证触发时显示 WebView 窗口（用户关闭"弹窗验证"开关时保持隐藏）
+                    if show_on_cf {
+                        sync_window_visibility(&window, true);
+                    }
                     emit_cf_state(
                         &app_handle,
                         frontend_event_name,
@@ -393,13 +397,31 @@ pub fn build_anti_detection_script() -> String {
             });
             cdcKeys.forEach(function(k) { try { delete window[k]; } catch(e) {} });
 
-            // ── 9. 屏幕尺寸保护（隐藏窗口可能 0×0 被 CF 检测） ──
-            if (window.innerWidth === 0 || window.innerHeight === 0) {
-                Object.defineProperty(window, 'innerWidth', { get: function() { return 1920; }, configurable: true });
-                Object.defineProperty(window, 'innerHeight', { get: function() { return 1080; }, configurable: true });
-                Object.defineProperty(window, 'outerWidth', { get: function() { return 1920; }, configurable: true });
-                Object.defineProperty(window, 'outerHeight', { get: function() { return 1080; }, configurable: true });
-            }
+            // ── 9. 视口/屏幕尺寸：统一上报 ≥1920×1080 ──
+            // 目的有二：①隐藏窗口可能 0×0 被 CF 检测；②很多视频站按 window.innerWidth/
+            // screen.width 决定提供的最高清晰度，小屏/小窗口会被限制到 720p。这里把窗口与
+            // 屏幕尺寸都"垫高"到至少 1080p（只升不降），让站点提供 1080p 变体。
+            (function() {
+                var TW = 1920, TH = 1080;
+                function bump(obj, prop, target) {
+                    try {
+                        var cur = obj[prop] || 0;
+                        if (cur < target) {
+                            Object.defineProperty(obj, prop, { get: function() { return target; }, configurable: true });
+                        }
+                    } catch (e) {}
+                }
+                bump(window, 'innerWidth', TW);
+                bump(window, 'innerHeight', TH);
+                bump(window, 'outerWidth', TW);
+                bump(window, 'outerHeight', TH);
+                if (window.screen) {
+                    bump(window.screen, 'width', TW);
+                    bump(window.screen, 'height', TH);
+                    bump(window.screen, 'availWidth', TW);
+                    bump(window.screen, 'availHeight', TH);
+                }
+            })();
 
             // ── 10. 修正 permissions API 行为（更接近真实浏览器） ──
             if (navigator.permissions) {

@@ -47,7 +47,7 @@ import {
   checkVideoExists,
   type VideoExistCheckResult
 } from '@/lib/tauri'
-import { getDefaultDownloadPath } from '@/lib/tauri'
+import { getDefaultDownloadPath, analyzeHls } from '@/lib/tauri'
 import { useDownloadStore, useSettingsStore } from '@/stores'
 import { toast } from 'vue-sonner'
 
@@ -73,10 +73,14 @@ const duplicateVideoInfo = ref<VideoExistCheckResult['video']>()
 // 保存当前等待确认的回调
 const pendingDownloadContext = ref<{ type: 'single', link: VideoLink } | { type: 'batch' } | null>(null)
 
+// 开发者模式显示真实站点名，否则一律用代号「资源 N」，不暴露真实网站名
+const isDeveloperMode = import.meta.env.DEV
+
 // 当前选中网站名称
 const selectedSiteName = computed(() => {
   const index = sites.value.findIndex(s => s.id === selectedSiteId.value)
-  return index !== -1 ? `资源 ${index + 1}` : '资源 1'
+  if (index === -1) return '资源 1'
+  return isDeveloperMode ? (sites.value[index].name || sites.value[index].id) : `资源 ${index + 1}`
 })
 
 // 可直接预览的 HLS 链接数量
@@ -105,6 +109,81 @@ async function handleCapturedUrl(url: string) {
   const link: VideoLink = { url, linkType, isHls, resolution }
   links.value = [...links.value, link]
 
+  // 获取一个就解析一个：抓取 m3u8 求时长/分辨率，用于识别真实正片
+  if (isHls) {
+    void analyzeLink(url)
+  }
+}
+
+// 以不可变方式更新某条链接（替换数组元素才能可靠触发 Vue 更新）
+function patchLink(url: string, patch: Partial<VideoLink>) {
+  links.value = links.value.map(l => (l.url === url ? { ...l, ...patch } : l))
+}
+
+/** 分析单个 HLS 链接，写回时长/分辨率 */
+async function analyzeLink(url: string) {
+  patchLink(url, { analyzing: true })
+  try {
+    const info = await analyzeHls(url)
+    patchLink(url, {
+      durationSecs: info.durationSecs,
+      width: info.width,
+      height: info.height,
+      isMaster: info.isMaster,
+      isVod: info.isVod,
+      analyzed: true,
+      analyzing: false,
+    })
+  } catch {
+    // 分析失败：清除"分析中"，保留链接供手动选择
+    patchLink(url, { analyzing: false, analyzed: true })
+  }
+}
+
+// 列表排序：识别出的正片排最前，其余按分辨率高、时长长在前
+const sortedLinks = computed(() => {
+  const real = realLink.value
+  return [...links.value].sort((a, b) => {
+    if (real) {
+      if (a.url === real.url) return -1
+      if (b.url === real.url) return 1
+    }
+    const hDiff = (b.height ?? 0) - (a.height ?? 0)
+    if (hDiff !== 0) return hDiff
+    return (b.durationSecs ?? 0) - (a.durationSecs ?? 0)
+  })
+})
+
+// 真实正片：时长最长（≥5 分钟）的那一条；同片多清晰度时优先主列表、再高分辨率
+const realLink = computed(() => {
+  const analyzed = links.value.filter(l => (l.durationSecs ?? 0) > 0)
+  if (!analyzed.length) return null
+  const maxDur = Math.max(...analyzed.map(l => l.durationSecs ?? 0))
+  if (maxDur < 300) return null
+  const candidates = analyzed.filter(l => (l.durationSecs ?? 0) >= maxDur * 0.9)
+  candidates.sort((a, b) => {
+    if (!!b.isMaster !== !!a.isMaster) return (b.isMaster ? 1 : 0) - (a.isMaster ? 1 : 0)
+    const hDiff = (b.height ?? 0) - (a.height ?? 0)
+    if (hDiff !== 0) return hDiff
+    return (b.durationSecs ?? 0) - (a.durationSecs ?? 0)
+  })
+  return candidates[0] ?? null
+})
+
+function formatDuration(secs?: number): string {
+  if (!secs || secs <= 0) return ''
+  const s = Math.round(secs)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  const sec = s % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
+    : `${m}:${String(sec).padStart(2, '0')}`
+}
+
+function formatRes(link: VideoLink): string {
+  if (link.height && link.height > 0) return `${link.height}p`
+  return link.resolution ?? ''
 }
 
 // 开始查找
@@ -135,7 +214,11 @@ async function startFinding() {
 
       cfChallengeActive.value = Boolean(payload.active)
       if (payload.status === 'active') {
-        toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
+        if (settingsStore.settings.scrape.webviewFallbackEnabled) {
+          toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
+        } else {
+          toast.warning('该站点触发了 Cloudflare 验证，但"HTTP 失败回退 WebView"已关闭，未弹出验证窗口')
+        }
       } else if (payload.status === 'passed') {
         toast.success('Cloudflare 验证已通过，继续监听视频链接')
       } else if (payload.status === 'timeout') {
@@ -260,7 +343,7 @@ async function handleAddTasks(ignoreDuplicate: boolean = false) {
 
   for (const url of selectedUrls.value) {
     try {
-      await downloadStore.addTask(url, savePath.value, filename)
+      await downloadStore.addTask(url, savePath.value, filename, selectedSiteId.value)
       success++
     } catch { failed++ }
   }
@@ -313,7 +396,7 @@ async function handleDownloadSingle(link: VideoLink, ignoreDuplicate: boolean = 
   }
 
   try {
-    await downloadStore.addTask(link.url, savePath.value, filename)
+    await downloadStore.addTask(link.url, savePath.value, filename, selectedSiteId.value)
     toast.success('已添加下载任务')
   } catch {
     toast.error('添加任务失败（已存在）')
@@ -403,7 +486,7 @@ onUnmounted(() => {
           <DropdownMenuItem v-for="(site, index) in sites" :key="site.id"
             :class="selectedSiteId === site.id ? 'bg-accent' : ''"
             @click="pickSite(site.id)">
-            资源 {{ index + 1 }}
+            {{ isDeveloperMode ? (site.name || site.id) : `资源 ${index + 1}` }}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -416,8 +499,11 @@ onUnmounted(() => {
         class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900"
       >
         <Globe class="mt-0.5 size-4 shrink-0" />
-        <div>
+        <div v-if="settingsStore.settings.scrape.webviewFallbackEnabled">
           当前页面触发了 Cloudflare 验证，辅助 WebView 已显示。请先在弹出的窗口中完成验证，链接捕获会自动继续。
+        </div>
+        <div v-else>
+          当前页面触发了 Cloudflare 验证，但"HTTP 失败回退 WebView"开关已关闭，未弹出验证窗口，可能无法获取该站点链接。如需手动验证，请在设置中开启该开关。
         </div>
       </div>
 
@@ -425,7 +511,7 @@ onUnmounted(() => {
       <div v-if="scanning && links.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
         <Loader2 class="size-8 animate-spin text-primary" />
         <span class="text-sm text-muted-foreground">{{ cfChallengeActive ? '等待 Cloudflare 验证完成...' : 'WebView 已打开，正在监听 HLS 链接...' }}</span>
-        <span class="text-xs text-muted-foreground">{{ cfChallengeActive ? '请在弹出的窗口中完成验证后返回' : `正在访问 ${selectedSiteName}，请等待页面加载` }}</span>
+        <span class="text-xs text-muted-foreground">{{ cfChallengeActive ? (settingsStore.settings.scrape.webviewFallbackEnabled ? '请在弹出的窗口中完成验证后返回' : '验证弹窗已关闭，可能无法获取该站点链接') : `正在访问 ${selectedSiteName}，请等待页面加载` }}</span>
       </div>
 
       <!-- 未开始 -->
@@ -456,22 +542,31 @@ onUnmounted(() => {
 
         <ScrollArea class="flex-1 min-h-0 rounded-md border">
           <div class="p-2 space-y-1">
-            <ContextMenu v-for="link in links" :key="link.url">
+            <ContextMenu v-for="link in sortedLinks" :key="link.url">
               <ContextMenuTrigger as-child>
                 <div class="flex items-start gap-3 rounded-md p-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
-                  :class="selectedUrls.has(link.url) ? 'bg-primary/5 ring-1 ring-primary/20' : ''"
+                  :class="[
+                    link.url === realLink?.url ? 'ring-2 ring-green-500/70 bg-green-500/5' : (selectedUrls.has(link.url) ? 'bg-primary/5 ring-1 ring-primary/20' : '')
+                  ]"
                   @click="toggleSelect(link.url)">
                   <Checkbox :model-value="selectedUrls.has(link.url)" class="mt-0.5" @click.stop
                     @update:model-value="toggleSelect(link.url)" />
                   <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 mb-1">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
                       <Badge :variant="link.isHls ? 'default' : 'secondary'" class="text-[10px] uppercase">
                         {{ link.linkType }}
                       </Badge>
-                      <Badge v-if="link.resolution" variant="outline" class="text-[10px]">
-                        {{ link.resolution }}
+                      <Badge v-if="formatRes(link)" variant="outline" class="text-[10px]">
+                        {{ formatRes(link) }}
                       </Badge>
-                      <Badge v-if="link.isHls" variant="default" class="text-[10px] bg-green-600">
+                      <Badge v-if="link.analyzing" variant="outline" class="text-[10px]">分析中…</Badge>
+                      <Badge v-else-if="link.durationSecs" variant="outline" class="text-[10px] tabular-nums">
+                        {{ formatDuration(link.durationSecs) }}
+                      </Badge>
+                      <Badge v-if="link.url === realLink?.url" class="text-[10px] bg-green-600">正片</Badge>
+                      <Badge v-else-if="link.analyzed && link.durationSecs && link.durationSecs < 120"
+                        variant="secondary" class="text-[10px]">广告/片段</Badge>
+                      <Badge v-if="link.isHls && link.url !== realLink?.url" variant="default" class="text-[10px] bg-green-600">
                         HLS ✓
                       </Badge>
                     </div>

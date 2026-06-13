@@ -4,6 +4,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type { DownloadTask, DownloadProgress, BatchAction } from '@/types'
 import { TaskStatus } from '@/types'
 import { useVideoStore } from './video'
+import { useSettingsStore } from './settings'
 import {
     getDownloadTasks,
     addDownloadTask,
@@ -89,7 +90,7 @@ export const useDownloadStore = defineStore('download', () => {
         }
     }
 
-    async function addTask(url: string, savePath: string, filename?: string) {
+    async function addTask(url: string, savePath: string, filename?: string, sourceSite?: string) {
         // 前端预检查：是否存在相同 URL 的任务（不管任何状态）
         const existingTask = tasks.value.find(t => t.url === url)
         if (existingTask) {
@@ -108,13 +109,36 @@ export const useDownloadStore = defineStore('download', () => {
         }
 
         try {
-            const taskId = await addDownloadTask(url, savePath, filename)
+            const taskId = await addDownloadTask(url, savePath, filename, sourceSite)
             await fetchTasks()
             return taskId
         } catch (e) {
             console.error('Failed to add download task:', e)
             throw e
         }
+    }
+
+    // 同一会话内已计过分的任务，避免完成事件重复触发（status 可能 6→4→6）导致重复加分
+    const scoredDownloadIds = new Set<string>()
+
+    /** 下载成功后，给来源下载源的成功次数 +1（用于资源链接下拉排序/下载源管理评分） */
+    async function bumpDownloadSourceSuccess(task: DownloadTask) {
+        const sourceId = task.sourceSite?.trim()
+        if (!sourceId || scoredDownloadIds.has(task.id)) return
+        scoredDownloadIds.add(task.id)
+
+        const settingsStore = useSettingsStore()
+        const sources = settingsStore.settings.download.sources
+        if (!sources?.length) return
+        const idx = sources.findIndex(s => s.id === sourceId)
+        if (idx === -1) return
+
+        const updated = sources.map((s, i) =>
+            i === idx ? { ...s, successCount: (s.successCount ?? 0) + 1 } : s
+        )
+        await settingsStore.updateSettings({
+            download: { ...settingsStore.settings.download, sources: updated },
+        })
     }
 
     function updateProgress(progress: DownloadProgress) {
@@ -138,6 +162,8 @@ export const useDownloadStore = defineStore('download', () => {
 
     // 下载任务完成后，检查保存目录是否在目录管理中，如果在则自动刷新
     async function onTaskCompleted(task: DownloadTask) {
+        // 下载成功 → 给来源下载源加分（只加一次）
+        bumpDownloadSourceSuccess(task).catch(e => console.error('[下载完成] 下载源加分失败:', e))
         try {
             const dirs = await getDirectories()
             const savePath = normalizePath(task.savePath)

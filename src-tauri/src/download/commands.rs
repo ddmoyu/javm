@@ -199,6 +199,8 @@ pub struct DownloadTaskResponse {
     pub created_at: String,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
+    /// 下载链接来源站点 id（资源链接添加时记录，用于下载源成功评分）
+    pub source_site: Option<String>,
 }
 
 /// 状态码转状态字符串
@@ -244,7 +246,7 @@ pub async fn get_download_tasks(app: AppHandle) -> Result<Vec<DownloadTaskRespon
         .prepare(
             "SELECT id, url, save_path, filename, total_bytes, downloaded_bytes,
                     status, error_message, downloader_type, retry_count, progress,
-                    created_at, updated_at, completed_at
+                    created_at, updated_at, completed_at, source_site
              FROM downloads
              ORDER BY created_at DESC",
         )
@@ -284,6 +286,7 @@ pub async fn get_download_tasks(app: AppHandle) -> Result<Vec<DownloadTaskRespon
                 created_at: row.get(11)?,
                 started_at: row.get::<_, Option<String>>(12).ok().flatten(),
                 completed_at: row.get(13)?,
+                source_site: row.get::<_, Option<String>>(14).ok().flatten(),
             })
         })
         .map_err(|e| e.to_string())?;
@@ -424,6 +427,7 @@ pub async fn add_download_task(
     url: String,
     save_path: String,
     filename: Option<String>,
+    source_site: Option<String>,
 ) -> Result<String, String> {
     let db = Database::new(&app).map_err(|e| e.to_string())?;
     let conn = db.get_connection().map_err(|e| e.to_string())?;
@@ -453,10 +457,13 @@ pub async fn add_download_task(
         None => None,
     };
 
+    let source_site = source_site
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
     conn.execute(
-        "INSERT INTO downloads (id, url, save_path, filename, status, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 0, datetime('now'), datetime('now'))",
-        rusqlite::params![id, url, save_path, filename_to_save],
+        "INSERT INTO downloads (id, url, save_path, filename, status, source_site, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 0, ?5, datetime('now'), datetime('now'))",
+        rusqlite::params![id, url, save_path, filename_to_save, source_site],
     )
     .map_err(|e| {
         e.to_string()

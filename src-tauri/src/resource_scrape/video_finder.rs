@@ -43,100 +43,40 @@ pub struct VideoSite {
     pub url_template: String,
 }
 
-/// 获取所有支持的视频网站列表
-pub fn get_video_sites() -> Vec<VideoSite> {
-    vec![
-        VideoSite {
-            id: "missav".to_string(),
-            name: "MissAV".to_string(),
-            url_template: "https://missav.ws/{code}".to_string(),
-        },
-        VideoSite {
-            id: "thisav".to_string(),
-            name: "ThisAV".to_string(),
-            url_template: "https://thisav2.com/cn/{code}".to_string(),
-        },
-        VideoSite {
-            id: "njav".to_string(),
-            name: "NJAV".to_string(),
-            url_template: "https://www.njav.com/zh/xvideos/{code}".to_string(),
-        },
-        VideoSite {
-            id: "jable".to_string(),
-            name: "Jable.tv".to_string(),
-            url_template: "https://jable.tv/videos/{code}/".to_string(),
-        },
-        VideoSite {
-            id: "jptt".to_string(),
-            name: "JPTT.tv".to_string(),
-            url_template: "https://jptt.tv/video/{code}".to_string(),
-        },
-        VideoSite {
-            id: "javsb".to_string(),
-            name: "Jav.sb".to_string(),
-            url_template: "https://jav.sb/jav/{code}-1-1.html".to_string(),
-        },
-        VideoSite {
-            id: "123av".to_string(),
-            name: "123AV".to_string(),
-            url_template: "https://123av.com/zh/v/{code}".to_string(),
-        },
-        VideoSite {
-            id: "myjav".to_string(),
-            name: "MyJav.tv".to_string(),
-            url_template: "https://cn.myjav.tv/video/{code}".to_string(),
-        },
-        VideoSite {
-            id: "javgg".to_string(),
-            name: "JavGG".to_string(),
-            url_template: "https://javgg.net/jav/{code}/".to_string(),
-        },
-        VideoSite {
-            id: "javct".to_string(),
-            name: "JavCT".to_string(),
-            url_template: "https://javct.net/v/{code}".to_string(),
-        },
-        VideoSite {
-            id: "javcl".to_string(),
-            name: "JavCL".to_string(),
-            url_template: "https://javcl.com/{code}".to_string(),
-        },
-        VideoSite {
-            id: "javmost".to_string(),
-            name: "JavMost".to_string(),
-            url_template: "https://www.javmost.ws/{CODE}/".to_string(),
-        },
-        VideoSite {
-            id: "javeng".to_string(),
-            name: "JavEng".to_string(),
-            url_template: "https://javeng.tv/jav-eng-sub/{code}/".to_string(),
-        },
-        VideoSite {
-            id: "jpsub".to_string(),
-            name: "JPSub".to_string(),
-            url_template: "https://jpsub.net/{code}".to_string(),
-        },
-    ]
-}
+/// 默认下载源站点（id, 显示名, URL 模板）。`{code}`/`{CODE}` 替换番号。
+/// 列表为代码内置（保证模板可随版本修正）；启用状态与下载成功次数由用户配置
+/// `settings.download.sources` 叠加覆盖。
+pub const DEFAULT_DOWNLOAD_SITES: &[(&str, &str, &str)] = &[
+    ("missav", "MissAV", "https://missav.ws/{code}"),
+    ("thisav", "ThisAV", "https://thisav2.com/cn/{code}"),
+    ("njav", "NJAV", "https://www.njav.com/zh/xvideos/{code}"),
+    ("jable", "Jable.tv", "https://jable.tv/videos/{code}/"),
+    ("jptt", "JPTT.tv", "https://jptt.tv/video/{code}"),
+    ("javsb", "Jav.sb", "https://jav.sb/jav/{code}-1-1.html"),
+    ("123av", "123AV", "https://123av.com/zh/v/{code}"),
+    ("myjav", "MyJav.tv", "https://cn.myjav.tv/video/{code}"),
+    ("javgg", "JavGG", "https://javgg.net/jav/{code}/"),
+    ("javct", "JavCT", "https://javct.net/v/{code}"),
+    ("javmost", "JavMost", "https://www.javmost.ws/{CODE}/"),
+    ("javeng", "JavEng", "https://javeng.tv/jav-eng-sub/{code}/"),
+    ("javfull", "JavFull", "https://javfull.net/{code}/"),
+];
 
 /// 根据网站 ID 和番号构建访问 URL
 ///
 /// URL 模板中 `{code}` 替换为小写番号，`{CODE}` 替换为大写番号
 pub fn build_site_url(site_id: &str, code: &str) -> Result<String, String> {
-    let sites = get_video_sites();
-    let site = sites
+    let (_, _, template) = DEFAULT_DOWNLOAD_SITES
         .iter()
-        .find(|s| s.id == site_id)
+        .find(|(id, _, _)| *id == site_id)
         .ok_or_else(|| format!("未知的视频网站: {}", site_id))?;
-    let url = site
-        .url_template
+    Ok(template
         .replace("{CODE}", &code.to_uppercase())
-        .replace("{code}", &code.to_lowercase());
-    Ok(url)
+        .replace("{code}", &code.to_lowercase()))
 }
 
 /// WebView 窗口标识
-const VIDEO_FINDER_LABEL: &str = "video_finder_webview";
+pub(crate) const VIDEO_FINDER_LABEL: &str = "video_finder_webview";
 
 /// 视频链接查找最大运行时长（秒）
 const FINDER_MAX_RUNTIME_SECS: u64 = 20 * 60;
@@ -146,7 +86,7 @@ const VIDEO_FINDER_CF_STATE_EVENT: &str = "video-finder-cf-state";
 
 /// 注入到 WebView 的 JS 脚本
 /// 拦截 XMLHttpRequest、fetch、HLS.js 等，捕获视频链接并通过 Tauri 事件发送
-const INTERCEPT_JS: &str = r#"
+pub(crate) const INTERCEPT_JS: &str = r#"
 (function() {
     if (window.__CF_CHALLENGE_ACTIVE__) return;
     if (window.__VIDEO_FINDER_INJECTED__) return;
@@ -351,7 +291,13 @@ const INTERCEPT_JS: &str = r#"
 ///
 /// 创建可见的 WebView 窗口访问指定视频网站，
 /// 注入 JS 拦截网络请求，捕获视频链接通过事件推送给前端。
-pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> Result<(), String> {
+pub fn open_video_finder_webview(
+    app: &AppHandle,
+    code: &str,
+    site_id: &str,
+    // 遇到 CF 验证时是否弹出窗口（对应设置中的"HTTP 失败回退 WebView"开关）
+    show_on_cf: bool,
+) -> Result<(), String> {
     let code_owned = code.to_string();
     let site_id_string = site_id.to_string();
     let url_str = build_site_url(site_id, code)?;
@@ -419,6 +365,7 @@ pub fn open_video_finder_webview(app: &AppHandle, code: &str, site_id: &str) -> 
         &resource_site,
         &cf_event_name,
         Some(VIDEO_FINDER_CF_STATE_EVENT),
+        show_on_cf,
     );
     let cf_probe_js = webview_support::build_cf_probe_script(&cf_event_name);
 

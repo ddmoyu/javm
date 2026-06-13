@@ -116,6 +116,53 @@ pub struct DownloadSettings {
     pub tools: Vec<DownloaderTool>,
     #[serde(default = "default_true", rename = "autoScrape", alias = "autoscrape")]
     pub auto_scrape: bool,
+    /// 下载源（资源链接站点）列表，含启用状态与下载成功次数（用于排序/评分）
+    #[serde(default = "default_download_sources")]
+    pub sources: Vec<DownloadSource>,
+}
+
+/// 下载源（资源链接视频站）。模板/名称随版本由代码默认值决定，
+/// 用户仅持久化启用状态与成功次数。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DownloadSource {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "urlTemplate")]
+    pub url_template: String,
+    pub enabled: bool,
+    /// 下载成功累计次数：越高排名越靠前
+    #[serde(rename = "successCount", default)]
+    pub success_count: u32,
+}
+
+fn default_download_sources() -> Vec<DownloadSource> {
+    crate::resource_scrape::video_finder::DEFAULT_DOWNLOAD_SITES
+        .iter()
+        .map(|(id, name, tpl)| DownloadSource {
+            id: id.to_string(),
+            name: name.to_string(),
+            url_template: tpl.to_string(),
+            enabled: true,
+            success_count: 0,
+        })
+        .collect()
+}
+
+/// 合并：以代码默认列表为基准（名称/模板随版本更新），叠加用户保存的启用状态与成功次数。
+/// 不在默认列表中的旧站点会被自然丢弃。
+fn merge_download_sources(saved: &[DownloadSource]) -> Vec<DownloadSource> {
+    let mut merged = default_download_sources();
+    for site in &mut merged {
+        if let Some(s) = saved.iter().find(|x| x.id == site.id) {
+            site.enabled = s.enabled;
+            site.success_count = s.success_count;
+        }
+    }
+    merged
+}
+
+pub fn normalize_download_settings(download: &mut DownloadSettings) {
+    download.sources = merge_download_sources(&download.sources);
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -406,6 +453,7 @@ impl Default for DownloadSettings {
                 },
             ],
             auto_scrape: true,
+            sources: default_download_sources(),
         }
     }
 }

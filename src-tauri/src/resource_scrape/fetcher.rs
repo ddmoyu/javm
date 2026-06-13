@@ -257,6 +257,8 @@ impl Fetcher {
             site,
             &cf_event_name,
             Some(RESOURCE_SCRAPE_CF_STATE_EVENT),
+            // 抓取回退的 WebView 只在 fallback 开启时创建，遇 CF 正常弹窗验证
+            true,
         );
 
         let cf_state = Arc::new(Mutex::new(CfChallengeState::default()));

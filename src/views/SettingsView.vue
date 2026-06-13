@@ -238,6 +238,39 @@ const saveDownloadSettings = () => {
   })
 }
 
+// ===== 下载源管理 =====
+const downloadSourcesOpen = ref(false)
+
+/** 下载源按成功次数降序展示 */
+const sortedDownloadSources = computed(() => {
+  return [...(localSettings.value.download.sources || [])].sort(
+    (a, b) => (b.successCount ?? 0) - (a.successCount ?? 0)
+  )
+})
+
+const toggleDownloadSource = (siteId: string, enabled: boolean) => {
+  const sources = localSettings.value.download.sources || []
+  const site = sources.find(s => s.id === siteId)
+  if (!site) return
+  if (!enabled && sources.filter(s => s.enabled).length <= 1 && site.enabled) {
+    toast.error('至少保留一个启用的下载源')
+    return
+  }
+  site.enabled = enabled
+  saveDownloadSettings()
+}
+
+const toggleAllDownloadSources = (enabled: boolean) => {
+  const sources = localSettings.value.download.sources || []
+  if (!enabled && sources.length > 0) {
+    sources.forEach((s, i) => { s.enabled = i === 0 })
+    toast.warning('已保留一个下载源为启用状态')
+  } else {
+    sources.forEach(s => { s.enabled = enabled })
+  }
+  saveDownloadSettings()
+}
+
 // 初始化时检测所有工具
 onMounted(async () => {
   await settingsStore.loadSettings()
@@ -483,7 +516,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
         <TabsList class="grid w-full grid-cols-5">
           <TabsTrigger value="theme">基础</TabsTrigger>
           <TabsTrigger value="download">下载</TabsTrigger>
-          <TabsTrigger value="scrape">资源刮削</TabsTrigger>
+          <TabsTrigger value="scrape">刮削</TabsTrigger>
           <TabsTrigger value="ai">AI</TabsTrigger>
           <TabsTrigger value="about">关于</TabsTrigger>
         </TabsList>
@@ -680,6 +713,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
 
         <!-- 下载设置 -->
         <TabsContent value="download">
+          <div class="space-y-6">
           <Card>
             <CardContent class="space-y-6">
               <!-- 保存路径 -->
@@ -732,6 +766,48 @@ watch(() => settingsStore.settings, async (newSettings) => {
 
             </CardContent>
           </Card>
+
+          <!-- 下载源管理（折叠） -->
+          <Card>
+            <CardContent class="pt-6">
+              <Collapsible v-model:open="downloadSourcesOpen">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">下载源管理</p>
+                    <p class="text-sm text-muted-foreground">管理资源链接使用的视频站，关闭后不在下拉中出现；按下载成功次数从高到低排序</p>
+                  </div>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <Button variant="outline" size="sm" @click="toggleAllDownloadSources(true)">全部开启</Button>
+                    <Button variant="outline" size="sm" @click="toggleAllDownloadSources(false)">全部关闭</Button>
+                    <CollapsibleTrigger as-child>
+                      <Button variant="ghost" size="sm">
+                        <ChevronsUpDown class="h-4 w-4" />
+                      </Button>
+                    </CollapsibleTrigger>
+                  </div>
+                </div>
+                <CollapsibleContent>
+                  <div class="mt-4 space-y-3 rounded-lg border p-3">
+                    <div v-for="(site, index) in sortedDownloadSources" :key="site.id"
+                      class="flex items-center justify-between gap-4 rounded-md border border-border/60 px-3 py-3">
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-2">
+                          <p class="font-medium">{{ isDeveloperMode ? site.name : `下载源 ${index + 1}` }}</p>
+                          <Badge v-if="isDeveloperMode" variant="outline">{{ site.id }}</Badge>
+                          <Badge v-if="site.successCount" variant="secondary" class="text-xs tabular-nums">
+                            成功 {{ site.successCount }} 次
+                          </Badge>
+                        </div>
+                      </div>
+                      <Switch :model-value="!!site.enabled"
+                        @update:model-value="(v: boolean) => toggleDownloadSource(site.id, v)" />
+                    </div>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+          </div>
         </TabsContent>
 
         <!-- 资源刮削设置 -->
@@ -740,7 +816,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
             <!-- 设置项 -->
             <Card>
               <CardHeader>
-                <CardTitle>资源刮削</CardTitle>
+                <CardTitle>刮削</CardTitle>
                 <CardDescription>配置资源网站和刮削行为</CardDescription>
               </CardHeader>
               <CardContent class="space-y-6">
@@ -789,7 +865,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
                 <div class="flex items-center justify-between gap-4">
                   <div>
                     <p class="font-medium">HTTP 失败回退 WebView</p>
-                    <p class="text-sm text-muted-foreground">遇到 HTTP 抓取失败、Cloudflare 验证或年龄确认页时，弹出窗口让你手动通过后继续抓取</p>
+                    <p class="text-sm text-muted-foreground">遇到 HTTP 抓取失败、Cloudflare 验证或年龄确认页时，弹出窗口让你手动通过后继续抓取；关闭后即使遇到验证也不弹窗（资源链接查找同样适用）</p>
                   </div>
                   <Switch :model-value="!!localSettings.scrape.webviewFallbackEnabled"
                     @update:model-value="(v: boolean) => { localSettings.scrape.webviewFallbackEnabled = v; saveScrapeSettings() }" />

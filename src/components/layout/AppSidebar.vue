@@ -37,7 +37,7 @@ const navItems = [
     path: '/download',
   },
   {
-    title: '资源刮削',
+    title: '刮削',
     icon: Radar,
     path: '/resource-scrape',
   },

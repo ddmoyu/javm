@@ -237,6 +237,7 @@ impl Database {
 
                 downloader_type TEXT DEFAULT 'N_m3u8DL-RE',
                 retry_count INTEGER DEFAULT 0,
+                source_site TEXT,
 
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -244,6 +245,9 @@ impl Database {
             )",
             [],
         )?;
+        // 兼容旧库：为已存在的 downloads 表补 source_site 列（记录下载链接来源站点，用于下载源评分）。
+        // 列已存在时会报错，忽略即可——不必升库版本、不丢用户数据。
+        let _ = conn.execute("ALTER TABLE downloads ADD COLUMN source_site TEXT", []);
         log::info!("[db] event=create_downloads_table_succeeded");
 
         // 5. 刮削任务表

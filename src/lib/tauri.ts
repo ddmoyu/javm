@@ -101,8 +101,8 @@ export async function getDownloadTasks(): Promise<DownloadTask[]> {
 }
 
 /** 娣诲姞涓嬭浇浠诲姟 */
-export async function addDownloadTask(url: string, savePath: string, filename?: string): Promise<string> {
-    return tauriInvoke<string>('add_download_task', { url, savePath, filename })
+export async function addDownloadTask(url: string, savePath: string, filename?: string, sourceSite?: string): Promise<string> {
+    return tauriInvoke<string>('add_download_task', { url, savePath, filename, sourceSite })
 }
 
 export interface ParsedDeepLink {
@@ -234,6 +234,27 @@ export interface VideoLink {
     linkType: string
     isHls: boolean
     resolution: string | null
+    // HLS 分析结果（用于识别真实正片）
+    durationSecs?: number
+    width?: number
+    height?: number
+    isMaster?: boolean
+    isVod?: boolean
+    analyzed?: boolean
+    analyzing?: boolean
+}
+
+export interface HlsInfo {
+    durationSecs: number
+    width: number
+    height: number
+    isMaster: boolean
+    isVod: boolean
+}
+
+/** 抓取并分析单个 m3u8，返回时长/分辨率等，用于识别真实正片 */
+export async function analyzeHls(url: string): Promise<HlsInfo> {
+    return tauriInvoke<HlsInfo>('rs_analyze_hls', { url })
 }
 
 export interface VideoSite {
