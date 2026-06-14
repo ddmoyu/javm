@@ -332,6 +332,8 @@ pub fn open_video_finder_webview(
             .visible(is_visible)
             .user_agent(webview_support::WEBVIEW_USER_AGENT)
             .initialization_script(&anti_detection_js)
+            // 提前注入拦截脚本，确保在页面 JS 执行前就绪，不漏掉初始网络请求
+            .initialization_script(INTERCEPT_JS)
             .data_directory(data_directory);
 
     #[cfg(target_os = "windows")]
