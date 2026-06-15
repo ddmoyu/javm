@@ -34,3 +34,4 @@ reasonix.toml
 
 # CodeGraph 代码索引数据库（机器本地生成）
 .codegraph/
+pin.md
