@@ -559,7 +559,9 @@ jobs:
             -F prerelease=$isPrerelease | Out-Null
 
   cleanup-release:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-release.result != 'success'
+    # 必须用 always()：依赖 job 失败时，不含状态函数的 if 会被 GitHub 隐式 success() 门控跳过，
+    # 导致失败后草稿 Release 无法清理。always() 让本 job 在非成功（含取消）时也执行清理。
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build-release.result != 'success' }}
     needs: [prepare_release, build-release]
     runs-on: windows-latest
     steps:
