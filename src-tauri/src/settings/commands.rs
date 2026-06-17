@@ -548,11 +548,16 @@ pub async fn test_ai_api(request: TestApiRequest) -> Result<TestApiResponse, Str
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecognizeDesignationResponse {
     pub success: bool,
     pub designation: Option<String>,
     pub method: String, // "regex" | "ai" | "failed"
     pub message: String,
+    /// 识别到的语义标记（字幕/版本/VR/分片）
+    pub markers: crate::utils::designation_recognizer::DesignationMarkers,
+    /// 标记转成的标签集合（供展示/筛选）
+    pub tags: Vec<String>,
 }
 
 /// 使用AI识别视频标题中的番号
@@ -594,11 +599,14 @@ pub async fn recognize_designation_with_ai(
 
     // 执行识别
     let result = recognizer.recognize(&title, force_ai).await?;
+    let tags = result.markers.to_tags();
 
     // 转换结果格式
     Ok(RecognizeDesignationResponse {
         success: result.success,
         designation: result.designation,
+        markers: result.markers,
+        tags,
         method: match result.method {
             RecognitionMethod::Regex => "regex".to_string(),
             RecognitionMethod::AI => "ai".to_string(),
