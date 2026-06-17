@@ -506,7 +506,7 @@ async fn capture_cover_as_fallback(app: &tauri::AppHandle, video_path: &str) -> 
 
 /// 执行刮削操作
 async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), String> {
-    use crate::resource_scrape::{fingerprint_client, fetcher::Fetcher, sources::{self, ResourceSite}};
+    use crate::resource_scrape::{fetcher::Fetcher, sources::{self, ResourceSite}};
     use crate::resource_scrape::database_writer::DatabaseWriter;
     use crate::media::assets::save_nfo_for_video;
     use crate::db::Database;
@@ -537,9 +537,8 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         url
     );
 
-    // 创建 Fetcher 获取 HTML
-    let http_client = fingerprint_client::shared_client()?;
-    let fetcher = Fetcher::new(http_client);
+    // 创建 Fetcher 获取 HTML（HTTP 抓取由反爬引擎统一编排）
+    let fetcher = Fetcher::new();
     // 自动刮削无搜索取消语义，传永不取消的令牌以保持原有抓取行为
     let scrape_cancel = tokio_util::sync::CancellationToken::new();
 

@@ -156,9 +156,10 @@ pub fn run() {
         .setup(|app| {
             let initial_settings = tauri::async_runtime::block_on(crate::settings::get_settings(app.handle().clone())).ok();
 
-            // 初始化全局代理缓存
+            // 初始化全局代理缓存与反爬工具箱
             if let Ok(config_dir) = app.path().app_config_dir() {
                 utils::proxy::init(&config_dir);
+                resource_scrape::anti_block::init(&config_dir);
             }
 
             // 视频链接探测模式（仅 dev）：设置 JAVM_LINK_PROBE 时进入无头批量探测，

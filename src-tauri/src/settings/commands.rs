@@ -57,9 +57,10 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
     let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
     fs::write(&path, &content).map_err(|e| e.to_string())?;
 
-    // 刷新全局代理缓存
+    // 刷新全局代理缓存与反爬工具箱配置
     if let Ok(config_dir) = app.path().app_config_dir() {
         crate::utils::proxy::refresh(&config_dir);
+        crate::resource_scrape::anti_block::refresh(&config_dir);
     }
 
     if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {

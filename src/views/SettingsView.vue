@@ -51,6 +51,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { Textarea } from '@/components/ui/textarea'
 import AIConfigDialog from '@/components/AIConfigDialog.vue'
 import { selectDirectory } from '@/lib/tauri'
 import { THEME_OPTIONS, VIEW_MODE_OPTIONS, COVER_TYPE_OPTIONS } from '@/utils/constants'
@@ -128,7 +129,11 @@ const localSettings = ref({
   download: { ...settingsStore.settings.download },
   scrape: {
     ...settingsStore.settings.scrape,
-    sites: settingsStore.settings.scrape.sites?.map(s => ({ ...s })) || []
+    sites: settingsStore.settings.scrape.sites?.map(s => ({ ...s })) || [],
+    antiBlock: {
+      ...settingsStore.settings.scrape.antiBlock,
+      proxies: [...(settingsStore.settings.scrape.antiBlock?.proxies || [])],
+    },
   },
   ai: { ...settingsStore.settings.ai },
 })
@@ -289,7 +294,11 @@ onMounted(async () => {
     download: { ...settingsStore.settings.download },
     scrape: {
       ...settingsStore.settings.scrape,
-      sites: settingsStore.settings.scrape.sites?.map(s => ({ ...s })) || []
+      sites: settingsStore.settings.scrape.sites?.map(s => ({ ...s })) || [],
+      antiBlock: {
+        ...settingsStore.settings.scrape.antiBlock,
+        proxies: [...(settingsStore.settings.scrape.antiBlock?.proxies || [])],
+      },
     },
     ai: { ...settingsStore.settings.ai },
   }
@@ -396,6 +405,24 @@ const saveScrapeSettings = () => {
   settingsStore.updateSettings({ scrape: localSettings.value.scrape })
 }
 
+// ===== 反爬工具箱 =====
+// 代理列表文本（每行一个），与 antiBlock.proxies 数组互转
+const antiBlockProxiesText = ref(
+  (localSettings.value.scrape.antiBlock?.proxies || []).join('\n')
+)
+// store 重载时同步文本
+watch(() => settingsStore.settings.scrape.antiBlock?.proxies, (proxies) => {
+  antiBlockProxiesText.value = (proxies || []).join('\n')
+})
+// 提交代理列表：按行解析、去空白后保存
+const saveAntiBlockProxies = () => {
+  localSettings.value.scrape.antiBlock.proxies = antiBlockProxiesText.value
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+  saveScrapeSettings()
+}
+
 // 脚本管理辅助函数已移除（改为资源网站管理）
 
 // AI 设置
@@ -487,7 +514,11 @@ watch(() => settingsStore.settings, async (newSettings) => {
     download: { ...newSettings.download },
     scrape: {
       ...newSettings.scrape,
-      sites: newSettings.scrape.sites?.map(s => ({ ...s })) || []
+      sites: newSettings.scrape.sites?.map(s => ({ ...s })) || [],
+      antiBlock: {
+        ...newSettings.scrape.antiBlock,
+        proxies: [...(newSettings.scrape.antiBlock?.proxies || [])],
+      },
     },
     ai: { ...newSettings.ai },
   }
@@ -918,6 +949,105 @@ watch(() => settingsStore.settings, async (newSettings) => {
                       <Switch :model-value="!!localSettings.scrape.devShowWebview"
                         @update:model-value="(v: boolean) => { localSettings.scrape.devShowWebview = v; saveScrapeSettings() }" />
                     </div>
+                  </div>
+                </template>
+              </CardContent>
+            </Card>
+
+            <!-- 反爬工具箱 -->
+            <Card>
+              <CardHeader>
+                <CardTitle>反爬工具箱</CardTitle>
+                <CardDescription>提升抓取稳定性与抗封禁能力，对所有数据源与下载源生效</CardDescription>
+              </CardHeader>
+              <CardContent class="space-y-6">
+                <!-- 总开关 -->
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <p class="font-medium">启用反爬工具箱</p>
+                    <p class="text-sm text-muted-foreground">关闭后退化为直连抓取，不限速、不重试（与旧版本行为一致）</p>
+                  </div>
+                  <Switch :model-value="!!localSettings.scrape.antiBlock.enabled"
+                    @update:model-value="(v: boolean) => { localSettings.scrape.antiBlock.enabled = v; saveScrapeSettings() }" />
+                </div>
+
+                <template v-if="localSettings.scrape.antiBlock.enabled">
+                  <Separator />
+
+                  <!-- 请求限速 -->
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <p class="font-medium">请求间隔限速</p>
+                      <p class="text-sm text-muted-foreground">对同一站点的连续请求随机延迟，礼貌爬取以降低被限频/封禁概率</p>
+                    </div>
+                    <Switch :model-value="!!localSettings.scrape.antiBlock.rateLimitEnabled"
+                      @update:model-value="(v: boolean) => { localSettings.scrape.antiBlock.rateLimitEnabled = v; saveScrapeSettings() }" />
+                  </div>
+                  <div v-if="localSettings.scrape.antiBlock.rateLimitEnabled"
+                    class="flex items-center justify-between gap-4 pl-1">
+                    <p class="text-sm text-muted-foreground">间隔区间（毫秒）</p>
+                    <div class="flex items-center gap-2">
+                      <Input type="number" min="0" class="w-24"
+                        v-model.number="localSettings.scrape.antiBlock.minIntervalMs" @blur="saveScrapeSettings" />
+                      <span class="text-muted-foreground">~</span>
+                      <Input type="number" min="0" class="w-24"
+                        v-model.number="localSettings.scrape.antiBlock.maxIntervalMs" @blur="saveScrapeSettings" />
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <!-- 失败重试 -->
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <p class="font-medium">失败重试次数</p>
+                      <p class="text-sm text-muted-foreground">网络错误、限频(429)、服务器错误(5xx)时自动分级退避重试，上限 5 次</p>
+                    </div>
+                    <Input type="number" min="0" max="5" class="w-24"
+                      v-model.number="localSettings.scrape.antiBlock.maxRetries" @blur="saveScrapeSettings" />
+                  </div>
+
+                  <Separator />
+
+                  <!-- UA / 指纹轮换 -->
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <p class="font-medium">UA / 指纹轮换</p>
+                      <p class="text-sm text-muted-foreground">在多个近期 Chrome 指纹之间轮换，模拟不同访客</p>
+                    </div>
+                    <Switch :model-value="!!localSettings.scrape.antiBlock.uaRotationEnabled"
+                      @update:model-value="(v: boolean) => { localSettings.scrape.antiBlock.uaRotationEnabled = v; saveScrapeSettings() }" />
+                  </div>
+
+                  <Separator />
+
+                  <!-- 镜像域名轮换 -->
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <p class="font-medium">镜像域名轮换</p>
+                      <p class="text-sm text-muted-foreground">站点主域名不可用时自动切换到备用镜像，并记忆当前可用域名</p>
+                    </div>
+                    <Switch :model-value="!!localSettings.scrape.antiBlock.mirrorRotationEnabled"
+                      @update:model-value="(v: boolean) => { localSettings.scrape.antiBlock.mirrorRotationEnabled = v; saveScrapeSettings() }" />
+                  </div>
+
+                  <Separator />
+
+                  <!-- 代理池 -->
+                  <div class="flex items-center justify-between gap-4">
+                    <div>
+                      <p class="font-medium">代理池</p>
+                      <p class="text-sm text-muted-foreground">配置多个代理后按成功率加权挑选并自动避开失效代理；留空则沿用「网络代理」设置</p>
+                    </div>
+                    <Switch :model-value="!!localSettings.scrape.antiBlock.proxyPoolEnabled"
+                      @update:model-value="(v: boolean) => { localSettings.scrape.antiBlock.proxyPoolEnabled = v; saveScrapeSettings() }" />
+                  </div>
+                  <div v-if="localSettings.scrape.antiBlock.proxyPoolEnabled" class="space-y-2">
+                    <p class="text-sm font-medium">代理列表（每行一个）</p>
+                    <Textarea v-model="antiBlockProxiesText" :rows="4"
+                      placeholder="http://127.0.0.1:7890&#10;socks5://127.0.0.1:1080"
+                      class="font-mono text-sm" @blur="saveAntiBlockProxies" />
+                    <p class="text-xs text-muted-foreground">支持 http/https/socks5 协议；保存后按成功率自动加权选择</p>
                   </div>
                 </template>
               </CardContent>

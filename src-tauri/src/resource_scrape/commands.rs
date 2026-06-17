@@ -384,7 +384,7 @@ pub async fn rs_search_resource(
     let mut handles = Vec::new();
     for source in search_sources {
         let client = http_client.clone();
-        let fetcher = Fetcher::new(client.clone());
+        let fetcher = Fetcher::new();
         let code = code.clone();
         let app = app.clone();
         let token = token.clone();

@@ -202,6 +202,87 @@ pub struct ScrapeSettings {
     /// 资源链接查找器上次选择的视频站点 id（与 sites 不同，独立的视频源列表）
     #[serde(rename = "linkFinderSite", default = "default_link_finder_site")]
     pub link_finder_site: String,
+    /// 反爬工具箱配置（限速/退避/UA 轮换/代理池/镜像轮换）
+    #[serde(rename = "antiBlock", default)]
+    pub anti_block: AntiBlockSettings,
+}
+
+/// 反爬工具箱设置。字段与 `resource_scrape::anti_block::config::AntiBlockConfig` 对应，
+/// 由引擎在启动/保存时从 settings.json 读取。
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AntiBlockSettings {
+    /// 总开关：关闭后退化为系统代理直连 + 不限速 + 不重试
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// 请求间隔限速开关
+    #[serde(rename = "rateLimitEnabled", default = "default_true")]
+    pub rate_limit_enabled: bool,
+    /// 同一 host 两次请求的最小间隔（毫秒）
+    #[serde(rename = "minIntervalMs", default = "default_anti_block_min_interval")]
+    pub min_interval_ms: u64,
+    /// 同一 host 两次请求的最大间隔（毫秒）
+    #[serde(rename = "maxIntervalMs", default = "default_anti_block_max_interval")]
+    pub max_interval_ms: u64,
+    /// 失败最大重试次数（不含首次）
+    #[serde(rename = "maxRetries", default = "default_anti_block_max_retries")]
+    pub max_retries: u32,
+    /// UA / 指纹轮换开关
+    #[serde(rename = "uaRotationEnabled", default = "default_true")]
+    pub ua_rotation_enabled: bool,
+    /// 多镜像域名轮换开关
+    #[serde(rename = "mirrorRotationEnabled", default = "default_true")]
+    pub mirror_rotation_enabled: bool,
+    /// 成功率加权代理池开关
+    #[serde(rename = "proxyPoolEnabled", default)]
+    pub proxy_pool_enabled: bool,
+    /// 代理 URL 列表
+    #[serde(default)]
+    pub proxies: Vec<String>,
+}
+
+fn default_anti_block_min_interval() -> u64 {
+    800
+}
+
+fn default_anti_block_max_interval() -> u64 {
+    2000
+}
+
+fn default_anti_block_max_retries() -> u32 {
+    2
+}
+
+impl Default for AntiBlockSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            rate_limit_enabled: true,
+            min_interval_ms: 800,
+            max_interval_ms: 2000,
+            max_retries: 2,
+            ua_rotation_enabled: true,
+            mirror_rotation_enabled: true,
+            proxy_pool_enabled: false,
+            proxies: Vec::new(),
+        }
+    }
+}
+
+fn normalize_anti_block_settings(anti_block: &mut AntiBlockSettings) {
+    if anti_block.min_interval_ms > anti_block.max_interval_ms {
+        std::mem::swap(&mut anti_block.min_interval_ms, &mut anti_block.max_interval_ms);
+    }
+    anti_block.max_interval_ms = anti_block.max_interval_ms.min(60_000);
+    anti_block.min_interval_ms = anti_block.min_interval_ms.min(anti_block.max_interval_ms);
+    anti_block.max_retries = anti_block.max_retries.min(5);
+
+    let mut seen = std::collections::HashSet::new();
+    let proxies = std::mem::take(&mut anti_block.proxies);
+    anti_block.proxies = proxies
+        .into_iter()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty() && seen.insert(p.clone()))
+        .collect();
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -248,6 +329,7 @@ fn normalize_scrape_settings(scrape: &mut ScrapeSettings) {
     scrape.concurrent = scrape.concurrent.clamp(1, 10);
     scrape.max_webview_windows = scrape.max_webview_windows.clamp(1, 8);
     scrape.sites = merge_scrape_sites(&scrape.sites);
+    normalize_anti_block_settings(&mut scrape.anti_block);
 
     if scrape.scraper_priority.is_empty() {
         scrape.scraper_priority = scrape.sites.iter().map(|site| site.id.clone()).collect();
@@ -476,6 +558,7 @@ impl Default for ScrapeSettings {
             default_site: default_scrape_default_site(),
             sites: default_scrape_sites(),
             link_finder_site: default_link_finder_site(),
+            anti_block: AntiBlockSettings::default(),
         }
     }
 }

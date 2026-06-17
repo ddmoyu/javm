@@ -10,7 +10,6 @@
 //! - `process_task` 改用 Fetcher + Source Parser 获取元数据
 
 use crate::db::{Database, ScrapeStatus};
-use crate::resource_scrape::fingerprint_client;
 use crate::resource_scrape::database_writer::DatabaseWriter;
 use crate::resource_scrape::detector::ScrapedVideoDetector;
 use crate::resource_scrape::fetcher::Fetcher;
@@ -313,9 +312,8 @@ impl TaskQueueManager {
             url
         );
 
-        // 创建 Fetcher 获取 HTML
-        let http_client = fingerprint_client::shared_client()?;
-        let fetcher = Fetcher::new(http_client);
+        // 创建 Fetcher 获取 HTML（HTTP 抓取由反爬引擎统一编排）
+        let fetcher = Fetcher::new();
         // 队列用 is_stopped 标志控制流程，此处传永不取消的令牌以保持原有抓取行为
         let scrape_cancel = tokio_util::sync::CancellationToken::new();
 

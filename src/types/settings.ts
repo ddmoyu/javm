@@ -99,6 +99,19 @@ export interface ResourceSite {
     scrapeCount?: number
 }
 
+/** 反爬工具箱设置 */
+export interface AntiBlockSettings {
+    enabled: boolean                // 总开关
+    rateLimitEnabled: boolean       // 请求间隔限速
+    minIntervalMs: number           // 同站点两次请求最小间隔（毫秒）
+    maxIntervalMs: number           // 同站点两次请求最大间隔（毫秒）
+    maxRetries: number              // 失败最大重试次数
+    uaRotationEnabled: boolean      // UA / 指纹轮换
+    mirrorRotationEnabled: boolean  // 多镜像域名轮换
+    proxyPoolEnabled: boolean       // 成功率加权代理池
+    proxies: string[]               // 代理 URL 列表
+}
+
 /** 刮削设置 */
 export interface ScrapeSettings {
     concurrent: number
@@ -110,6 +123,7 @@ export interface ScrapeSettings {
     defaultSite: string        // 默认刮削网站（如 "javbus"）
     sites: ResourceSite[]      // 资源网站列表
     linkFinderSite: string     // 资源链接查找器上次选择的视频站点 id
+    antiBlock: AntiBlockSettings // 反爬工具箱配置
 }
 
 /** AI 设置 */
@@ -207,6 +221,17 @@ export const defaultSettings: AppSettings = {
             { id: 'freejavbt', name: '数据源 8', enabled: true },
             { id: 'javlibrary', name: '数据源 9', enabled: true },
         ],
+        antiBlock: {
+            enabled: true,
+            rateLimitEnabled: true,
+            minIntervalMs: 800,
+            maxIntervalMs: 2000,
+            maxRetries: 2,
+            uaRotationEnabled: true,
+            mirrorRotationEnabled: true,
+            proxyPoolEnabled: false,
+            proxies: [],
+        },
     },
     ai: {
         providers: [],

@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::cf_detection;
 use super::sources::ResourceSite;
-use super::fingerprint_client;
+use super::anti_block;
 use super::webview_support;
 
 #[derive(Debug, Clone, Copy)]
@@ -22,11 +22,12 @@ pub struct FetchOptions {
     pub max_webview_windows: usize,
 }
 
-/// 双模式获取器：wreq HTTP + WebView 回退
-pub struct Fetcher {
-    /// wreq TLS 指纹 HTTP 客户端
-    http_client: wreq::Client,
-}
+/// 双模式获取器：HTTP（反爬引擎）+ WebView 回退
+///
+/// HTTP 抓取统一委托给 `anti_block` 引擎（限速/退避/UA 轮换/代理池/镜像），
+/// 故无需持有 client；仅在 HTTP 失败或遇 CF 时回退到 WebView。
+#[derive(Default)]
+pub struct Fetcher;
 
 /// WebView 获取超时时间（秒）。dev 下放长，便于手动调试。
 const WEBVIEW_TIMEOUT_SECS: u64 = if cfg!(debug_assertions) { 180 } else { 60 };
@@ -193,13 +194,8 @@ impl WebviewPoolState {
 
 impl Fetcher {
     /// 创建新的获取器
-    pub fn new(http_client: wreq::Client) -> Self {
-        Self { http_client }
-    }
-
-    /// HTTP 模式获取网页 HTML（使用 wreq Chrome TLS 指纹）
-    pub async fn fetch_http(&self, url: &str) -> Result<String, String> {
-        fingerprint_client::fetch_html(&self.http_client, url).await
+    pub fn new() -> Self {
+        Self
     }
 
     /// WebView 模式获取网页 HTML
@@ -425,7 +421,7 @@ impl Fetcher {
             return Err("搜索已取消".to_string());
         }
 
-        match self.fetch_http(url).await {
+        match anti_block::engine().fetch_text(url, &site.id, cancel).await {
             Ok(html) => {
                 // wreq 成功拿到响应，检查是否是 CF 验证页或错页
                 if cf_detection::is_cloudflare_challenge_html(&html) {
