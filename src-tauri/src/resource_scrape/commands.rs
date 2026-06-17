@@ -357,6 +357,27 @@ fn associate_search_evidence(
     }
 }
 
+/// 归一化搜索输入番号：补连字符（`ssis666` → `SSIS-666`），让无连字符输入与标准写法
+/// 得到一致的搜索结果。**保守**：仅当识别结果与原输入「去连字符大写后一致」（即只是重整
+/// 连字符、未另抽成别的番号）才采用；否则原样大写返回，避免误伤 FC2-PPV、素人数字前缀等。
+fn normalize_search_code(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let fallback = trimmed.to_uppercase();
+    let recognizer = crate::utils::designation_recognizer::DesignationRecognizer::new();
+    if let Some(recognized) = recognizer.recognize_with_regex(trimmed) {
+        let canon = |s: &str| -> String {
+            s.chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .flat_map(|c| c.to_uppercase())
+                .collect()
+        };
+        if canon(&recognized) == canon(trimmed) {
+            return recognized;
+        }
+    }
+    fallback
+}
+
 #[tauri::command]
 pub async fn rs_search_resource(
     app: AppHandle,
@@ -364,10 +385,12 @@ pub async fn rs_search_resource(
     source: Option<String>,
     search_cancel: tauri::State<'_, SearchCancelState>,
 ) -> Result<(), String> {
-    let code = code.trim().to_uppercase();
-    if code.is_empty() {
+    let trimmed = code.trim();
+    if trimmed.is_empty() {
         return Err("番号不能为空".to_string());
     }
+    // 归一化：让 ssis666 与 ssis-666 走到同一个正确番号
+    let code = normalize_search_code(trimmed);
 
     // 取消上一次搜索
     {
@@ -910,6 +933,26 @@ pub(crate) fn prepare_video_for_scrape_save(
 #[cfg(test)]
 mod tests {
     use super::normalize_result_url;
+    use super::normalize_search_code;
+
+    #[test]
+    fn search_code_inserts_missing_hyphen() {
+        // 核心修复：无连字符与标准写法归一到同一番号
+        assert_eq!(normalize_search_code("ssis666"), "SSIS-666");
+        assert_eq!(normalize_search_code("ssis-666"), "SSIS-666");
+        assert_eq!(normalize_search_code("SSIS-666"), "SSIS-666");
+        assert_eq!(normalize_search_code("  ssis666  "), "SSIS-666");
+    }
+
+    #[test]
+    fn search_code_preserves_special_forms() {
+        // 保守：不把 FC2-PPV 抽成 FC2-xxx，原样保留（仅大写）
+        assert_eq!(normalize_search_code("FC2-PPV-1234567"), "FC2-PPV-1234567");
+        // 素人数字前缀无连字符时不被截成 JAC-132，原样保留
+        assert_eq!(normalize_search_code("390jac132"), "390JAC132");
+        // 已规范的素人写法保持
+        assert_eq!(normalize_search_code("390JAC-132"), "390JAC-132");
+    }
 
     #[test]
     fn normalize_result_url_resolves_relative_detail_link() {
