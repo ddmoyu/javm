@@ -147,7 +147,9 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
                     JOIN genres g ON vg.genre_id = g.id
                     WHERE vg.video_id = v.id
                 ) as genres,
-                v.fast_hash
+                v.fast_hash,
+                v.cover_width,
+                v.cover_height
             FROM videos v
         "#;
         // 注意：不在 SQL 里排序，最终顺序由 enrich_videos_with_file_times 按文件
@@ -186,6 +188,8 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
                     "tags": row.get::<_, Option<String>>(18)?,
                     "genres": row.get::<_, Option<String>>(19)?,
                     "fastHash": row.get::<_, Option<String>>(20)?,
+                    "coverWidth": row.get::<_, Option<i64>>(21)?,
+                    "coverHeight": row.get::<_, Option<i64>>(22)?,
                 }))
             })?;
 
@@ -244,6 +248,48 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
     .map_err(|e| AppError::TaskJoin(e.to_string()))??;
 
     Ok(enrich_videos_with_file_times(videos).await)
+}
+
+/// 回填存量视频的封面尺寸：扫描有 poster 但缺 cover_width/cover_height 的记录，
+/// 仅读图头补算尺寸写回。瀑布流等高画廊布局/虚拟化需要封面比例。
+/// 返回成功补算的数量。
+#[tauri::command]
+pub async fn backfill_cover_dimensions(db: State<'_, crate::db::Database>) -> AppResult<u32> {
+    let conn = db.get_connection()?;
+
+    tokio::task::spawn_blocking(move || -> AppResult<u32> {
+        let targets: Vec<(String, String)> = {
+            let mut stmt = conn.prepare(
+                "SELECT id, poster FROM videos
+                 WHERE poster IS NOT NULL AND poster <> ''
+                   AND (cover_width IS NULL OR cover_height IS NULL)",
+            )?;
+            let iter = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            let mut list = Vec::new();
+            for item in iter {
+                list.push(item?);
+            }
+            list
+        };
+
+        let mut updated = 0u32;
+        for (id, poster) in targets {
+            if let Ok((w, h)) = image::image_dimensions(&poster) {
+                if w > 0 && h > 0 {
+                    conn.execute(
+                        "UPDATE videos SET cover_width = ?, cover_height = ? WHERE id = ?",
+                        rusqlite::params![w as i64, h as i64, id],
+                    )?;
+                    updated += 1;
+                }
+            }
+        }
+        Ok(updated)
+    })
+    .await
+    .map_err(|e| AppError::TaskJoin(e.to_string()))?
 }
 
 #[tauri::command]

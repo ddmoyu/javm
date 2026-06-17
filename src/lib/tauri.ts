@@ -59,6 +59,11 @@ export async function getDuplicateVideos(): Promise<Video[]> {
     return tauriInvoke<Video[]>('get_duplicate_videos')
 }
 
+/** 回填存量视频封面尺寸（瀑布流布局需要），返回补算数量 */
+export async function backfillCoverDimensions(): Promise<number> {
+    return tauriInvoke<number>('backfill_cover_dimensions')
+}
+
 /** 鑾峰彇鍗曚釜瑙嗛璇︽儏 */
 export async function getVideo(id: string): Promise<Video> {
     return tauriInvoke<Video>('get_video', { id })

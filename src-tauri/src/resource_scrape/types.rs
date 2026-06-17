@@ -103,6 +103,9 @@ pub struct SearchResult {
     /// 原始远程封面 URL（代理后保留，用于保存时下载）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_cover_url: Option<String>,
+    /// 封面方向（"landscape"/"portrait"），仅后端探测尺寸后用于评分，不下发前端
+    #[serde(skip)]
+    pub cover_orientation: Option<String>,
 }
 
 // ============================================================

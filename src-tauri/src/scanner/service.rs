@@ -359,6 +359,7 @@ impl ScannerService {
         let poster_mtime = poster.as_deref().and_then(path_mtime_from_str);
         let thumb_mtime = thumb.as_deref().and_then(path_mtime_from_str);
         let fanart_mtime = fanart.as_deref().and_then(path_mtime_from_str);
+        let (cover_width, cover_height) = read_cover_dimensions(poster.as_deref());
 
         // 解析 NFO 文件
         let nfo_path = file_path.with_extension("nfo");
@@ -566,6 +567,8 @@ impl ScannerService {
                 poster_mtime,
                 thumb_mtime,
                 fanart_mtime,
+                cover_width,
+                cover_height,
             };
             Database::insert_video(tx, &data)
                 .map_err(|e| format!("插入视频记录失败 '{}': {}", path_str, e))?;
@@ -649,6 +652,17 @@ fn path_mtime(path: &Path) -> Option<i64> {
 
 fn path_mtime_from_str(path: &str) -> Option<i64> {
     path_mtime(Path::new(path))
+}
+
+/// 读取本地封面尺寸（仅读图头，开销小）。无封面或读取失败时返回 (None, None)。
+fn read_cover_dimensions(path: Option<&str>) -> (Option<i32>, Option<i32>) {
+    match path {
+        Some(p) if !p.trim().is_empty() => match image::image_dimensions(p) {
+            Ok((w, h)) if w > 0 && h > 0 => (Some(w as i32), Some(h as i32)),
+            _ => (None, None),
+        },
+        _ => (None, None),
+    }
 }
 
 /// Adler-32 校验和

@@ -28,6 +28,8 @@ export interface Video {
     poster?: string // 同级 poster 图片路径 (videos.poster)
     thumb?: string // 同级 thumb 图片路径 (videos.thumb)
     fanart?: string // 同级 fanart 图片路径 (videos.fanart)
+    coverWidth?: number // 封面宽度像素 (videos.cover_width)
+    coverHeight?: number // 封面高度像素 (videos.cover_height)
     fastHash?: string // 快速哈希值 (videos.fast_hash)
     resolution?: string // 分辨率 (videos.resolution)
     videoPath: string // 视频文件路径 (videos.video_path)

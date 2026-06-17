@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
-import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw } from 'lucide-vue-next'
+import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw, RectangleHorizontal, RectangleVertical, LayoutDashboard } from 'lucide-vue-next'
 import { useVideoStore, useSettingsStore } from '@/stores'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,8 @@ import {
 import VirtualGrid from '@/components/VirtualGrid.vue'
 import VideoDetailDialog from '@/components/VideoDetailDialog.vue'
 import ScrapeDialog from '@/components/ScrapeDialog.vue'
-import type { Video, ViewMode } from '@/types'
+import type { Video, ViewMode, CoverType } from '@/types'
+import { backfillCoverDimensions } from '@/lib/tauri'
 
 const ALL_DIRECTORY_VALUE = '__all__'
 
@@ -49,9 +50,27 @@ const selectedVideo = ref<Video | null>(null)
 // 视图模式 - 从设置中读取
 const viewMode = computed(() => settingsStore.settings.general.viewMode || 'card')
 
+// 循环切换：卡片 → 瀑布流 → 列表 → 卡片
+const VIEW_MODE_CYCLE: ViewMode[] = ['card', 'waterfall', 'list']
+const nextViewMode = computed<ViewMode>(() => {
+  const idx = VIEW_MODE_CYCLE.indexOf(viewMode.value)
+  return VIEW_MODE_CYCLE[(idx + 1) % VIEW_MODE_CYCLE.length]
+})
+const VIEW_MODE_LABEL: Record<ViewMode, string> = {
+  card: '卡片模式',
+  waterfall: '瀑布流',
+  list: '列表模式',
+}
 const toggleViewMode = () => {
-  const newMode: ViewMode = viewMode.value === 'card' ? 'list' : 'card'
-  settingsStore.updateSettings({ general: { ...settingsStore.settings.general, viewMode: newMode } })
+  settingsStore.updateSettings({ general: { ...settingsStore.settings.general, viewMode: nextViewMode.value } })
+}
+
+// 封面类型（横屏/竖屏） - 从设置中读取
+const coverType = computed(() => settingsStore.settings.general.coverType || 'landscape')
+
+const toggleCoverType = () => {
+  const newType: CoverType = coverType.value === 'landscape' ? 'portrait' : 'landscape'
+  settingsStore.updateSettings({ general: { ...settingsStore.settings.general, coverType: newType } })
 }
 
 const refreshMediaLibrary = async () => {
@@ -171,9 +190,19 @@ const clearSearch = () => {
   videoStore.setFilter({ search: '' })
 }
 
-onMounted(() => {
-  videoStore.fetchVideos()
+onMounted(async () => {
+  await videoStore.fetchVideos()
   videoStore.fetchDirectories()
+  // 回填存量视频封面尺寸（瀑布流布局需要），有补算则刷新列表拿到尺寸
+  try {
+    const updated = await backfillCoverDimensions()
+    if (updated > 0) {
+      await videoStore.fetchVideos()
+      virtualGridRef.value?.refreshLayout()
+    }
+  } catch (e) {
+    console.error('回填封面尺寸失败:', e)
+  }
 })
 
 onActivated(() => {
@@ -486,11 +515,25 @@ const unscrapedChecked = computed({
           variant="ghost"
           size="icon"
           class="h-9 w-9"
-          :title="viewMode === 'card' ? '切换到列表模式' : '切换到卡片模式'"
+          :title="`切换到${VIEW_MODE_LABEL[nextViewMode]}`"
           @click="toggleViewMode"
         >
-          <List v-if="viewMode === 'card'" class="size-4" />
+          <LayoutDashboard v-if="viewMode === 'waterfall'" class="size-4" />
+          <List v-else-if="viewMode === 'list'" class="size-4" />
           <LayoutGrid v-else class="size-4" />
+        </Button>
+
+        <!-- 封面横竖屏切换 -->
+        <Button
+          v-if="viewMode === 'card'"
+          variant="ghost"
+          size="icon"
+          class="h-9 w-9"
+          :title="coverType === 'landscape' ? '切换到竖屏封面' : '切换到横屏封面'"
+          @click="toggleCoverType"
+        >
+          <RectangleVertical v-if="coverType === 'landscape'" class="size-4" />
+          <RectangleHorizontal v-else class="size-4" />
         </Button>
 
         <Button

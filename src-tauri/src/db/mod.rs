@@ -180,12 +180,18 @@ impl Database {
                 poster_mtime INTEGER,
                 thumb_mtime INTEGER,
                 fanart_mtime INTEGER,
+                cover_width INTEGER,
+                cover_height INTEGER,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 scraped_at TEXT
             )",
             [],
         )?;
+        // 兼容旧库：为已存在的 videos 表补封面尺寸列（瀑布流等高画廊布局/虚拟化需要）。
+        // 列已存在时会报错，忽略即可——不必升库版本、不丢用户数据。
+        let _ = conn.execute("ALTER TABLE videos ADD COLUMN cover_width INTEGER", []);
+        let _ = conn.execute("ALTER TABLE videos ADD COLUMN cover_height INTEGER", []);
         log::info!("[db] event=create_videos_table_succeeded");
 
         // 3. 关联表
@@ -624,6 +630,8 @@ impl Database {
                 rating = ?,
                 poster = ?,
                 local_id = ?,
+                cover_width = ?,
+                cover_height = ?,
                 scan_status = 2,
                 scraped_at = datetime('now'),
                 updated_at = datetime('now')
@@ -638,6 +646,8 @@ impl Database {
                 data.rating.unwrap_or(0.0),
                 data.poster,
                 data.local_id,
+                data.cover_width,
+                data.cover_height,
                 video_id
             ],
         )?;
@@ -882,8 +892,9 @@ impl Database {
                 studio, premiered, director,
                 file_size, fast_hash, created_at, updated_at, scan_status,
                 duration, resolution, rating, poster, thumb, fanart,
-                file_mtime, nfo_mtime, poster_mtime, thumb_mtime, fanart_mtime
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)",
+                file_mtime, nfo_mtime, poster_mtime, thumb_mtime, fanart_mtime,
+                cover_width, cover_height
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)",
             params![
                 data.id,
                 data.local_id,
@@ -908,7 +919,9 @@ impl Database {
                 data.nfo_mtime,
                 data.poster_mtime,
                 data.thumb_mtime,
-                data.fanart_mtime
+                data.fanart_mtime,
+                data.cover_width,
+                data.cover_height
             ],
         )?;
         Ok(())

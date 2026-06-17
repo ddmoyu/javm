@@ -8,6 +8,7 @@ import type { Video } from '@/types'
 import type { ViewMode } from '@/types/settings'
 import { openWithPlayer, openVideoPlayerWindow } from '@/lib/tauri'
 import { useSettingsStore } from '@/stores/settings'
+import { COVER_LAYOUTS, WATERFALL_ROW_HEIGHT, WATERFALL_NO_COVER_WIDTH } from '@/utils/constants'
 import { Button } from '@/components/ui/button'
 
 interface Props {
@@ -27,6 +28,12 @@ const emit = defineEmits<{
 }>()
 
 const router = useRouter()
+const settingsStore = useSettingsStore()
+
+// 封面布局（横屏/竖屏）随设置变化
+const coverLayout = computed(() =>
+  COVER_LAYOUTS[settingsStore.settings.general.coverType] || COVER_LAYOUTS.landscape,
+)
 
 // 容器引用
 const containerRef = ref<HTMLElement>()
@@ -34,40 +41,87 @@ const containerRef = ref<HTMLElement>()
 // 监听容器尺寸变化，页面从隐藏恢复时常见的是高度先为 0 再恢复
 const { width: containerWidth, height: containerHeight } = useElementSize(containerRef)
 
-// 响应式列数配置
-const columnConfig = {
-  cardWidth: 280,  // 固定卡片宽度
+// 响应式列数配置（卡片宽度随封面类型变化）
+const columnConfig = computed(() => ({
+  cardWidth: coverLayout.value.cardWidth,
   gap: 16,         // 间距
   minColumns: 1,
   maxColumns: 10,
-}
+}))
 
-const coverAspectRatio = 536 / 800
+const coverAspectRatio = computed(() => coverLayout.value.coverAspectRatio)
 const OVERSCAN_ROWS = 3
 
 // 是否为列表模式
 const isListMode = computed(() => props.viewMode === 'list')
 
+// 是否为瀑布流(等高画廊)模式：封面固定高度、宽度按比例自适应，行虚拟化
+const isWaterfall = computed(() => props.viewMode === 'waterfall')
+
+const WATERFALL_GAP = 16
+// 等高画廊单行高度 = 封面固定高 + 信息区 + 行间距
+const waterfallRowHeight = WATERFALL_ROW_HEIGHT + 60 + WATERFALL_GAP
+
+// 单张封面在画廊中的宽度（= 固定高度 × 封面宽高比；无封面用窄占位，缺尺寸用设置默认比例）
+const itemGalleryWidth = (video: Video): number => {
+  const hasCover = !!(video.poster || video.thumb)
+  if (!hasCover) return WATERFALL_NO_COVER_WIDTH
+  let ratio: number
+  if (video.coverWidth && video.coverHeight && video.coverHeight > 0) {
+    ratio = video.coverWidth / video.coverHeight
+  } else {
+    // 缺尺寸（未回填）回退到当前封面类型的默认比例（宽/高）
+    ratio = 1 / coverLayout.value.coverAspectRatio
+  }
+  return Math.round(WATERFALL_ROW_HEIGHT * ratio)
+}
+
+// 按容器宽度把视频贪心打包成等高行（行尾自然参差）
+const waterfallRows = computed<Video[][]>(() => {
+  if (!isWaterfall.value) return []
+  const availableWidth = (containerWidth.value || 800) - WATERFALL_GAP * 2
+  const rows: Video[][] = []
+  let current: Video[] = []
+  let currentWidth = 0
+  for (const video of props.items) {
+    const w = itemGalleryWidth(video)
+    const needed = currentWidth === 0 ? w : currentWidth + WATERFALL_GAP + w
+    if (currentWidth > 0 && needed > availableWidth) {
+      rows.push(current)
+      current = []
+      currentWidth = 0
+    }
+    current.push(video)
+    currentWidth = currentWidth === 0 ? w : currentWidth + WATERFALL_GAP + w
+  }
+  if (current.length) rows.push(current)
+  return rows
+})
+
 // 计算列数 - 列表模式固定1列
 const columns = computed(() => {
   if (isListMode.value) return 1
   const width = containerWidth.value || 800
-  const availableWidth = width - columnConfig.gap * 2 // 左右padding
+  const cfg = columnConfig.value
+  const availableWidth = width - cfg.gap * 2 // 左右padding
 
   // 计算可容纳的列数（使用固定卡片宽度）
-  const cols = Math.floor((availableWidth + columnConfig.gap) / (columnConfig.cardWidth + columnConfig.gap))
+  const cols = Math.floor((availableWidth + cfg.gap) / (cfg.cardWidth + cfg.gap))
 
-  return Math.max(columnConfig.minColumns, Math.min(columnConfig.maxColumns, cols))
+  return Math.max(cfg.minColumns, Math.min(cfg.maxColumns, cols))
 })
 
 // 计算行数
-const rowCount = computed(() => Math.ceil(props.items.length / columns.value))
+const rowCount = computed(() =>
+  isWaterfall.value ? waterfallRows.value.length : Math.ceil(props.items.length / columns.value),
+)
 
 // 卡片高度（列表模式使用固定行高）
 const rowHeight = computed(() => {
   if (isListMode.value) return 126 // 列表行高
-  const coverHeight = columnConfig.cardWidth * coverAspectRatio
-  return coverHeight + 60 + columnConfig.gap // 封面高度 + 信息区域 + 行间距
+  if (isWaterfall.value) return waterfallRowHeight
+  const coverHeight = columnConfig.value.cardWidth * coverAspectRatio.value
+  return coverHeight + 60 + columnConfig.value.gap // 封面高度 + 信息区域 + 行间距
 })
 
 const scrollTop = ref(0)
@@ -75,6 +129,7 @@ const savedScrollTop = ref(0)
 
 // 获取某一行的视频
 const getRowItems = (rowIndex: number): Video[] => {
+  if (isWaterfall.value) return waterfallRows.value[rowIndex] ?? []
   const startIndex = rowIndex * columns.value
   return props.items.slice(startIndex, startIndex + columns.value)
 }
@@ -182,7 +237,7 @@ const handleScroll = () => {
   savedScrollTop.value = currentScrollTop
 }
 
-watch([() => props.items.length, columns, () => props.viewMode, containerWidth, containerHeight], () => {
+watch([() => props.items.length, columns, () => props.viewMode, containerWidth, containerHeight, coverLayout], () => {
   void syncLayout()
 })
 
@@ -232,8 +287,26 @@ defineExpose({
       height: `${totalHeight}px`,
       position: 'relative',
     }">
+      <!-- 瀑布流(等高画廊)模式：封面固定高度、宽度按比例自适应，行虚拟化 -->
+      <template v-if="isWaterfall">
+        <div v-for="virtualRow in virtualRows" :key="virtualRow.index" class="flex gap-4 px-4 justify-center"
+          :style="{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: `${virtualRow.size}px`,
+            transform: `translateY(${virtualRow.start}px)`,
+            paddingBottom: '16px',
+          }">
+          <VideoCard v-for="video in getRowItems(virtualRow.index)" :key="video.id" :video="video"
+            :gallery-height="WATERFALL_ROW_HEIGHT" @click="handleVideoClick" @play="handleVideoPlay"
+            @scrape="handleScrape" />
+        </div>
+      </template>
+
       <!-- 列表模式 -->
-      <template v-if="isListMode">
+      <template v-else-if="isListMode">
         <div v-for="virtualRow in virtualRows" :key="virtualRow.index" :style="{
           position: 'absolute',
           top: 0,
@@ -258,7 +331,7 @@ defineExpose({
           transform: `translateY(${virtualRow.start}px)`,
           display: 'grid',
           gap: '16px',
-          gridTemplateColumns: `repeat(${columns}, 280px)`,
+          gridTemplateColumns: `repeat(${columns}, ${columnConfig.cardWidth}px)`,
           justifyContent: 'center',
           paddingBottom: '16px',
         }">

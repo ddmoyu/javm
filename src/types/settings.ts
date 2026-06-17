@@ -49,10 +49,13 @@ export interface ThemeSettings {
 }
 
 /** 显示模式 */
-export type ViewMode = 'card' | 'list'
+export type ViewMode = 'card' | 'list' | 'waterfall'
 
 /** 播放方式 */
 export type PlayMethod = 'system' | 'software'
+
+/** 封面类型（横屏/竖屏） */
+export type CoverType = 'landscape' | 'portrait'
 
 /** 通用设置 */
 export interface GeneralSettings {
@@ -60,6 +63,7 @@ export interface GeneralSettings {
     viewMode: ViewMode
     playMethod: PlayMethod
     coverClickToPlay: boolean
+    coverType: CoverType
 }
 
 /** 下载源（资源链接视频站） */
@@ -160,6 +164,7 @@ export const defaultSettings: AppSettings = {
         viewMode: 'card',
         playMethod: 'software',
         coverClickToPlay: true,
+        coverType: 'landscape',
     },
     download: {
         savePath: '',

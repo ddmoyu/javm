@@ -83,6 +83,8 @@ pub struct GeneralSettings {
     pub play_method: String,
     #[serde(rename = "coverClickToPlay", default = "default_true")]
     pub cover_click_to_play: bool,
+    #[serde(rename = "coverType", default = "default_cover_type")]
+    pub cover_type: String,
 }
 
 fn default_play_method() -> String {
@@ -91,6 +93,10 @@ fn default_play_method() -> String {
 
 fn default_view_mode() -> String {
     "card".to_string()
+}
+
+fn default_cover_type() -> String {
+    "landscape".to_string()
 }
 
 fn default_true() -> bool {
@@ -510,6 +516,7 @@ impl Default for AppSettings {
                 view_mode: "card".to_string(),
                 play_method: "software".to_string(),
                 cover_click_to_play: true,
+                cover_type: "landscape".to_string(),
             },
             download: DownloadSettings::default(),
             scrape: ScrapeSettings::default(),

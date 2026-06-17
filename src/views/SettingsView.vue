@@ -53,7 +53,7 @@ import {
 } from '@/components/ui/collapsible'
 import AIConfigDialog from '@/components/AIConfigDialog.vue'
 import { selectDirectory } from '@/lib/tauri'
-import { THEME_OPTIONS, VIEW_MODE_OPTIONS } from '@/utils/constants'
+import { THEME_OPTIONS, VIEW_MODE_OPTIONS, COVER_TYPE_OPTIONS } from '@/utils/constants'
 import type { AIProvider, ViewMode } from '@/types'
 
 const route = useRoute()
@@ -565,6 +565,27 @@ watch(() => settingsStore.settings, async (newSettings) => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem v-for="opt in VIEW_MODE_OPTIONS" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Separator />
+
+                <!-- 封面类型 -->
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="font-medium">封面类型</p>
+                    <p class="text-sm text-muted-foreground">选择媒体库卡片封面的方向，横屏或竖屏</p>
+                  </div>
+                  <Select :model-value="settingsStore.settings.general.coverType || 'landscape'"
+                    @update:model-value="(v) => settingsStore.updateSettings({ general: { ...settingsStore.settings.general, coverType: String(v) as import('@/types').CoverType } })">
+                    <SelectTrigger class="w-40">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem v-for="opt in COVER_TYPE_OPTIONS" :key="opt.value" :value="opt.value">
                         {{ opt.label }}
                       </SelectItem>
                     </SelectContent>

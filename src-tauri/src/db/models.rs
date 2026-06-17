@@ -99,6 +99,8 @@ pub struct VideoInsertData<'a> {
     pub poster_mtime: Option<i64>,
     pub thumb_mtime: Option<i64>,
     pub fanart_mtime: Option<i64>,
+    pub cover_width: Option<i32>,
+    pub cover_height: Option<i32>,
 }
 
 pub struct ExistingVideoScanInfo {
@@ -131,6 +133,8 @@ pub struct VideoScrapeUpdateData<'a> {
     pub rating: Option<f64>,
     pub poster: &'a str,
     pub local_id: Option<&'a str>,
+    pub cover_width: Option<i32>,
+    pub cover_height: Option<i32>,
 }
 
 /// 合法的元数据表名枚举，防止 SQL 注入

@@ -282,6 +282,7 @@ pub fn run() {
             proxy_hls_request,
             // 视频 + 目录
             video::commands::get_videos,
+            video::commands::backfill_cover_dimensions,
             video::commands::get_duplicate_videos,
             video::commands::delete_video_db,
             video::commands::delete_video_file,

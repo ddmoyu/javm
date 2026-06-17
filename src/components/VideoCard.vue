@@ -8,6 +8,7 @@ import { formatDuration, formatRating } from '@/utils/format'
 import { useVideoStore } from '@/stores'
 import { useSettingsStore } from '@/stores/settings'
 import { toImageSrc } from '@/utils/image'
+import { COVER_LAYOUTS, WATERFALL_NO_COVER_WIDTH } from '@/utils/constants'
 import {
   openInExplorer,
   moveVideoFile,
@@ -26,9 +27,14 @@ import DeleteVideoDialog from './DeleteVideoDialog.vue'
 
 interface Props {
   video: Video
+  /** 等高画廊(瀑布流)模式：传入封面固定高度(px)，宽度按封面比例自适应；不传则为普通卡片 */
+  galleryHeight?: number
 }
 
 const props = defineProps<Props>()
+
+// 是否为等高画廊模式
+const isGallery = computed(() => props.galleryHeight != null)
 
 const emit = defineEmits<{
   (e: 'click', video: Video): void
@@ -40,6 +46,39 @@ const videoStore = useVideoStore()
 const settingsStore = useSettingsStore()
 const imgError = ref(false)
 const showDeleteDialog = ref(false)
+
+// 封面布局（横屏/竖屏）随设置变化
+const coverLayout = computed(() =>
+  COVER_LAYOUTS[settingsStore.settings.general.coverType] || COVER_LAYOUTS.landscape,
+)
+
+// 是否有封面图（按 poster/thumb 是否存在判断，与虚拟网格打包逻辑保持一致）
+const hasCover = computed(() => !!(props.video.poster || props.video.thumb))
+
+// 画廊模式下卡片显式宽度 = 固定高 × 封面比例（缺尺寸用设置默认比例，无封面用窄占位）。
+// 用显式宽度而非依赖图片加载，避免懒加载未完成时卡片塌成 0 宽。
+const galleryWidth = computed(() => {
+  if (!props.galleryHeight) return 0
+  if (!hasCover.value) return WATERFALL_NO_COVER_WIDTH
+  const { coverWidth, coverHeight } = props.video
+  const ratio = coverWidth && coverHeight && coverHeight > 0
+    ? coverWidth / coverHeight
+    : 1 / coverLayout.value.coverAspectRatio
+  return Math.round(props.galleryHeight * ratio)
+})
+
+// 卡片根容器样式：画廊模式按比例算显式宽度，普通模式固定宽度
+const cardStyle = computed(() =>
+  isGallery.value ? { width: `${galleryWidth.value}px` } : { width: `${coverLayout.value.cardWidth}px` },
+)
+
+// 封面容器样式：画廊模式显式宽高，普通模式按比例
+const coverStyle = computed(() => {
+  if (isGallery.value) {
+    return { width: `${galleryWidth.value}px`, height: `${props.galleryHeight}px` }
+  }
+  return { aspectRatio: coverLayout.value.aspectStyle }
+})
 
 const coverStateKey = computed(() => [
   props.video.poster || '',
@@ -138,15 +177,17 @@ const onImgError = () => {
   <ContextMenu>
     <ContextMenuTrigger as-child>
       <div
-        class="video-card group relative overflow-hidden rounded-lg bg-card border shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer w-[280px] shrink-0"
+        class="video-card group relative overflow-hidden rounded-lg bg-card border shadow-sm hover:shadow-lg transition-all duration-300 cursor-pointer shrink-0"
+        :style="cardStyle"
         @click="handleClick">
 
         <!-- 封面图 / 占位图 -->
-        <div class="aspect-[800/536] overflow-hidden bg-muted flex items-center justify-center relative"
+        <div class="overflow-hidden bg-muted flex items-center justify-center relative"
+          :style="coverStyle"
           @click.stop="handleCoverClick">
           <img v-if="imageSrc" :src="imageSrc" :alt="video.title || video.originalTitle"
-            class="w-full h-full object-contain transition-transform duration-300" loading="lazy"
-            @error="onImgError" />
+            :class="isGallery ? 'w-full h-full object-contain block' : 'w-full h-full object-contain transition-transform duration-300'"
+            loading="lazy" @error="onImgError" />
 
           <div v-else class="flex flex-col items-center justify-center text-muted-foreground/50">
             <Film class="size-12 mb-2" />

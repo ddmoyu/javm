@@ -124,7 +124,19 @@ fn is_valid_search_result(result: &SearchResult) -> bool {
     true
 }
 
-fn compute_search_result_detail_score(result: &SearchResult) -> i32 {
+/// 探测本地封面文件的方向（"portrait"/"landscape"）。
+///
+/// 仅读取图片头获取尺寸，开销很小；读取失败返回 None（不影响评分）。
+fn detect_cover_orientation(path: &str) -> Option<String> {
+    match image::image_dimensions(path) {
+        Ok((w, h)) if w > 0 && h > 0 => {
+            Some(if h > w { "portrait" } else { "landscape" }.to_string())
+        }
+        _ => None,
+    }
+}
+
+fn compute_search_result_detail_score(result: &SearchResult, preferred_cover_type: &str) -> i32 {
     let preview_count = result.thumbs.len();
     let has_previews = preview_count > 0;
     let mut score = 0;
@@ -183,6 +195,16 @@ fn compute_search_result_detail_score(result: &SearchResult) -> i32 {
         score += 2;
     }
 
+    // 封面方向与用户设置一致则加分，不一致则减分（探测失败时不调整）
+    if let Some(orientation) = result.cover_orientation.as_deref() {
+        if orientation == preferred_cover_type {
+            score += 12;
+        } else {
+            score -= 10;
+        }
+    }
+    score = score.max(0);
+
     if !has_previews {
         return score.min(20);
     }
@@ -199,8 +221,8 @@ fn detail_level_from_score(score: i32) -> &'static str {
     }
 }
 
-fn enrich_search_result_detail(result: &mut SearchResult) {
-    let score = compute_search_result_detail_score(result);
+fn enrich_search_result_detail(result: &mut SearchResult, preferred_cover_type: &str) {
+    let score = compute_search_result_detail_score(result, preferred_cover_type);
     result.detail_score = score;
     result.detail_level = detail_level_from_score(score).to_string();
 }
@@ -316,6 +338,8 @@ pub async fn rs_search_resource(
     let enabled_sites = settings::enabled_scrape_sites(&app_settings.scrape);
     let enabled_site_ids: Vec<String> = enabled_sites.iter().map(|site| site.id.clone()).collect();
     let fetch_settings = settings::resolve_scrape_fetch_settings(&app_settings.scrape);
+    // 用户偏好的封面方向，用于封面比例评分
+    let preferred_cover_type = app_settings.general.cover_type.clone();
 
     // 根据 source 参数和启用状态过滤数据源
     let search_sources: Vec<Box<dyn Source>> = if let Some(ref site_id) = source {
@@ -365,6 +389,7 @@ pub async fn rs_search_resource(
         let app = app.clone();
         let token = token.clone();
         let semaphore = semaphore.clone();
+        let preferred_cover_type = preferred_cover_type.clone();
         let site = enabled_sites
             .iter()
             .find(|item| item.id.eq_ignore_ascii_case(source.name()))
@@ -498,6 +523,8 @@ pub async fn rs_search_resource(
                                 Ok(local_path) => {
                                     // 保留原始远程 URL，同时提供本地缓存路径
                                     result.remote_cover_url = Some(result.cover_url.clone());
+                                    // 探测封面方向用于评分（基于已下载到本地的封面文件）
+                                    result.cover_orientation = detect_cover_orientation(&local_path);
                                     result.cover_url = local_path;
                                 }
                                 Err(e) => {
@@ -528,7 +555,7 @@ pub async fn rs_search_resource(
                                 result
                             }
                         };
-                        enrich_search_result_detail(&mut result_to_emit);
+                        enrich_search_result_detail(&mut result_to_emit, &preferred_cover_type);
                         if !token.is_cancelled() {
                             let _ = app.emit("search-result", &result_to_emit);
                         }

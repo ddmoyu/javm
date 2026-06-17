@@ -12,6 +12,17 @@ fn resolve_scraped_duration(existing_duration: Option<i32>, scraped_duration_min
     }
 }
 
+/// 读取本地封面文件尺寸（仅读图头，开销小）。路径为空或读取失败时返回 (None, None)。
+fn read_cover_dimensions(path: &str) -> (Option<i32>, Option<i32>) {
+    if path.trim().is_empty() {
+        return (None, None);
+    }
+    match image::image_dimensions(path) {
+        Ok((w, h)) if w > 0 && h > 0 => (Some(w as i32), Some(h as i32)),
+        _ => (None, None),
+    }
+}
+
 /// 数据库写入器 - 负责将刮削的视频元数据写入数据库
 ///
 /// 提供的功能：
@@ -57,6 +68,8 @@ impl DatabaseWriter {
 
             // 如果数据库时长为 0 或 NULL，则使用刮削得到的时长（刮削器返回分钟，数据库存储秒）
             let new_duration = resolve_scraped_duration(existing_duration, metadata.duration);
+            // 读取本地封面尺寸（仅读图头，开销小），写入库用于瀑布流等高画廊布局/虚拟化
+            let (cover_width, cover_height) = read_cover_dimensions(&local_cover_image);
             let update = crate::db::VideoScrapeUpdateData {
                 title: &metadata.title,
                 original_title: metadata.original_title.as_deref(),
@@ -67,6 +80,8 @@ impl DatabaseWriter {
                 rating: metadata.score,
                 poster: &local_cover_image,
                 local_id: Some(metadata.local_id.as_str()),
+                cover_width,
+                cover_height,
             };
 
             Database::update_video_scrape_info(&conn, &video_id, &update).map_err(|e| e.to_string())?;
@@ -195,6 +210,8 @@ impl DatabaseWriter {
             let existing_duration: Option<i32> =
                 Database::get_video_duration(&tx, &video_id).map_err(|e| e.to_string())?;
             let new_duration = resolve_scraped_duration(existing_duration, metadata.duration);
+            // 读取本地封面尺寸（仅读图头，开销小），写入库用于瀑布流等高画廊布局/虚拟化
+            let (cover_width, cover_height) = read_cover_dimensions(&local_cover_image);
             let update = crate::db::VideoScrapeUpdateData {
                 title: &metadata.title,
                 original_title: metadata.original_title.as_deref(),
@@ -205,6 +222,8 @@ impl DatabaseWriter {
                 rating: metadata.score,
                 poster: &local_cover_image,
                 local_id: Some(metadata.local_id.as_str()),
+                cover_width,
+                cover_height,
             };
             Database::update_video_scrape_info(&tx, &video_id, &update)
                 .map_err(|e| e.to_string())?;
