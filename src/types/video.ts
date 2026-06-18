@@ -30,6 +30,7 @@ export interface Video {
     fanart?: string // 同级 fanart 图片路径 (videos.fanart)
     coverWidth?: number // 封面宽度像素 (videos.cover_width)
     coverHeight?: number // 封面高度像素 (videos.cover_height)
+    isUncensored?: boolean // 是否无码作品 (videos.is_uncensored)
     fastHash?: string // 快速哈希值 (videos.fast_hash)
     resolution?: string // 分辨率 (videos.resolution)
     videoPath: string // 视频文件路径 (videos.video_path)
@@ -56,6 +57,7 @@ export interface VideoFilter {
     status?: ScanStatus
     resolution?: string[]
     scraped?: string[] // 刮削状态筛选：'scraped' 已刮削, 'unscraped' 未刮削
+    censorship?: string[] // 有码无码筛选：'censored' 有码, 'uncensored' 无码
     fileCreatedAfter?: string
     sortBy?: 'premiered' | 'rating' | 'createdAt' | 'fileCreatedAt' | 'title' | 'duration' | 'fileSize'
     sortOrder?: 'asc' | 'desc'

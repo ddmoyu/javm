@@ -129,6 +129,7 @@ const filterState = ref({
   fileCreatedRange: undefined as string | undefined,
   resolution: [] as string[],
   scraped: [] as string[], // 刮削状态筛选：'scraped' 已刮削, 'unscraped' 未刮削
+  censorship: [] as string[], // 有码无码筛选：'censored' 有码, 'uncensored' 无码
 })
 
 const availableDirectories = computed(() => {
@@ -151,6 +152,7 @@ const applyFilters = () => {
     fileCreatedAfter: getFileCreatedAfter(filterState.value.fileCreatedRange),
     resolution: filterState.value.resolution.length > 0 ? filterState.value.resolution : undefined,
     scraped: filterState.value.scraped.length > 0 ? filterState.value.scraped : undefined,
+    censorship: filterState.value.censorship.length > 0 ? filterState.value.censorship : undefined,
   })
 }
 
@@ -228,6 +230,7 @@ const clearFilters = () => {
     fileCreatedRange: undefined,
     resolution: [],
     scraped: [],
+    censorship: [],
   }
 }
 
@@ -244,6 +247,7 @@ const activeFilterCount = computed(() => {
   if (filterState.value.fileCreatedRange) count++
   if (filterState.value.resolution.length > 0) count++
   if (filterState.value.scraped.length > 0) count++
+  if (filterState.value.censorship.length > 0) count++
   return count
 })
 
@@ -311,6 +315,29 @@ const unscrapedChecked = computed({
       filterState.value.scraped = [...filterState.value.scraped, 'unscraped']
     } else {
       filterState.value.scraped = filterState.value.scraped.filter(i => i !== 'unscraped')
+    }
+  }
+})
+
+// 有码/无码 checkbox 计算属性
+const censoredChecked = computed({
+  get: () => filterState.value.censorship.includes('censored'),
+  set: (val) => {
+    if (val) {
+      filterState.value.censorship = [...filterState.value.censorship, 'censored']
+    } else {
+      filterState.value.censorship = filterState.value.censorship.filter(i => i !== 'censored')
+    }
+  }
+})
+
+const uncensoredChecked = computed({
+  get: () => filterState.value.censorship.includes('uncensored'),
+  set: (val) => {
+    if (val) {
+      filterState.value.censorship = [...filterState.value.censorship, 'uncensored']
+    } else {
+      filterState.value.censorship = filterState.value.censorship.filter(i => i !== 'uncensored')
     }
   }
 })
@@ -499,6 +526,23 @@ const unscrapedChecked = computed({
                   <Checkbox id="unscraped" v-model="unscrapedChecked" />
                   <label for="unscraped"
                     class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">未刮削</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- 有码/无码筛选 -->
+            <div class="space-y-2">
+              <Label class="text-xs text-muted-foreground">有码/无码</Label>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="flex items-center space-x-2">
+                  <Checkbox id="censored" v-model="censoredChecked" />
+                  <label for="censored"
+                    class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">有码</label>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <Checkbox id="uncensored" v-model="uncensoredChecked" />
+                  <label for="uncensored"
+                    class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">无码</label>
                 </div>
               </div>
             </div>

@@ -149,7 +149,8 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
                 ) as genres,
                 v.fast_hash,
                 v.cover_width,
-                v.cover_height
+                v.cover_height,
+                v.is_uncensored
             FROM videos v
         "#;
         // 注意：不在 SQL 里排序，最终顺序由 enrich_videos_with_file_times 按文件
@@ -190,6 +191,7 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
                     "fastHash": row.get::<_, Option<String>>(20)?,
                     "coverWidth": row.get::<_, Option<i64>>(21)?,
                     "coverHeight": row.get::<_, Option<i64>>(22)?,
+                    "isUncensored": row.get::<_, Option<i64>>(23)?.unwrap_or(0) != 0,
                 }))
             })?;
 

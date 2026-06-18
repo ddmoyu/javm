@@ -148,6 +148,19 @@ export const useVideoStore = defineStore('video', () => {
             })
         }
 
+        // 有码/无码过滤
+        if (filter.value.censorship && filter.value.censorship.length > 0) {
+            result = result.filter(v => {
+                const isUncensored = v.isUncensored === true
+                const hasCensored = filter.value.censorship!.includes('censored')
+                const hasUncensored = filter.value.censorship!.includes('uncensored')
+                if (hasCensored && hasUncensored) return true
+                if (hasCensored && !hasUncensored) return !isUncensored
+                if (!hasCensored && hasUncensored) return isUncensored
+                return true
+            })
+        }
+
         // 状态过滤
         if (filter.value.status !== undefined) {
             result = result.filter(v => v.scanStatus === filter.value.status)

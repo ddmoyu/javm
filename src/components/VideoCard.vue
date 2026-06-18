@@ -237,6 +237,12 @@ const onImgError = () => {
           :class="['absolute top-2 right-2 z-10', statusBadgeClass]">
           <span :class="statusTextClass">{{ SCAN_STATUS_TEXT[video.scanStatus] }}</span>
         </Badge>
+
+        <!-- 无码标记 -->
+        <Badge v-if="video.isUncensored" variant="destructive"
+          class="absolute top-2 left-2 z-10 text-[10px] px-1.5 py-0">
+          无码
+        </Badge>
       </div>
     </ContextMenuTrigger>
 
