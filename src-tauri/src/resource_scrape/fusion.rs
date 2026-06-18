@@ -63,6 +63,9 @@ pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
         }
     }
 
+    // 无码标记：任一源判定为无码即为无码（有码无码分轨）
+    base.is_uncensored = results.iter().any(|r| r.is_uncensored);
+
     // ===== 数组：并集去重（用 results 含主源，主源项先入 seen 保留在前；标量补全用 rest 排除主源）=====
     base.actors = union_csv(results.iter().map(|r| r.actors.as_str()));
     base.tags = union_csv(results.iter().map(|r| r.tags.as_str()));

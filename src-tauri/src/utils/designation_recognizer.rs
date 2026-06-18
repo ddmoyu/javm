@@ -73,6 +73,9 @@ impl DesignationMarkers {
 pub struct DesignationInfo {
     pub designation: String,
     pub markers: DesignationMarkers,
+    /// 番号本身是否为无码作品（按格式/厂牌判定，区别于 markers.uncensored 的"有码作品无码流出版"）
+    #[serde(default)]
+    pub is_uncensored: bool,
 }
 
 /// 识别结果
@@ -82,6 +85,9 @@ pub struct RecognitionResult {
     pub designation: Option<String>,
     #[serde(default)]
     pub markers: DesignationMarkers,
+    /// 番号本身是否为无码作品（按格式/厂牌判定）
+    #[serde(default)]
+    pub is_uncensored: bool,
     pub method: RecognitionMethod,
     pub message: String,
 }
@@ -151,6 +157,34 @@ static LEAK_RE: std::sync::LazyLock<Regex> =
 /// 多碟标记 CD1 / DISC2
 static CD_RE: std::sync::LazyLock<Regex> =
     std::sync::LazyLock::new(|| Regex::new(r"(?i)^(?:cd|disc)(\d{1,2})$").unwrap());
+
+/// 已知无码厂牌前缀（番号本身即无码作品）。纯数字前缀（加勒比/一本道/天然むすめ/帕高等）
+/// 另行按"前缀全为数字"判定，不在此列。
+static UNCENSORED_PREFIXES: &[&str] = &[
+    "FC2", "HEYZO", "KIN8", "MYWIFE", "CARIB", "CARIBBEANCOM", "CARIBBEANCOMPR", "PACO",
+    "PACOPACOMAMA", "HEYDOUGA", "GACHINCO", "GACHI", "1PONDO", "10MU", "10MUSUME", "TOKYOHOT",
+];
+
+/// 判定番号本身是否为无码作品（按格式/厂牌）。
+///
+/// - 纯数字前缀（`010120-001` / `123456_789`：加勒比 / 一本道 / 天然むすめ / 帕高等）→ 无码
+/// - 已知无码厂牌前缀（FC2 / HEYZO / KIN8 / MYWIFE 等）→ 无码
+/// - 素人数字+字母前缀（`300MIUM-700` / `390JAC-132`）含字母 → 有码，不误判
+///
+/// 注意：这判定"作品天生无码"，与 [`DesignationMarkers::uncensored`]（有码作品的无码破解流出版）
+/// 是不同维度。入参应为归一后的纯番号（`PREFIX-NUMBER`）。
+pub fn is_uncensored_designation(designation: &str) -> bool {
+    let upper = designation.to_uppercase();
+    let prefix = upper.split('-').next().unwrap_or("");
+    if prefix.is_empty() {
+        return false;
+    }
+    // 纯数字前缀 → 无码（加勒比/一本道等）
+    if prefix.chars().all(|c| c.is_ascii_digit()) {
+        return true;
+    }
+    UNCENSORED_PREFIXES.contains(&prefix)
+}
 
 /// 提取语义标记。
 ///
@@ -281,7 +315,8 @@ impl DesignationRecognizer {
     pub fn recognize_detailed(&self, title: &str) -> Option<DesignationInfo> {
         let (designation, end) = self.best_candidate(title)?;
         let markers = extract_markers(title, Some(end), &designation);
-        Some(DesignationInfo { designation, markers })
+        let is_uncensored = is_uncensored_designation(&designation);
+        Some(DesignationInfo { designation, markers, is_uncensored })
     }
 
     /// 验证番号是否合理
@@ -492,6 +527,7 @@ JAV番号的常见格式包括：
                     success: true,
                     designation: Some(info.designation),
                     markers: info.markers,
+                    is_uncensored: info.is_uncensored,
                     method: RecognitionMethod::Regex,
                     message: "识别成功（正则匹配）".to_string(),
                 });
@@ -503,10 +539,12 @@ JAV番号的常见格式包括：
             match self.recognize_with_ai(title).await {
                 Ok(designation) => {
                     let markers = extract_markers(title, None, &designation);
+                    let is_uncensored = is_uncensored_designation(&designation);
                     return Ok(RecognitionResult {
                         success: true,
                         designation: Some(designation),
                         markers,
+                        is_uncensored,
                         method: RecognitionMethod::AI,
                         message: "识别成功（AI）".to_string(),
                     });
@@ -526,6 +564,7 @@ JAV番号的常见格式包括：
             success: false,
             designation: None,
             markers: DesignationMarkers::default(),
+            is_uncensored: false,
             method: RecognitionMethod::Failed,
             message: "无法识别番号".to_string(),
         })
@@ -584,6 +623,30 @@ mod tests {
     fn recognizes_space_separator() {
         let r = DesignationRecognizer::new();
         assert_eq!(r.recognize_with_regex("ABC 123.mp4"), Some("ABC-123".into()));
+    }
+
+    #[test]
+    fn classifies_uncensored_designation() {
+        // 无码：纯数字前缀（加勒比/一本道等）+ 已知无码厂牌
+        assert!(is_uncensored_designation("123456-999"));
+        assert!(is_uncensored_designation("010120-001"));
+        assert!(is_uncensored_designation("FC2-1234567"));
+        assert!(is_uncensored_designation("HEYZO-1234"));
+        assert!(is_uncensored_designation("KIN8-1675"));
+        assert!(is_uncensored_designation("heyzo-1234")); // 大小写不敏感
+        // 有码：标准番号 + 素人（数字+字母前缀，含字母不误判）
+        assert!(!is_uncensored_designation("SSIS-001"));
+        assert!(!is_uncensored_designation("300MIUM-700"));
+        assert!(!is_uncensored_designation("390JAC-132"));
+        assert!(!is_uncensored_designation(""));
+    }
+
+    #[test]
+    fn recognize_detailed_sets_is_uncensored() {
+        let r = DesignationRecognizer::new();
+        assert!(r.recognize_detailed("FC2-PPV-1234567.mp4").unwrap().is_uncensored);
+        assert!(r.recognize_detailed("123456_999.mp4").unwrap().is_uncensored);
+        assert!(!r.recognize_detailed("SSIS-001.mp4").unwrap().is_uncensored);
     }
 
     #[test]

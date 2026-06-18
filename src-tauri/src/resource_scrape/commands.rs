@@ -225,6 +225,11 @@ fn enrich_search_result_detail(result: &mut SearchResult, preferred_cover_type: 
     let score = compute_search_result_detail_score(result, preferred_cover_type);
     result.detail_score = score;
     result.detail_level = detail_level_from_score(score).to_string();
+    // 有码无码分轨：按番号格式/厂牌判定是否无码作品（源未判定时由此兜底）
+    if !result.is_uncensored {
+        result.is_uncensored =
+            crate::utils::designation_recognizer::is_uncensored_designation(&result.code);
+    }
 }
 
 async fn proxy_preview_images_to_files(
@@ -1262,6 +1267,8 @@ pub fn search_result_to_metadata(sr: &SearchResult) -> ScrapeMetadata {
         mpaa: sr.mpaa.clone(),
         custom_rating: sr.custom_rating.clone(),
         country_code: sr.country_code.clone(),
+        is_uncensored: sr.is_uncensored
+            || crate::utils::designation_recognizer::is_uncensored_designation(&sr.code),
         set_name: sr.set_name.clone(),
         maker: sr.maker.clone(),
         publisher: sr.publisher.clone(),

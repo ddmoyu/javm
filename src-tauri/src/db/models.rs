@@ -135,6 +135,8 @@ pub struct VideoScrapeUpdateData<'a> {
     pub local_id: Option<&'a str>,
     pub cover_width: Option<i32>,
     pub cover_height: Option<i32>,
+    /// 是否无码作品（有码无码分轨）
+    pub is_uncensored: bool,
 }
 
 /// 合法的元数据表名枚举，防止 SQL 注入

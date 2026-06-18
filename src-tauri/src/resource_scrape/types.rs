@@ -82,6 +82,9 @@ pub struct SearchResult {
     /// 国家代码
     #[serde(default)]
     pub country_code: String,
+    /// 是否无码作品（按番号格式/厂牌判定，区别于"有码作品的无码流出版"标记）
+    #[serde(default)]
+    pub is_uncensored: bool,
     /// 媒体评分
     #[serde(default)]
     pub critic_rating: Option<i32>,
@@ -212,6 +215,10 @@ pub struct ScrapeMetadata {
     /// 国家代码
     #[serde(default, deserialize_with = "deserialize_null_as_empty_string")]
     pub country_code: String,
+
+    /// 是否无码作品（按番号格式/厂牌判定）
+    #[serde(default)]
+    pub is_uncensored: bool,
 
     /// 系列/套装名
     #[serde(default, deserialize_with = "deserialize_null_as_empty_string")]

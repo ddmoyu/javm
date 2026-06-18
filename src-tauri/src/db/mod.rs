@@ -274,6 +274,7 @@ impl Database {
                 fanart_mtime INTEGER,
                 cover_width INTEGER,
                 cover_height INTEGER,
+                is_uncensored INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 scraped_at TEXT
@@ -284,6 +285,8 @@ impl Database {
         // 列已存在时会报错，忽略即可——不必升库版本、不丢用户数据。
         let _ = conn.execute("ALTER TABLE videos ADD COLUMN cover_width INTEGER", []);
         let _ = conn.execute("ALTER TABLE videos ADD COLUMN cover_height INTEGER", []);
+        // 兼容旧库：补有码/无码标记列（有码无码分轨：识别为无码作品的视频置 1）。
+        let _ = conn.execute("ALTER TABLE videos ADD COLUMN is_uncensored INTEGER DEFAULT 0", []);
         log::info!("[db] event=create_videos_table_succeeded");
 
         // 3. 关联表
@@ -724,6 +727,7 @@ impl Database {
                 local_id = ?,
                 cover_width = ?,
                 cover_height = ?,
+                is_uncensored = ?,
                 scan_status = 2,
                 scraped_at = datetime('now'),
                 updated_at = datetime('now')
@@ -740,6 +744,7 @@ impl Database {
                 data.local_id,
                 data.cover_width,
                 data.cover_height,
+                data.is_uncensored as i32,
                 video_id
             ],
         )?;

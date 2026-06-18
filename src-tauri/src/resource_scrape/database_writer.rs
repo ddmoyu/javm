@@ -110,6 +110,10 @@ impl DatabaseWriter {
                 local_id: Some(metadata.local_id.as_str()),
                 cover_width,
                 cover_height,
+                is_uncensored: metadata.is_uncensored
+                    || crate::utils::designation_recognizer::is_uncensored_designation(
+                        &metadata.local_id,
+                    ),
             };
 
             Database::update_video_scrape_info(&conn, &video_id, &update).map_err(|e| e.to_string())?;
@@ -252,6 +256,10 @@ impl DatabaseWriter {
                 local_id: Some(metadata.local_id.as_str()),
                 cover_width,
                 cover_height,
+                is_uncensored: metadata.is_uncensored
+                    || crate::utils::designation_recognizer::is_uncensored_designation(
+                        &metadata.local_id,
+                    ),
             };
             Database::update_video_scrape_info(&tx, &video_id, &update)
                 .map_err(|e| e.to_string())?;

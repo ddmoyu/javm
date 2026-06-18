@@ -575,6 +575,8 @@ pub(crate) fn build_nfo_metadata_for_update(
 
     crate::resource_scrape::types::ScrapeMetadata {
         title,
+        // 借用须在 local_id 被移动进结构体之前完成
+        is_uncensored: crate::utils::designation_recognizer::is_uncensored_designation(&local_id),
         local_id,
         original_title,
         plot: parsed_nfo
