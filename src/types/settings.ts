@@ -124,6 +124,7 @@ export interface ScrapeSettings {
     sites: ResourceSite[]      // 资源网站列表
     linkFinderSite: string     // 资源链接查找器上次选择的视频站点 id
     antiBlock: AntiBlockSettings // 反爬工具箱配置
+    uncensoredMode: boolean    // 一键无码模式：所有刮削强制走无码路由
 }
 
 /** AI 设置 */
@@ -217,6 +218,7 @@ export const defaultSettings: AppSettings = {
         devShowWebview: false,
         defaultSite: 'javbus',
         linkFinderSite: 'missav',
+        uncensoredMode: false,
         sites: [
             { id: 'javbus', name: '数据源 1', enabled: true },
             { id: 'javmenu', name: '数据源 2', enabled: true },

@@ -467,8 +467,10 @@ pub(crate) async fn scrape_and_fuse(
         max_webview_windows: fetch_settings.max_webview_windows,
     };
 
-    // 有码无码分轨：无码作品走无码/综合源，有码作品走有码/综合源
-    let is_uncensored = crate::utils::designation_recognizer::is_uncensored_designation(&code);
+    // 有码无码分轨：无码作品走无码/综合源，有码作品走有码/综合源；
+    // 一键无码模式开启时强制按无码路由（所有番号都纳入无码/综合源）
+    let is_uncensored = settings.scrape.uncensored_mode
+        || crate::utils::designation_recognizer::is_uncensored_designation(&code);
     let scrape_sources: Vec<Box<dyn Source>> = sources::all_sources()
         .into_iter()
         .filter(|s| enabled_ids.iter().any(|id| id.eq_ignore_ascii_case(s.name())))
@@ -817,8 +819,10 @@ pub async fn rs_search_resource(
             })
             .collect()
     } else {
-        // 有码无码分轨：无码作品走无码/综合源，有码作品走有码/综合源
-        let is_uncensored = crate::utils::designation_recognizer::is_uncensored_designation(&code);
+        // 有码无码分轨：无码作品走无码/综合源，有码作品走有码/综合源；
+        // 一键无码模式开启时强制按无码路由
+        let is_uncensored = app_settings.scrape.uncensored_mode
+            || crate::utils::designation_recognizer::is_uncensored_designation(&code);
         sources::all_sources()
             .into_iter()
             .filter(|s| enabled_site_ids.iter().any(|id| id.eq_ignore_ascii_case(s.name())))

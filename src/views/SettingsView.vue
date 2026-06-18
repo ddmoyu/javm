@@ -936,6 +936,16 @@ watch(() => settingsStore.settings, async (newSettings) => {
                   </Select>
                 </div>
 
+                <!-- 一键无码模式 -->
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <p class="font-medium">一键无码模式</p>
+                    <p class="text-sm text-muted-foreground">开启后所有刮削强制走无码路由：番号无论有码无码都纳入无码/综合源、跳过纯有码源</p>
+                  </div>
+                  <Switch :model-value="!!localSettings.scrape.uncensoredMode"
+                    @update:model-value="(v: boolean) => { localSettings.scrape.uncensoredMode = v; saveScrapeSettings() }" />
+                </div>
+
                 <div class="flex items-center justify-between gap-4">
                   <div>
                     <p class="font-medium">搜索并发数</p>

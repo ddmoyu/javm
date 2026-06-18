@@ -238,6 +238,10 @@ pub struct ScrapeSettings {
     /// 反爬工具箱配置（限速/退避/UA 轮换/代理池/镜像轮换）
     #[serde(rename = "antiBlock", default)]
     pub anti_block: AntiBlockSettings,
+    /// 一键无码模式：开启后所有刮削强制走无码路由（番号无论有码无码都视为无码，
+    /// 纳入无码/综合源、跳过纯有码源）。有码无码分轨·全局开关。
+    #[serde(rename = "uncensoredMode", default)]
+    pub uncensored_mode: bool,
 }
 
 /// 反爬工具箱设置。字段与 `resource_scrape::anti_block::config::AntiBlockConfig` 对应，
@@ -566,6 +570,7 @@ impl Default for ScrapeSettings {
             sites: default_scrape_sites(),
             link_finder_site: default_link_finder_site(),
             anti_block: AntiBlockSettings::default(),
+            uncensored_mode: false,
         }
     }
 }
