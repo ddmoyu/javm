@@ -318,108 +318,34 @@ impl TaskQueueManager {
         let prepared_video = super::commands::prepare_video_for_scrape_save(&self.db, &video_id)?;
         let video_path = prepared_video.video_path.clone();
 
-        // 解析元数据落地目标：独立目录模式定向到 <root>/<番号 标题>/ 并写 .strm；
-        // 跟随视频模式 / 解析失败时回退为原有「视频同目录」逻辑。
-        let storage_settings = crate::settings::get_settings(self.app.clone()).await.unwrap_or_default();
-        let storage_cfg = crate::media::assets::MetadataStorageConfig::from_settings(&storage_settings);
-        let asset_target = crate::media::assets::resolve_asset_target(
-            &video_path,
-            &metadata.local_id,
-            &metadata.title,
-            &storage_cfg,
-        )
-        .map_err(|e| {
-            log::error!("[scrape_queue] event=resolve_asset_target_failed task_id={} error={}", task_id, e)
-        })
-        .ok();
-        if let Some(target) = asset_target.as_ref() {
-            if let Err(e) = crate::media::assets::ensure_asset_dir_and_strm(target) {
-                log::error!("[scrape_queue] event=metadata_dir_prepare_failed task_id={} error={}", task_id, e);
-            }
-        }
-
-        // 图集落地目录与文件名 stem（独立目录 / 跟随视频）
-        let (art_dir, art_stem) = match asset_target.as_ref() {
-            Some(target) => (target.dir.clone(), target.stem.clone()),
-            None => {
-                let p = std::path::Path::new(&video_path);
-                (
-                    p.parent().map(|x| x.to_path_buf()).unwrap_or_default(),
-                    p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-                )
-            }
-        };
-
+        // 进度 2：准备就绪
         self.db
             .update_scrape_task_progress(task_id, 2)
             .map_err(|e| e.to_string())?;
         self.emit_progress(task_id, 2).await;
-
         if self.check_stop(task_id, 2).await? {
             return Err("Task stopped".to_string());
         }
 
-        // 步骤 3: 产出标准图集 poster(竖)/fanart(横)/thumb(横)（进度 3）
-        let produced = crate::media::artwork::produce_artwork(
-            &art_dir,
-            &art_stem,
-            &metadata.cover_url,
-            &metadata.poster_url,
-            None,
-        )
-        .await;
-        let artwork = if produced.fanart.is_some() || produced.poster.is_some() {
-            log::info!(
-                "[scrape_queue] event=artwork_produced task_id={} poster={} fanart={} thumb={}",
-                task_id, produced.poster.is_some(), produced.fanart.is_some(), produced.thumb.is_some()
-            );
-            produced
-        } else {
-            // 失败/无封面时保留已有图集（poster/thumb/fanart），避免清空数据库封面
+        // 刮削产物统一落地（独立目录/.strm + 标准图集 + 预览图 + NFO，各步失败不中断）。
+        // 失败/无封面时保留已有图集，避免清空数据库封面。
+        let outcome = crate::media::storage::write_scraped_media(
+            &self.app,
+            &video_path,
+            &metadata,
             crate::media::artwork::ArtworkResult {
                 poster: prepared_video.poster.clone(),
                 thumb: prepared_video.thumb.clone(),
                 fanart: prepared_video.fanart.clone(),
-            }
-        };
+            },
+        )
+        .await;
 
-        self.db
-            .update_scrape_task_progress(task_id, 3)
-            .map_err(|e| e.to_string())?;
-        self.emit_progress(task_id, 3).await;
-
-        if self.check_stop(task_id, 3).await? {
-            return Err("Task stopped".to_string());
-        }
-
-        // 步骤 4: 下载预览图并生成 NFO（进度 4）
-        if !metadata.thumbs.is_empty() {
-            let preview_items: Vec<(usize, String)> = metadata
-            .thumbs
-                .iter()
-                .enumerate()
-                .map(|(index, url)| (index + 1, url.clone()))
-                .collect();
-
-            if let Err(e) = crate::media::assets::sync_extrafanart_to_dir(&art_dir, preview_items).await {
-                log::error!(
-                    "[scrape_queue] event=extrafanart_sync_failed task_id={} path={} error={}",
-                    task_id,
-                    video_path,
-                    e
-                );
-            }
-        }
-
-        if let Err(e) = crate::media::assets::save_nfo_to(&art_dir, &art_stem, &metadata) {
-            log::error!("[scrape_queue] event=save_nfo_failed task_id={} path={} error={}", task_id, video_path, e);
-        }
-
+        // 进度 4：媒体落地完成
         self.db
             .update_scrape_task_progress(task_id, 4)
             .map_err(|e| e.to_string())?;
         self.emit_progress(task_id, 4).await;
-
         if self.check_stop(task_id, 4).await? {
             return Err("Task stopped".to_string());
         }
@@ -430,7 +356,7 @@ impl TaskQueueManager {
             .write_all(
                 video_id.clone(),
                 metadata,
-                artwork,
+                outcome.artwork,
             )
             .await
         {

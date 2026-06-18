@@ -539,83 +539,18 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
     // 将 SearchResult 转换为 ScrapeMetadata
     let metadata = crate::resource_scrape::commands::search_result_to_metadata(&search_result);
 
-    // 解析元数据落地目标：独立目录模式定向到 <root>/<番号 标题>/ 并写 .strm；
-    // 跟随视频模式 / 解析失败时回退为原有「视频同目录」逻辑。
-    let storage_settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
-    let storage_cfg = crate::media::assets::MetadataStorageConfig::from_settings(&storage_settings);
-    let asset_target = crate::media::assets::resolve_asset_target(
+    // 刮削产物统一落地（独立目录/.strm + 标准图集 + 预览图 + NFO）。
+    // 自动刮削的是新下载视频，无既有封面可保留，回退图集为空。
+    let outcome = crate::media::storage::write_scraped_media(
+        app,
         video_path,
-        &metadata.local_id,
-        &metadata.title,
-        &storage_cfg,
-    )
-    .map_err(|e| log::error!("[auto_scrape] event=resolve_asset_target_failed path={} error={}", video_path, e))
-    .ok();
-    if let Some(target) = asset_target.as_ref() {
-        if let Err(e) = crate::media::assets::ensure_asset_dir_and_strm(target) {
-            log::error!("[auto_scrape] event=metadata_dir_prepare_failed path={} error={}", video_path, e);
-        }
-    }
-
-    // 图集落地目录与文件名 stem（独立目录 / 跟随视频）
-    let (art_dir, art_stem) = match asset_target.as_ref() {
-        Some(target) => (target.dir.clone(), target.stem.clone()),
-        None => {
-            let p = std::path::Path::new(video_path);
-            (
-                p.parent().map(|x| x.to_path_buf()).unwrap_or_default(),
-                p.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-            )
-        }
-    };
-
-    // 3. 产出标准图集 poster(竖)/fanart(横)/thumb(横)
-    let artwork = crate::media::artwork::produce_artwork(
-        &art_dir,
-        &art_stem,
-        &metadata.cover_url,
-        &metadata.poster_url,
-        None,
+        &metadata,
+        crate::media::artwork::ArtworkResult::default(),
     )
     .await;
-    log::info!(
-        "[auto_scrape] event=artwork_produced path={} poster={} fanart={} thumb={}",
-        video_path, artwork.poster.is_some(), artwork.fanart.is_some(), artwork.thumb.is_some()
-    );
 
-    // 4. 下载预览图到 extrafanart
-    if !metadata.thumbs.is_empty() {
-        let preview_items: Vec<(usize, String)> = metadata
-            .thumbs
-            .iter()
-            .enumerate()
-            .map(|(index, url)| (index + 1, url.clone()))
-            .collect();
-
-        if let Err(e) = crate::media::assets::sync_extrafanart_to_dir(&art_dir, preview_items).await {
-            log::error!(
-                "[auto_scrape] event=extrafanart_sync_failed path={} error={}",
-                video_path,
-                e
-            );
-        }
-    }
-
-    // 5. 保存 NFO 文件（按已落地图集引用本地文件名）
-    if let Err(e) = crate::media::assets::save_nfo_to(&art_dir, &art_stem, &metadata) {
-        log::error!(
-            "[auto_scrape] event=save_nfo_failed path={} error={}",
-            video_path,
-            e
-        );
-    } else {
-        log::info!("[auto_scrape] event=save_nfo_succeeded path={}", video_path);
-    }
-
-    // 6. 写入数据库
+    // 写入数据库
     let db = Database::new(app).map_err(|e| e.to_string())?;
-
-    // 生成或查询video_id
     let video_id = get_or_create_video_id(&db, video_path)?;
 
     let writer = DatabaseWriter::new(&db);
@@ -623,7 +558,7 @@ async fn perform_scrape(app: &tauri::AppHandle, video_path: &str) -> Result<(), 
         .write_all(
             video_id,
             metadata,
-            artwork,
+            outcome.artwork,
         )
         .await?;
 

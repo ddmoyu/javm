@@ -393,7 +393,7 @@ pub async fn move_video_file(app: AppHandle, db: State<'_, crate::db::Database>,
     let conn = db.get_connection()?;
     let app_clone = app.clone();
     // 独立目录模式配置（用于移动后同步 .strm）
-    let storage_cfg = crate::media::assets::MetadataStorageConfig::from_settings(
+    let storage_cfg = crate::media::storage::MetadataStorageConfig::from_settings(
         &crate::settings::get_settings(app.clone()).await.unwrap_or_default(),
     );
 
@@ -476,7 +476,7 @@ pub async fn move_video_file(app: AppHandle, db: State<'_, crate::db::Database>,
         )?;
 
         // 独立目录模式：把对应番号的 .strm 指向新视频路径（外部媒体库点播才不会失效）
-        if let Err(e) = crate::media::assets::sync_independent_strm(
+        if let Err(e) = crate::media::storage::sync_independent_strm(
             &storage_cfg,
             local_id.as_deref().unwrap_or_default(),
             &new_path_str,
@@ -504,7 +504,7 @@ pub async fn update_video(app: AppHandle, db: State<'_, crate::db::Database>, id
     let mut conn = db.get_connection()?;
     let app_clone = app.clone();
     // 独立目录模式配置（用于重命名后同步 .strm）
-    let storage_cfg = crate::media::assets::MetadataStorageConfig::from_settings(
+    let storage_cfg = crate::media::storage::MetadataStorageConfig::from_settings(
         &crate::settings::get_settings(app.clone()).await.unwrap_or_default(),
     );
 
@@ -702,7 +702,7 @@ pub async fn update_video(app: AppHandle, db: State<'_, crate::db::Database>, id
 
         // 独立目录模式：视频被重命名/移动时，同步对应番号的 .strm 指向新路径
         if final_video_path != current.video_path {
-            if let Err(e) = crate::media::assets::sync_independent_strm(
+            if let Err(e) = crate::media::storage::sync_independent_strm(
                 &storage_cfg,
                 current.local_id.as_deref().unwrap_or_default(),
                 &final_video_path,
@@ -712,7 +712,7 @@ pub async fn update_video(app: AppHandle, db: State<'_, crate::db::Database>, id
         }
 
         // 独立目录模式：把更新后的 NFO 写回独立目录；非独立 / 未找到时回退写视频同级
-        let wrote_independent_nfo = match crate::media::assets::save_nfo_to_independent_dir(
+        let wrote_independent_nfo = match crate::media::storage::save_nfo_to_independent_dir(
             &storage_cfg,
             current.local_id.as_deref().unwrap_or_default(),
             &rewritten_nfo_metadata,
