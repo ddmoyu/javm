@@ -26,6 +26,7 @@ pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
     let rest = &results[1..];
 
     // ===== 标量：主源为空则按 score 降序取第一个非空 =====
+    fill_if_empty(&mut base.code, rest, |r| &r.code);
     fill_if_empty(&mut base.title, rest, |r| &r.title);
     fill_if_empty(&mut base.duration, rest, |r| &r.duration);
     fill_if_empty(&mut base.studio, rest, |r| &r.studio);
@@ -62,7 +63,7 @@ pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
         }
     }
 
-    // ===== 数组：并集去重 =====
+    // ===== 数组：并集去重（用 results 含主源，主源项先入 seen 保留在前；标量补全用 rest 排除主源）=====
     base.actors = union_csv(results.iter().map(|r| r.actors.as_str()));
     base.tags = union_csv(results.iter().map(|r| r.tags.as_str()));
     base.genres = union_csv(results.iter().map(|r| r.genres.as_str()));

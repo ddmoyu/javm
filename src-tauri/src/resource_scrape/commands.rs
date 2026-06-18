@@ -378,7 +378,15 @@ async fn fetch_and_parse_source(
             let detail = normalize_result_url(&detail, &url);
             match fetcher.fetch(app, &detail, site, fetch_options, cancel).await {
                 Ok(dh) => (dh, detail),
-                Err(_) => (html, url.clone()),
+                Err(e) => {
+                    log::warn!(
+                        "[scrape_fuse] event=detail_fetch_failed source={} code={} fallback=search_page error={}",
+                        source.name(),
+                        code,
+                        e
+                    );
+                    (html, url.clone())
+                }
             }
         }
         None => (html, url.clone()),
@@ -406,7 +414,16 @@ async fn metatube_top_result(
         (client, manager.config().providers)
     };
     let candidates = client.search(code, &providers).await.ok()?;
-    let top = candidates.into_iter().next()?;
+    // MetaTube search 为模糊匹配，取番号与查询一致的候选（去除符号大写后比对），
+    // 避免把"最相近"的不相关影片字段并入融合，污染结果。
+    let canon = |s: &str| -> String {
+        s.chars()
+            .filter(|c| c.is_ascii_alphanumeric())
+            .flat_map(|c| c.to_uppercase())
+            .collect()
+    };
+    let want = canon(code);
+    let top = candidates.into_iter().find(|c| canon(&c.number) == want)?;
     let info = client.get_movie(&top.provider, &top.id).await.ok()?;
     let mut result = crate::metatube::client::movie_info_to_search_result(info);
     if !is_valid_search_result(&result) {
@@ -449,6 +466,18 @@ pub(crate) async fn scrape_and_fuse(
         .into_iter()
         .filter(|s| enabled_ids.iter().any(|id| id.eq_ignore_ascii_case(s.name())))
         .collect();
+
+    // 区分「一个源都没启用」与「有源但没刮到」：无任何可用源时给出可操作的错误，
+    // 而非误导用户去检查番号。MetaTube 就绪时即便没启用自研源也可单独刮削。
+    if scrape_sources.is_empty() {
+        let metatube_ready = app
+            .try_state::<crate::metatube::MetaTubeManager>()
+            .and_then(|m| m.client())
+            .is_some();
+        if !metatube_ready {
+            return Err("未启用任何刮削网站，请先在设置中开启至少一个网站".to_string());
+        }
+    }
 
     let max_concurrent = (settings.scrape.concurrent.max(1) as usize).max(1);
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
@@ -506,6 +535,11 @@ pub async fn rs_scrape_fused(app: AppHandle, code: String) -> Result<Option<Sear
     let Some(mut result) = scrape_and_fuse(&app, &code, &cancel).await? else {
         return Ok(None);
     };
+    // 翻译融合结果，让对话框预览即看到译文（与旧详情刮削一致；保存时再翻译为幂等）。
+    // 是否翻译由设置开关控制，关则原样返回。
+    if let Ok(translated) = crate::utils::ai_translator::translate_search_result(&app, &result).await {
+        result = translated;
+    }
     // 图片代理到本地缓存供对话框展示（保留 remote_* 供保存时下载）
     if let Ok(http) = fingerprint_client::shared_client() {
         if !result.thumbs.is_empty() {
