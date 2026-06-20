@@ -440,7 +440,15 @@ async fn metatube_top_result(
     Some(result)
 }
 
-/// 多源抓取 + 字段融合：并发抓所有启用自研源（+ MetaTube 最优），融合成一条最佳结果。
+/// 详情融合刮削：按评分取前 N 个源（避免把慢/低质源都拉上拖慢刮削）
+const FUSED_TOP_N: usize = 6;
+/// 拿到首个结果后，再等这么久收集其它源用于融合，然后提前返回
+const FUSED_FIRST_GRACE: std::time::Duration = std::time::Duration::from_millis(1500);
+/// 绝对超时：再慢也不超过这个时间就用已有结果融合返回
+const FUSED_HARD_DEADLINE: std::time::Duration = std::time::Duration::from_secs(8);
+
+/// 多源抓取 + 字段融合：按评分取前 N 个启用源（+ MetaTube 最优）**并发**抓取，**提前返回**
+/// （首个结果 + 短暂收集窗口），融合成一条最佳结果。慢源在后台跑完（自行关闭 WebView），结果丢弃。
 /// 供无选择列表的路径（详情刮削 / 批量 / 下载后自动）自动产出最佳元数据；远程图片 URL 不代理，
 /// 由调用方按需下载/代理。
 pub(crate) async fn scrape_and_fuse(
@@ -471,11 +479,37 @@ pub(crate) async fn scrape_and_fuse(
     // 一键无码模式开启时强制按无码路由（所有番号都纳入无码/综合源）
     let is_uncensored = settings.scrape.uncensored_mode
         || crate::utils::designation_recognizer::is_uncensored_designation(&code);
-    let scrape_sources: Vec<Box<dyn Source>> = sources::all_sources()
+    let mut scrape_sources: Vec<Box<dyn Source>> = sources::all_sources()
         .into_iter()
         .filter(|s| enabled_ids.iter().any(|id| id.eq_ignore_ascii_case(s.name())))
         .filter(|s| s.capability().handles(is_uncensored))
         .collect();
+
+    // 按「设置里的丰富度评分」降序 + 优先级排序，取前 N 个：评分高的源更可能快且全，
+    // 避免把所有源（含慢 WebView 源）都拉上拖慢详情刮削。评分缺省（新装未刮过）时按优先级/默认序。
+    let score_of = |name: &str| -> u32 {
+        enabled_sites
+            .iter()
+            .find(|s| s.id.eq_ignore_ascii_case(name))
+            .and_then(|s| s.avg_score)
+            .unwrap_or(0)
+    };
+    let prio_of = |name: &str| -> usize {
+        settings
+            .scrape
+            .scraper_priority
+            .iter()
+            .position(|p| p.eq_ignore_ascii_case(name))
+            .unwrap_or(usize::MAX)
+    };
+    scrape_sources.sort_by(|a, b| {
+        score_of(b.name())
+            .cmp(&score_of(a.name()))
+            .then_with(|| prio_of(a.name()).cmp(&prio_of(b.name())))
+    });
+    if scrape_sources.len() > FUSED_TOP_N {
+        scrape_sources.truncate(FUSED_TOP_N);
+    }
 
     // 区分「一个源都没启用」与「有源但没刮到」：无任何可用源时给出可操作的错误，
     // 而非误导用户去检查番号。MetaTube 就绪时即便没启用自研源也可单独刮削。
@@ -492,13 +526,20 @@ pub(crate) async fn scrape_and_fuse(
     let max_concurrent = (settings.scrape.concurrent.max(1) as usize).max(1);
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(max_concurrent));
 
-    let mut handles = Vec::new();
+    // 每个源/ MetaTube 完成即把结果送入 channel；收集端按「首个结果 + 收集窗口 / 绝对超时」提前返回。
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<SearchResult>();
+
+    // 子令牌：提前返回后 cancel 它即可让未收完的慢源**立即关 WebView 窗口、释放槽位**
+    //（fetcher 见取消即关窗），避免批量场景下后台慢源窗口堆积；外部取消父令牌也会传递到这里。
+    let child = cancel.child_token();
+
     for source in scrape_sources {
         let app = app.clone();
         let code = code.clone();
-        let cancel = cancel.clone();
+        let cancel = child.clone();
         let semaphore = semaphore.clone();
         let cover = preferred_cover_type.clone();
+        let tx = tx.clone();
         let site = enabled_sites
             .iter()
             .find(|s| s.id.eq_ignore_ascii_case(source.name()))
@@ -510,29 +551,70 @@ pub(crate) async fn scrape_and_fuse(
                 avg_score: None,
                 scrape_count: None,
             });
-        handles.push(tokio::spawn(async move {
-            let _permit = semaphore.acquire().await.ok()?;
+        tokio::spawn(async move {
+            let _permit = match semaphore.acquire().await {
+                Ok(p) => p,
+                Err(_) => return,
+            };
             if cancel.is_cancelled() {
-                return None;
+                return;
             }
-            fetch_and_parse_source(&app, source.as_ref(), &site, &code, fetch_options, &cover, &cancel)
-                .await
-        }));
+            if let Some(r) = fetch_and_parse_source(
+                &app,
+                source.as_ref(),
+                &site,
+                &code,
+                fetch_options,
+                &cover,
+                &cancel,
+            )
+            .await
+            {
+                let _ = tx.send(r);
+            }
+        });
     }
 
+    // MetaTube 最优与自研源**并发**（不再串行等在最后），就绪才有结果
+    {
+        let app = app.clone();
+        let code = code.clone();
+        let cover = preferred_cover_type.clone();
+        let cancel = child.clone();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            if cancel.is_cancelled() {
+                return;
+            }
+            if let Some(r) = metatube_top_result(&app, &code, &cover).await {
+                let _ = tx.send(r);
+            }
+        });
+    }
+    drop(tx); // 关闭原始发送端：所有任务结束后 rx.recv() 返回 None
+
+    // 提前返回：拿到首个结果后再等 FIRST_GRACE 收集可融合的源，最迟到 HARD_DEADLINE。
     let mut results: Vec<SearchResult> = Vec::new();
-    for handle in handles {
-        if let Ok(Some(result)) = handle.await {
-            results.push(result);
+    let hard = tokio::time::Instant::now() + FUSED_HARD_DEADLINE;
+    let mut soft: Option<tokio::time::Instant> = None;
+    loop {
+        let deadline = soft.map(|s| s.min(hard)).unwrap_or(hard);
+        tokio::select! {
+            msg = rx.recv() => match msg {
+                Some(r) => {
+                    results.push(r);
+                    if soft.is_none() {
+                        soft = Some(tokio::time::Instant::now() + FUSED_FIRST_GRACE);
+                    }
+                }
+                None => break,
+            },
+            _ = tokio::time::sleep_until(deadline) => break,
         }
     }
 
-    // MetaTube 最优加入融合池（best-effort）
-    if !cancel.is_cancelled() {
-        if let Some(mt) = metatube_top_result(app, &code, &preferred_cover_type).await {
-            results.push(mt);
-        }
-    }
+    // 通知未收完的慢源立即停止并关窗（提前返回时丢弃其迟到结果），避免后台窗口堆积
+    child.cancel();
 
     log::info!("[scrape_fuse] event=fused code={} sources={}", code, results.len());
     Ok(super::fusion::merge_sources(results))
