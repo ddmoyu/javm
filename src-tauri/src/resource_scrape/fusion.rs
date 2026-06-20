@@ -16,12 +16,17 @@ pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
     if results.is_empty() {
         return None;
     }
+
+    // 主源 = detail_score 最高（稳定排序保留先后），同时决定封面候选顺序
+    results.sort_by(|a, b| b.detail_score.cmp(&a.detail_score));
+    let cover_candidates = collect_cover_candidates(&results);
+
     if results.len() == 1 {
-        return results.pop();
+        let mut only = results.pop().unwrap();
+        only.cover_candidates = cover_candidates;
+        return Some(only);
     }
 
-    // 主源 = detail_score 最高（稳定排序保留先后）
-    results.sort_by(|a, b| b.detail_score.cmp(&a.detail_score));
     let mut base = results[0].clone();
     let rest = &results[1..];
 
@@ -73,7 +78,28 @@ pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
     base.thumbs = union_vec(results.iter().flat_map(|r| r.thumbs.iter().cloned()));
     base.actor_avatars = merge_actor_avatars(&results);
 
+    base.cover_candidates = cover_candidates;
     Some(base)
+}
+
+/// 跨源封面候选：按入参顺序（已按评分降序）收集各源 `cover_url`，再各源 `poster_url` 兜底；
+/// 仅保留 http(s) 且去重。代理时逐个尝试，直到拿到能解码的有效图，破图源自动跳过。
+fn collect_cover_candidates(results: &[SearchResult]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut out: Vec<String> = Vec::new();
+    let mut push = |u: &str| {
+        let u = u.trim();
+        if (u.starts_with("http://") || u.starts_with("https://")) && seen.insert(u.to_string()) {
+            out.push(u.to_string());
+        }
+    };
+    for r in results {
+        push(&r.cover_url);
+    }
+    for r in results {
+        push(&r.poster_url);
+    }
+    out
 }
 
 /// 合并各源演员头像：按名字去重，保留首个非空 `avatar_url` / `star_code`（多源补全）。

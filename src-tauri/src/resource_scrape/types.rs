@@ -123,6 +123,10 @@ pub struct SearchResult {
     /// 封面方向（"landscape"/"portrait"），仅后端探测尺寸后用于评分，不下发前端
     #[serde(skip)]
     pub cover_orientation: Option<String>,
+    /// 跨源封面候选（按评分降序去重，各源 cover_url 在前、poster_url 兜底）。
+    /// 仅后端融合→代理间使用：代理时逐个尝试直到拿到「能解码的有效图」，不下发前端。
+    #[serde(skip)]
+    pub cover_candidates: Vec<String>,
 }
 
 // ============================================================

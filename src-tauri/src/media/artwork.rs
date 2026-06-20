@@ -51,6 +51,21 @@ pub fn read_image_dimensions(path: Option<&str>) -> (Option<i32>, Option<i32>) {
     }
 }
 
+/// 校验内存字节是否为可解码的真实图片，且短边不小于 `min_edge`。
+///
+/// 按 magic bytes 猜测格式后只读图头（不全解码，开销小）：
+/// HTML/404 页、空数据、被防盗链替换的文本等无法解码 → 视为无效（避免「保存成 .jpg 的裂图」）；
+/// `min_edge` 可顺带过滤 1x1 跟踪像素等极小占位图。
+pub fn is_valid_image_bytes(bytes: &[u8], min_edge: u32) -> bool {
+    if bytes.is_empty() {
+        return false;
+    }
+    match image::ImageReader::new(std::io::Cursor::new(bytes)).with_guessed_format() {
+        Ok(reader) => matches!(reader.into_dimensions(), Ok((w, h)) if w.min(h) >= min_edge),
+        Err(_) => false,
+    }
+}
+
 /// 预览图最小有效短边（像素）。短边小于此视为无效缩略图（如 125x100 网格图），刮削时过滤掉。
 pub const MIN_PREVIEW_EDGE: u32 = 250;
 

@@ -661,11 +661,42 @@ pub async fn rs_scrape_fused(app: AppHandle, code: String) -> Result<Option<Sear
             result.thumbs = display;
             result.remote_thumb_urls = remote;
         }
-        if result.cover_url.starts_with("http://") || result.cover_url.starts_with("https://") {
-            if let Ok(local) = proxy_image_to_file(&http, &result.cover_url).await {
-                result.remote_cover_url = Some(result.cover_url.clone());
-                result.cover_url = local;
+        // 封面：跨源候选逐个尝试，拿到首个「能解码的有效图」即止；都失败则清空，避免前端裂图
+        let candidates = if result.cover_candidates.is_empty() {
+            vec![result.cover_url.clone()]
+        } else {
+            result.cover_candidates.clone()
+        };
+        let mut cover_done = false;
+        for cand in &candidates {
+            if cand.starts_with("http://") || cand.starts_with("https://") {
+                match proxy_image_to_file(&http, cand).await {
+                    Ok(local) => {
+                        result.remote_cover_url = Some(cand.clone());
+                        result.cover_url = local;
+                        cover_done = true;
+                        break;
+                    }
+                    Err(e) => log::info!(
+                        "[scrape_fuse] event=cover_candidate_skipped url={} error={}",
+                        cand, e
+                    ),
+                }
+            } else if !cand.trim().is_empty() {
+                // 非 http（data: 等）原样保留，交前端直接展示
+                result.cover_url = cand.clone();
+                cover_done = true;
+                break;
             }
+        }
+        if !cover_done {
+            log::info!(
+                "[scrape_fuse] event=no_valid_cover code={} tried={}",
+                result.code,
+                candidates.len()
+            );
+            result.cover_url = String::new();
+            result.remote_cover_url = None;
         }
     }
     Ok(Some(result))
@@ -1332,6 +1363,10 @@ async fn proxy_image_to_file(
 
     if bytes.is_empty() {
         return Err("下载的图片数据为空".to_string());
+    }
+    // 校验确为可解码图片：防盗链/404 常回 200+HTML，若不校验会被当成 .jpg 存下→前端裂图
+    if !crate::media::artwork::is_valid_image_bytes(&bytes, 0) {
+        return Err("下载内容不是有效图片".to_string());
     }
 
     // 生成唯一文件名
