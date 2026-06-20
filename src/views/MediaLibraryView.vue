@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
-import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw, RectangleHorizontal, RectangleVertical, LayoutDashboard, Download, Activity } from 'lucide-vue-next'
+import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw, RectangleHorizontal, RectangleVertical, LayoutDashboard, Activity } from 'lucide-vue-next'
 import { useVideoStore, useSettingsStore } from '@/stores'
-import { toast } from 'vue-sonner'
-import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
-import { hasCoverImage } from '@/utils/image'
 import LibraryHealthDialog from '@/components/LibraryHealthDialog.vue'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -231,50 +227,6 @@ const videoCount = computed(() => {
 // 库健康诊断对话框
 const libraryHealthOpen = ref(false)
 
-// ===== 批量获取封面(DMM) =====
-const batchRunning = ref(false)
-const batchDone = ref(0)
-const batchTotal = ref(0)
-
-// 对当前筛选视图中「缺封面」的视频，批量从 DMM 官方 CDN 补全封面
-const batchFetchCovers = async () => {
-  if (batchRunning.value) return
-  const targets = displayVideos.value.filter((v) => !hasCoverImage(v))
-  if (targets.length === 0) {
-    toast.info('当前列表没有缺封面的视频')
-    return
-  }
-  const ids = targets.map((v) => v.id)
-  batchRunning.value = true
-  batchDone.value = 0
-  batchTotal.value = ids.length
-
-  let unlisten: (() => void) | null = null
-  try {
-    unlisten = await listen<{ done: number; total: number }>('batch-fetch-cover-progress', (e) => {
-      batchDone.value = e.payload.done
-      batchTotal.value = e.payload.total
-    })
-    const result = await invoke<{ total: number; applied: number; skipped: number; failed: number }>(
-      'batch_fetch_covers',
-      { videoIds: ids },
-    )
-    toast.success(
-      `批量获取完成：${result.applied} 张已获取，${result.skipped} 跳过` +
-        (result.failed ? `，${result.failed} 失败` : ''),
-    )
-    if (result.applied > 0) {
-      await videoStore.fetchVideos()
-    }
-  } catch (err) {
-    console.error('批量获取封面失败:', err)
-    toast.error('批量获取失败：' + String(err))
-  } finally {
-    if (unlisten) unlisten()
-    batchRunning.value = false
-  }
-}
-
 // 用于重置筛选
 const clearFilters = () => {
   filterState.value = {
@@ -492,18 +444,6 @@ const showNonStandardLibrary = () => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <!-- 批量获取封面(DMM) -->
-      <Button variant="outline" size="sm" class="h-9 gap-1" :disabled="batchRunning" @click="batchFetchCovers">
-        <Download class="size-4 text-muted-foreground" :class="batchRunning ? 'animate-pulse' : ''" />
-        {{ batchRunning ? `获取中 ${batchDone}/${batchTotal}` : '批量获取封面' }}
-      </Button>
-
-      <!-- 库健康诊断 -->
-      <Button variant="outline" size="sm" class="h-9 gap-1" @click="libraryHealthOpen = true">
-        <Activity class="size-4 text-muted-foreground" />
-        库健康
-      </Button>
-
       <!-- 复合筛选 Popover -->
       <Popover>
         <PopoverTrigger as-child>
@@ -663,6 +603,12 @@ const showNonStandardLibrary = () => {
           </div>
         </PopoverContent>
       </Popover>
+
+      <!-- 库健康诊断 -->
+      <Button variant="outline" size="sm" class="h-9 gap-1" @click="libraryHealthOpen = true">
+        <Activity class="size-4 text-muted-foreground" />
+        库健康
+      </Button>
 
       <div class="ml-auto flex items-center gap-2">
         <!-- 统计信息 -->
