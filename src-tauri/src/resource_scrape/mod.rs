@@ -14,6 +14,8 @@ pub mod fusion;
 pub mod database_writer;
 pub mod detector;
 pub mod sources;
+pub mod actor_provider;
+pub mod magnet;
 pub mod cf_detection;
 pub mod fetcher;
 pub mod commands;

@@ -13,6 +13,14 @@ const router = createRouter({
             },
         },
         {
+            path: '/discover',
+            name: 'discover',
+            component: () => import('@/views/DiscoverView.vue'),
+            meta: {
+                title: '发现',
+            },
+        },
+        {
             path: '/directory',
             name: 'directory',
             component: () => import('@/views/DirectoryView.vue'),

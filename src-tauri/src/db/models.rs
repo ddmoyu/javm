@@ -153,6 +153,9 @@ pub enum MetadataTable {
     Actors,
     Tags,
     Genres,
+    Studios,
+    Series,
+    Directors,
 }
 
 impl MetadataTable {
@@ -161,6 +164,33 @@ impl MetadataTable {
             Self::Actors => "actors",
             Self::Tags => "tags",
             Self::Genres => "genres",
+            Self::Studios => "studios",
+            Self::Series => "series",
+            Self::Directors => "directors",
         }
     }
+}
+
+/// 演员作品全集的写入入参（来自 ActorProvider 抓取的单部作品）。
+/// 标题/封面/日期/来源为 None 时 upsert 不覆盖已有值（多源补全友好）。
+pub struct ActorWorkInput<'a> {
+    pub actor_id: i64,
+    pub code: &'a str,
+    pub title: Option<&'a str>,
+    pub cover_url: Option<&'a str>,
+    pub release_date: Option<&'a str>,
+    pub source: Option<&'a str>,
+    pub is_uncensored: bool,
+}
+
+/// 演员档案写入入参（来自 star 页解析）。各字段 None 时 `update_actor_profile` 不覆盖已有值。
+#[derive(Debug, Default, Clone)]
+pub struct ActorProfileInput {
+    pub avatar_url: Option<String>,
+    pub birthday: Option<String>,
+    pub height: Option<i32>,
+    pub cup: Option<String>,
+    pub bust: Option<i32>,
+    pub waist: Option<i32>,
+    pub hip: Option<i32>,
 }

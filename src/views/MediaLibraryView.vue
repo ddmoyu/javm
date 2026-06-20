@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onActivated, computed, watch } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
-import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw, RectangleHorizontal, RectangleVertical, LayoutDashboard } from 'lucide-vue-next'
+import { Search, ArrowUpDown, Filter, X, LayoutGrid, List, RefreshCw, RectangleHorizontal, RectangleVertical, LayoutDashboard, Download, Activity } from 'lucide-vue-next'
 import { useVideoStore, useSettingsStore } from '@/stores'
+import { toast } from 'vue-sonner'
+import { invoke } from '@tauri-apps/api/core'
+import { listen } from '@tauri-apps/api/event'
+import { hasCoverImage } from '@/utils/image'
+import LibraryHealthDialog from '@/components/LibraryHealthDialog.vue'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -130,6 +135,7 @@ const filterState = ref({
   resolution: [] as string[],
   scraped: [] as string[], // 刮削状态筛选：'scraped' 已刮削, 'unscraped' 未刮削
   censorship: [] as string[], // 有码无码筛选：'censored' 有码, 'uncensored' 无码
+  libraryType: [] as string[], // 库类型筛选：'standard' 标准库, 'nonStandard' 非标准库
 })
 
 const availableDirectories = computed(() => {
@@ -153,6 +159,7 @@ const applyFilters = () => {
     resolution: filterState.value.resolution.length > 0 ? filterState.value.resolution : undefined,
     scraped: filterState.value.scraped.length > 0 ? filterState.value.scraped : undefined,
     censorship: filterState.value.censorship.length > 0 ? filterState.value.censorship : undefined,
+    libraryType: filterState.value.libraryType.length > 0 ? filterState.value.libraryType : undefined,
   })
 }
 
@@ -221,6 +228,53 @@ const videoCount = computed(() => {
   return `共 ${displayVideos.value.length} 个视频`
 })
 
+// 库健康诊断对话框
+const libraryHealthOpen = ref(false)
+
+// ===== 批量获取封面(DMM) =====
+const batchRunning = ref(false)
+const batchDone = ref(0)
+const batchTotal = ref(0)
+
+// 对当前筛选视图中「缺封面」的视频，批量从 DMM 官方 CDN 补全封面
+const batchFetchCovers = async () => {
+  if (batchRunning.value) return
+  const targets = displayVideos.value.filter((v) => !hasCoverImage(v))
+  if (targets.length === 0) {
+    toast.info('当前列表没有缺封面的视频')
+    return
+  }
+  const ids = targets.map((v) => v.id)
+  batchRunning.value = true
+  batchDone.value = 0
+  batchTotal.value = ids.length
+
+  let unlisten: (() => void) | null = null
+  try {
+    unlisten = await listen<{ done: number; total: number }>('batch-fetch-cover-progress', (e) => {
+      batchDone.value = e.payload.done
+      batchTotal.value = e.payload.total
+    })
+    const result = await invoke<{ total: number; applied: number; skipped: number; failed: number }>(
+      'batch_fetch_covers',
+      { videoIds: ids },
+    )
+    toast.success(
+      `批量获取完成：${result.applied} 张已获取，${result.skipped} 跳过` +
+        (result.failed ? `，${result.failed} 失败` : ''),
+    )
+    if (result.applied > 0) {
+      await videoStore.fetchVideos()
+    }
+  } catch (err) {
+    console.error('批量获取封面失败:', err)
+    toast.error('批量获取失败：' + String(err))
+  } finally {
+    if (unlisten) unlisten()
+    batchRunning.value = false
+  }
+}
+
 // 用于重置筛选
 const clearFilters = () => {
   filterState.value = {
@@ -231,6 +285,7 @@ const clearFilters = () => {
     resolution: [],
     scraped: [],
     censorship: [],
+    libraryType: [],
   }
 }
 
@@ -248,6 +303,7 @@ const activeFilterCount = computed(() => {
   if (filterState.value.resolution.length > 0) count++
   if (filterState.value.scraped.length > 0) count++
   if (filterState.value.censorship.length > 0) count++
+  if (filterState.value.libraryType.length > 0) count++
   return count
 })
 
@@ -342,6 +398,35 @@ const uncensoredChecked = computed({
   }
 })
 
+// 标准库/非标准库 checkbox 计算属性
+const standardChecked = computed({
+  get: () => filterState.value.libraryType.includes('standard'),
+  set: (val) => {
+    if (val) {
+      filterState.value.libraryType = [...filterState.value.libraryType, 'standard']
+    } else {
+      filterState.value.libraryType = filterState.value.libraryType.filter(i => i !== 'standard')
+    }
+  }
+})
+
+const nonStandardChecked = computed({
+  get: () => filterState.value.libraryType.includes('nonStandard'),
+  set: (val) => {
+    if (val) {
+      filterState.value.libraryType = [...filterState.value.libraryType, 'nonStandard']
+    } else {
+      filterState.value.libraryType = filterState.value.libraryType.filter(i => i !== 'nonStandard')
+    }
+  }
+})
+
+// 从库健康面板跳转：仅显示非标准库(无番号)
+const showNonStandardLibrary = () => {
+  filterState.value.libraryType = ['nonStandard']
+  libraryHealthOpen.value = false
+}
+
 </script>
 
 <template>
@@ -406,6 +491,18 @@ const uncensoredChecked = computed({
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <!-- 批量获取封面(DMM) -->
+      <Button variant="outline" size="sm" class="h-9 gap-1" :disabled="batchRunning" @click="batchFetchCovers">
+        <Download class="size-4 text-muted-foreground" :class="batchRunning ? 'animate-pulse' : ''" />
+        {{ batchRunning ? `获取中 ${batchDone}/${batchTotal}` : '批量获取封面' }}
+      </Button>
+
+      <!-- 库健康诊断 -->
+      <Button variant="outline" size="sm" class="h-9 gap-1" @click="libraryHealthOpen = true">
+        <Activity class="size-4 text-muted-foreground" />
+        库健康
+      </Button>
 
       <!-- 复合筛选 Popover -->
       <Popover>
@@ -546,6 +643,23 @@ const uncensoredChecked = computed({
                 </div>
               </div>
             </div>
+
+            <!-- 标准库/非标准库筛选 -->
+            <div class="space-y-2">
+              <Label class="text-xs text-muted-foreground">库类型</Label>
+              <div class="grid grid-cols-2 gap-2">
+                <div class="flex items-center space-x-2">
+                  <Checkbox id="standard" v-model="standardChecked" />
+                  <label for="standard"
+                    class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">标准库</label>
+                </div>
+                <div class="flex items-center space-x-2">
+                  <Checkbox id="nonStandard" v-model="nonStandardChecked" />
+                  <label for="nonStandard"
+                    class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer">非标准库</label>
+                </div>
+              </div>
+            </div>
           </div>
         </PopoverContent>
       </Popover>
@@ -620,5 +734,8 @@ const uncensoredChecked = computed({
 
     <!-- 刮削对话框 -->
     <ScrapeDialog ref="scrapeDialogRef" @success="videoStore.fetchVideos()" />
+
+    <!-- 库健康诊断 -->
+    <LibraryHealthDialog v-model:open="libraryHealthOpen" @view-non-standard="showNonStandardLibrary" />
   </div>
 </template>

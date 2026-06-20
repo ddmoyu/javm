@@ -40,6 +40,17 @@ impl ArtworkResult {
     }
 }
 
+/// 读取图片尺寸（仅读图头，开销小）。路径为空/读取失败返回 `(None, None)`。
+pub fn read_image_dimensions(path: Option<&str>) -> (Option<i32>, Option<i32>) {
+    match path {
+        Some(p) if !p.trim().is_empty() => match image::image_dimensions(p) {
+            Ok((w, h)) if w > 0 && h > 0 => (Some(w as i32), Some(h as i32)),
+            _ => (None, None),
+        },
+        _ => (None, None),
+    }
+}
+
 /// 图集文件路径：`<dir>/<stem>-<suffix>.jpg`
 pub fn artwork_path(dir: &Path, stem: &str, suffix: &str) -> PathBuf {
     dir.join(format!("{}-{}.jpg", stem, suffix))

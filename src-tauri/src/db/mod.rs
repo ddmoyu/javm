@@ -13,6 +13,32 @@ use tauri::Manager;
 /// 数据库 schema 版本号，不匹配时直接删除旧数据库并重建
 const DB_SCHEMA_VERSION: i32 = 2;
 
+/// 从番号提取系列/厂牌前缀（如 `SSIS-001` → `SSIS`）。
+///
+/// 规则与番号识别器 `is_valid_designation` 一致：大写后按 `-` 分两段，
+/// 前缀长度 2-8 且至少含一个字母（排除纯数字无码番号、分辨率等）。
+pub fn series_prefix_of(local_id: &str) -> Option<String> {
+    let upper = local_id.trim().to_uppercase();
+    let parts: Vec<&str> = upper.split('-').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let prefix = parts[0];
+    let number = parts[1];
+    let len = prefix.chars().count();
+    if !(2..=8).contains(&len) {
+        return None;
+    }
+    // 前缀至少含一个字母（排除纯数字无码番号），数字段至少含一个数字（排除非番号文本）
+    if !prefix.chars().any(|c| c.is_ascii_alphabetic()) {
+        return None;
+    }
+    if !number.chars().any(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(prefix.to_string())
+}
+
 #[derive(Clone)]
 pub struct Database {
     path: PathBuf,
@@ -123,15 +149,55 @@ impl Database {
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 
         // 1. 元数据表
+        // 演员表含档案字段（头像/别名/资料），演员中心模块使用；旧库由下方 ALTER 循环补列。
         conn.execute(
             "CREATE TABLE IF NOT EXISTS actors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
                 avatar_path TEXT,
+                avatar_url TEXT,
+                aliases TEXT,
+                gender TEXT,
+                height INTEGER,
+                bust INTEGER,
+                waist INTEGER,
+                hip INTEGER,
+                cup TEXT,
+                birthday TEXT,
+                debut_date TEXT,
+                nationality TEXT,
+                blood_type TEXT,
+                summary TEXT,
+                work_count INTEGER,
+                profile_source TEXT,
+                star_codes TEXT,
+                profile_updated_at TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )",
             [],
         )?;
+        // 兼容旧库：为已存在的 actors 表补演员档案列（列已存在则忽略错误，不升库版本、不丢数据）。
+        for col in [
+            "avatar_url TEXT",
+            "aliases TEXT",
+            "gender TEXT",
+            "height INTEGER",
+            "bust INTEGER",
+            "waist INTEGER",
+            "hip INTEGER",
+            "cup TEXT",
+            "birthday TEXT",
+            "debut_date TEXT",
+            "nationality TEXT",
+            "blood_type TEXT",
+            "summary TEXT",
+            "work_count INTEGER",
+            "profile_source TEXT",
+            "star_codes TEXT",
+            "profile_updated_at TEXT",
+        ] {
+            let _ = conn.execute(&format!("ALTER TABLE actors ADD COLUMN {}", col), []);
+        }
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS tags (
@@ -145,6 +211,35 @@ impl Database {
 
         conn.execute(
             "CREATE TABLE IF NOT EXISTS genres (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+
+        // 多维度浏览：片商 / 系列(番号前缀) / 导演 独立维度表（沿用 actors/genres 模式）。
+        // 旧库由 IF NOT EXISTS 自动补建，存量数据由 backfill_video_dimensions 一次性回填。
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS studios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS series (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS directors (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -318,6 +413,55 @@ impl Database {
             [],
         )?;
 
+        // 多维度关联表（片商 / 系列 / 导演）
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_studios (
+                video_id TEXT REFERENCES videos(id) ON DELETE CASCADE,
+                studio_id INTEGER REFERENCES studios(id) ON DELETE CASCADE,
+                PRIMARY KEY (video_id, studio_id)
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_series (
+                video_id TEXT REFERENCES videos(id) ON DELETE CASCADE,
+                series_id INTEGER REFERENCES series(id) ON DELETE CASCADE,
+                PRIMARY KEY (video_id, series_id)
+            )",
+            [],
+        )?;
+
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS video_directors (
+                video_id TEXT REFERENCES videos(id) ON DELETE CASCADE,
+                director_id INTEGER REFERENCES directors(id) ON DELETE CASCADE,
+                PRIMARY KEY (video_id, director_id)
+            )",
+            [],
+        )?;
+
+        // 演员作品全集表（演员中心模块）：一个演员的全部作品（本地有 local_video_id 非空 / 缺失为空）。
+        // status: local 本地已有 / missing 缺失（信息已补）/ scraping / downloading / downloaded / failed
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS actor_works (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_id INTEGER NOT NULL REFERENCES actors(id) ON DELETE CASCADE,
+                code TEXT NOT NULL,
+                title TEXT,
+                cover_url TEXT,
+                release_date TEXT,
+                source TEXT,
+                local_video_id TEXT REFERENCES videos(id) ON DELETE SET NULL,
+                status TEXT NOT NULL DEFAULT 'missing',
+                is_uncensored INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (actor_id, code)
+            )",
+            [],
+        )?;
+
         // 4. 下载表
         // 状态码: 0=排队 1=准备 2=下载中 3=合并 4=刮削中 5=暂停 6=完成 7=失败 8=重试 9=取消
         log::info!("[db] event=create_downloads_table_started");
@@ -398,6 +542,43 @@ impl Database {
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_downloads_url ON downloads (url)",
             [],
         )?;
+        // 维度关联表反向索引：支撑「某片商/系列/导演的全部作品」查询
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_video_studios_studio ON video_studios (studio_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_video_series_series ON video_series (series_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_video_directors_director ON video_directors (director_id)",
+            [],
+        )?;
+        // 演员作品全集：按演员取作品、按番号做本地匹配
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_actor_works_actor ON actor_works (actor_id)",
+            [],
+        )?;
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_actor_works_code ON actor_works (code)",
+            [],
+        )?;
+
+        // 存量视频维度回填（一次性，按 app_meta 标记幂等）
+        let dim_backfilled: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM app_meta WHERE key = 'dim_backfill_v1'",
+            [],
+            |r| r.get(0),
+        )?;
+        if dim_backfilled == 0 {
+            Self::backfill_video_dimensions(&conn)?;
+            conn.execute(
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('dim_backfill_v1', '1')",
+                [],
+            )?;
+            log::info!("[db] event=dimension_backfill_completed");
+        }
 
         // 标记当前数据库 schema 版本
         conn.pragma_update(None, "user_version", DB_SCHEMA_VERSION)?;
@@ -442,6 +623,210 @@ impl Database {
 
     pub fn get_or_create_genre(conn: &Connection, name: &str) -> Result<i64> {
         Self::get_or_create_metadata(conn, MetadataTable::Genres, name)
+    }
+
+    /// 重建单个视频的维度关联（片商 / 系列 / 导演）。
+    ///
+    /// 先清后插，与 actors/genres 同样的「清空+重填」语义。片商/导演取文本字段，
+    /// 系列由番号前缀派生（`series_prefix_of`）。空值/无效番号则该维度留空。
+    /// 在三处写入路径复用：刮削落地（`write_all`）、手动编辑（`update_video`）、扫描（NFO 变更）。
+    pub fn sync_video_dimensions(
+        conn: &Connection,
+        video_id: &str,
+        studio: Option<&str>,
+        director: Option<&str>,
+        local_id: Option<&str>,
+    ) -> Result<()> {
+        conn.execute("DELETE FROM video_studios WHERE video_id = ?", params![video_id])?;
+        conn.execute("DELETE FROM video_series WHERE video_id = ?", params![video_id])?;
+        conn.execute("DELETE FROM video_directors WHERE video_id = ?", params![video_id])?;
+
+        if let Some(name) = studio.map(str::trim).filter(|s| !s.is_empty()) {
+            let id = Self::get_or_create_metadata(conn, MetadataTable::Studios, name)?;
+            conn.execute(
+                "INSERT OR IGNORE INTO video_studios (video_id, studio_id) VALUES (?, ?)",
+                params![video_id, id],
+            )?;
+        }
+
+        if let Some(name) = director.map(str::trim).filter(|s| !s.is_empty()) {
+            let id = Self::get_or_create_metadata(conn, MetadataTable::Directors, name)?;
+            conn.execute(
+                "INSERT OR IGNORE INTO video_directors (video_id, director_id) VALUES (?, ?)",
+                params![video_id, id],
+            )?;
+        }
+
+        if let Some(name) = local_id.and_then(series_prefix_of) {
+            let id = Self::get_or_create_metadata(conn, MetadataTable::Series, &name)?;
+            conn.execute(
+                "INSERT OR IGNORE INTO video_series (video_id, series_id) VALUES (?, ?)",
+                params![video_id, id],
+            )?;
+        }
+
+        Ok(())
+    }
+
+    /// 写入/更新演员作品全集中的一部作品（按 `UNIQUE(actor_id, code)` 幂等）。
+    ///
+    /// 冲突时仅以非空新值覆盖（`COALESCE`），便于多源补全；不改 `local_video_id`/`status`
+    /// （由 `relink_actor_works_local` 统一按本地库匹配维护）。
+    pub fn upsert_actor_work(conn: &Connection, w: &ActorWorkInput) -> Result<()> {
+        conn.execute(
+            "INSERT INTO actor_works
+                (actor_id, code, title, cover_url, release_date, source, is_uncensored, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, CURRENT_TIMESTAMP)
+             ON CONFLICT(actor_id, code) DO UPDATE SET
+                title = COALESCE(excluded.title, actor_works.title),
+                cover_url = COALESCE(excluded.cover_url, actor_works.cover_url),
+                release_date = COALESCE(excluded.release_date, actor_works.release_date),
+                source = COALESCE(excluded.source, actor_works.source),
+                is_uncensored = excluded.is_uncensored,
+                updated_at = CURRENT_TIMESTAMP",
+            params![
+                w.actor_id,
+                w.code,
+                w.title,
+                w.cover_url,
+                w.release_date,
+                w.source,
+                w.is_uncensored as i64,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// 将某演员的作品全集与本地库按番号匹配：命中本地视频则 `local_video_id` 回填且 `status='local'`，
+    /// 否则 `status='missing'`。仅触碰 `local`/`missing` 行，不干扰下载中等中间态。
+    pub fn relink_actor_works_local(conn: &Connection, actor_id: i64) -> Result<usize> {
+        let affected = conn.execute(
+            "UPDATE actor_works
+             SET local_video_id = (
+                     SELECT v.id FROM videos v
+                     WHERE UPPER(TRIM(v.local_id)) = UPPER(TRIM(actor_works.code))
+                     LIMIT 1
+                 ),
+                 status = CASE WHEN EXISTS (
+                     SELECT 1 FROM videos v
+                     WHERE UPPER(TRIM(v.local_id)) = UPPER(TRIM(actor_works.code))
+                 ) THEN 'local' ELSE 'missing' END,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE actor_id = ?1 AND status IN ('local', 'missing')",
+            params![actor_id],
+        )?;
+        Ok(affected)
+    }
+
+    /// 用详情页抓取的头像信息补全演员档案（仅当演员已存在，按名匹配）。
+    ///
+    /// `avatar_url` 非空才覆盖（旧值保留）；`star_code` 为字母数字时以 `{"javbus":"code"}` 存入 `star_codes`。
+    /// 二者皆空则不更新时间戳。
+    pub fn update_actor_avatar(
+        conn: &Connection,
+        name: &str,
+        avatar_url: &str,
+        star_code: &str,
+    ) -> Result<()> {
+        let avatar = avatar_url.trim();
+        let sc = star_code.trim();
+        let star_codes_json = if !sc.is_empty()
+            && sc.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            Some(format!(r#"{{"javbus":"{}"}}"#, sc))
+        } else {
+            None
+        };
+        conn.execute(
+            "UPDATE actors SET
+                avatar_url = COALESCE(NULLIF(?2, ''), avatar_url),
+                star_codes = COALESCE(?3, star_codes),
+                profile_updated_at = CASE WHEN ?2 <> '' OR ?3 IS NOT NULL
+                    THEN CURRENT_TIMESTAMP ELSE profile_updated_at END
+             WHERE name = ?1",
+            params![name, avatar, star_codes_json],
+        )?;
+        Ok(())
+    }
+
+    /// 写入演员档案（star 页解析结果）。各字段 None 时 `COALESCE` 保留已有值（多源/分次补全）。
+    pub fn update_actor_profile(
+        conn: &Connection,
+        actor_id: i64,
+        p: &ActorProfileInput,
+    ) -> Result<()> {
+        conn.execute(
+            "UPDATE actors SET
+                avatar_url = COALESCE(?2, avatar_url),
+                birthday = COALESCE(?3, birthday),
+                height = COALESCE(?4, height),
+                cup = COALESCE(?5, cup),
+                bust = COALESCE(?6, bust),
+                waist = COALESCE(?7, waist),
+                hip = COALESCE(?8, hip),
+                profile_source = 'javbus',
+                profile_updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?1",
+            params![
+                actor_id,
+                p.avatar_url,
+                p.birthday,
+                p.height,
+                p.cup,
+                p.bust,
+                p.waist,
+                p.hip,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// 读取演员的数据源 star code（从 `star_codes` JSON 的 `javbus` 键）。
+    pub fn get_actor_star_code(conn: &Connection, actor_id: i64) -> Result<Option<String>> {
+        let raw: Option<String> = conn
+            .query_row(
+                "SELECT star_codes FROM actors WHERE id = ?",
+                params![actor_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(raw
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+            .and_then(|v| v.get("javbus").and_then(|x| x.as_str()).map(String::from)))
+    }
+
+    /// 记录演员作品全集总数。
+    pub fn set_actor_work_count(conn: &Connection, actor_id: i64, count: i64) -> Result<()> {
+        conn.execute(
+            "UPDATE actors SET work_count = ?2 WHERE id = ?1",
+            params![actor_id, count],
+        )?;
+        Ok(())
+    }
+
+    /// 一次性回填：为所有存量视频重建维度关联。由 `init()` 按 app_meta 标记仅执行一次。
+    fn backfill_video_dimensions(conn: &Connection) -> Result<()> {
+        let rows: Vec<(String, Option<String>, Option<String>, Option<String>)> = {
+            let mut stmt =
+                conn.prepare("SELECT id, studio, director, local_id FROM videos")?;
+            let mapped = stmt.query_map([], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            })?;
+            mapped.collect::<Result<Vec<_>>>()?
+        };
+
+        for (id, studio, director, local_id) in rows {
+            Self::sync_video_dimensions(
+                conn,
+                &id,
+                studio.as_deref(),
+                director.as_deref(),
+                local_id.as_deref(),
+            )?;
+        }
+        Ok(())
     }
 
     // ==================== 刮削任务操作 ====================
@@ -695,10 +1080,12 @@ impl Database {
         poster_path: Option<&str>,
         thumb_path: Option<&str>,
         fanart_path: Option<&str>,
+        cover_width: Option<i32>,
+        cover_height: Option<i32>,
     ) -> Result<()> {
         conn.execute(
-            "UPDATE videos SET poster = ?, thumb = ?, fanart = ?, updated_at = datetime('now') WHERE id = ?",
-            rusqlite::params![poster_path, thumb_path, fanart_path, video_id],
+            "UPDATE videos SET poster = ?, thumb = ?, fanart = ?, cover_width = ?, cover_height = ?, updated_at = datetime('now') WHERE id = ?",
+            rusqlite::params![poster_path, thumb_path, fanart_path, cover_width, cover_height, video_id],
         )?;
         Ok(())
     }
@@ -1289,5 +1676,332 @@ impl Database {
             |row| row.get(0),
         )
         .optional()
+    }
+}
+
+#[cfg(test)]
+mod dimension_tests {
+    use super::{series_prefix_of, Database};
+    use rusqlite::{params, Connection, OptionalExtension};
+
+    fn setup_dim_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE videos (id TEXT PRIMARY KEY, studio TEXT, director TEXT, local_id TEXT);
+             CREATE TABLE studios (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT);
+             CREATE TABLE series (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT);
+             CREATE TABLE directors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, created_at TEXT);
+             CREATE TABLE video_studios (video_id TEXT, studio_id INTEGER, PRIMARY KEY (video_id, studio_id));
+             CREATE TABLE video_series (video_id TEXT, series_id INTEGER, PRIMARY KEY (video_id, series_id));
+             CREATE TABLE video_directors (video_id TEXT, director_id INTEGER, PRIMARY KEY (video_id, director_id));",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn dim_name(conn: &Connection, rel: &str, dim: &str, col: &str, video_id: &str) -> Option<String> {
+        let sql = format!(
+            "SELECT d.name FROM {dim} d JOIN {rel} r ON r.{col} = d.id WHERE r.video_id = ?"
+        );
+        conn.query_row(&sql, params![video_id], |r| r.get(0)).optional().unwrap()
+    }
+
+    #[test]
+    fn series_prefix_extracts_label() {
+        assert_eq!(series_prefix_of("SSIS-001"), Some("SSIS".to_string()));
+        assert_eq!(series_prefix_of("ipx-177"), Some("IPX".to_string()));
+        assert_eq!(series_prefix_of("  abp-123 "), Some("ABP".to_string()));
+        assert_eq!(series_prefix_of("300MAAN-456"), Some("300MAAN".to_string()));
+    }
+
+    #[test]
+    fn series_prefix_rejects_non_designations() {
+        assert_eq!(series_prefix_of(""), None);
+        assert_eq!(series_prefix_of("SSIS001"), None); // 无分隔符
+        assert_eq!(series_prefix_of("010112-001"), None); // 纯数字前缀（无码）
+        assert_eq!(series_prefix_of("A-001"), None); // 前缀过短
+        assert_eq!(series_prefix_of("ABCDEFGHI-001"), None); // 前缀过长
+        assert_eq!(series_prefix_of("NO-NUMBER"), None); // 数字段无数字
+        assert_eq!(series_prefix_of("FC2-PPV-1234567"), None); // 多段
+    }
+
+    #[test]
+    fn sync_dimensions_populates_all_relations() {
+        let conn = setup_dim_db();
+        Database::sync_video_dimensions(
+            &conn,
+            "v1",
+            Some("S1 STUDIO"),
+            Some("导演A"),
+            Some("SSIS-123"),
+        )
+        .unwrap();
+
+        assert_eq!(dim_name(&conn, "video_studios", "studios", "studio_id", "v1").as_deref(), Some("S1 STUDIO"));
+        assert_eq!(dim_name(&conn, "video_series", "series", "series_id", "v1").as_deref(), Some("SSIS"));
+        assert_eq!(dim_name(&conn, "video_directors", "directors", "director_id", "v1").as_deref(), Some("导演A"));
+    }
+
+    #[test]
+    fn sync_dimensions_skips_empty_and_invalid() {
+        let conn = setup_dim_db();
+        // 空片商/空导演/无码番号 → 三个维度均不建立关联
+        Database::sync_video_dimensions(&conn, "v1", Some("  "), None, Some("010112-001")).unwrap();
+        assert!(dim_name(&conn, "video_studios", "studios", "studio_id", "v1").is_none());
+        assert!(dim_name(&conn, "video_series", "series", "series_id", "v1").is_none());
+        assert!(dim_name(&conn, "video_directors", "directors", "director_id", "v1").is_none());
+    }
+
+    #[test]
+    fn sync_dimensions_rebuilds_on_rerun() {
+        let conn = setup_dim_db();
+        Database::sync_video_dimensions(&conn, "v1", Some("OLD"), None, Some("ABP-001")).unwrap();
+        // 改片商 + 改番号前缀 → 旧关联清除，新关联建立
+        Database::sync_video_dimensions(&conn, "v1", Some("NEW"), None, Some("IPX-200")).unwrap();
+
+        assert_eq!(dim_name(&conn, "video_studios", "studios", "studio_id", "v1").as_deref(), Some("NEW"));
+        assert_eq!(dim_name(&conn, "video_series", "series", "series_id", "v1").as_deref(), Some("IPX"));
+        // 同番号前缀的复用：另一视频归入同一 series 记录
+        Database::sync_video_dimensions(&conn, "v2", None, None, Some("IPX-201")).unwrap();
+        let series_rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM series", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(series_rows, 2); // ABP（遗留）、IPX；IPX 未因 v2 重复创建
+    }
+}
+
+#[cfg(test)]
+mod actor_works_tests {
+    use super::{ActorWorkInput, Database};
+    use rusqlite::Connection;
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE actors (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL);
+             CREATE TABLE videos (id TEXT PRIMARY KEY, local_id TEXT);
+             CREATE TABLE actor_works (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor_id INTEGER NOT NULL,
+                code TEXT NOT NULL,
+                title TEXT, cover_url TEXT, release_date TEXT, source TEXT,
+                local_video_id TEXT,
+                status TEXT NOT NULL DEFAULT 'missing',
+                is_uncensored INTEGER DEFAULT 0,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (actor_id, code)
+             );",
+        )
+        .unwrap();
+        conn.execute("INSERT INTO actors (id, name) VALUES (1, '演员A')", [])
+            .unwrap();
+        conn
+    }
+
+    fn work(actor_id: i64, code: &'static str) -> ActorWorkInput<'static> {
+        ActorWorkInput {
+            actor_id,
+            code,
+            title: None,
+            cover_url: None,
+            release_date: None,
+            source: None,
+            is_uncensored: false,
+        }
+    }
+
+    #[test]
+    fn upsert_is_idempotent_and_coalesces() {
+        let conn = setup();
+        Database::upsert_actor_work(
+            &conn,
+            &ActorWorkInput { title: Some("标题1"), cover_url: Some("u1"), ..work(1, "SSIS-001") },
+        )
+        .unwrap();
+        // 第二次：title=None 不抹掉已有标题；cover 非空覆盖
+        Database::upsert_actor_work(
+            &conn,
+            &ActorWorkInput { cover_url: Some("u2"), ..work(1, "SSIS-001") },
+        )
+        .unwrap();
+
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM actor_works", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1); // 同 actor+code 幂等不新增
+        let (title, cover): (String, String) = conn
+            .query_row(
+                "SELECT title, cover_url FROM actor_works WHERE actor_id=1 AND code='SSIS-001'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(title, "标题1"); // COALESCE 保留
+        assert_eq!(cover, "u2"); // 非空覆盖
+    }
+
+    #[test]
+    fn relink_marks_local_and_missing() {
+        let conn = setup();
+        // 本地有 ssis-001（大小写与 code 不同），无 ABP-002
+        conn.execute("INSERT INTO videos (id, local_id) VALUES ('v1', 'ssis-001')", [])
+            .unwrap();
+        Database::upsert_actor_work(&conn, &work(1, "SSIS-001")).unwrap();
+        Database::upsert_actor_work(&conn, &work(1, "ABP-002")).unwrap();
+
+        let n = Database::relink_actor_works_local(&conn, 1).unwrap();
+        assert_eq!(n, 2);
+
+        let (lv, st): (Option<String>, String) = conn
+            .query_row(
+                "SELECT local_video_id, status FROM actor_works WHERE code='SSIS-001'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(lv.as_deref(), Some("v1")); // 大小写不敏感匹配
+        assert_eq!(st, "local");
+
+        let (lv2, st2): (Option<String>, String) = conn
+            .query_row(
+                "SELECT local_video_id, status FROM actor_works WHERE code='ABP-002'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert!(lv2.is_none());
+        assert_eq!(st2, "missing");
+    }
+}
+
+#[cfg(test)]
+mod actor_avatar_tests {
+    use super::Database;
+    use rusqlite::Connection;
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE actors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                avatar_url TEXT,
+                star_codes TEXT,
+                profile_updated_at TEXT
+             );
+             INSERT INTO actors (name) VALUES ('三上悠亜');",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn sets_avatar_and_star_codes() {
+        let conn = setup();
+        Database::update_actor_avatar(&conn, "三上悠亜", "https://img/a.jpg", "abc").unwrap();
+        let (av, sc): (Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT avatar_url, star_codes FROM actors WHERE name='三上悠亜'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(av.as_deref(), Some("https://img/a.jpg"));
+        assert_eq!(sc.as_deref(), Some(r#"{"javbus":"abc"}"#));
+    }
+
+    #[test]
+    fn empty_values_keep_existing() {
+        let conn = setup();
+        Database::update_actor_avatar(&conn, "三上悠亜", "https://img/a.jpg", "abc").unwrap();
+        Database::update_actor_avatar(&conn, "三上悠亜", "", "").unwrap(); // 空值不覆盖
+        let av: Option<String> = conn
+            .query_row("SELECT avatar_url FROM actors WHERE name='三上悠亜'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(av.as_deref(), Some("https://img/a.jpg"));
+    }
+
+    #[test]
+    fn unknown_actor_is_noop() {
+        let conn = setup();
+        // 演员不存在：WHERE 不匹配，0 行受影响，不报错
+        Database::update_actor_avatar(&conn, "不存在", "https://img/a.jpg", "abc").unwrap();
+    }
+}
+
+#[cfg(test)]
+mod actor_profile_tests {
+    use super::{ActorProfileInput, Database};
+    use rusqlite::Connection;
+
+    fn setup() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE actors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL,
+                avatar_url TEXT, birthday TEXT, height INTEGER, cup TEXT,
+                bust INTEGER, waist INTEGER, hip INTEGER, work_count INTEGER,
+                star_codes TEXT, profile_source TEXT, profile_updated_at TEXT
+             );
+             INSERT INTO actors (id, name, star_codes) VALUES (1, 'A', '{\"javbus\":\"xyz\"}');
+             INSERT INTO actors (id, name) VALUES (2, 'B');",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn update_profile_sets_and_coalesces() {
+        let conn = setup();
+        let p = ActorProfileInput {
+            avatar_url: Some("u".into()),
+            birthday: Some("1990-01-01".into()),
+            height: Some(160),
+            cup: Some("D".into()),
+            bust: Some(88),
+            waist: Some(58),
+            hip: Some(85),
+        };
+        Database::update_actor_profile(&conn, 1, &p).unwrap();
+        let (h, cup, bust): (Option<i64>, Option<String>, Option<i64>) = conn
+            .query_row("SELECT height, cup, bust FROM actors WHERE id=1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+            })
+            .unwrap();
+        assert_eq!(h, Some(160));
+        assert_eq!(cup.as_deref(), Some("D"));
+        assert_eq!(bust, Some(88));
+
+        // None 字段不覆盖已有，Some 字段覆盖
+        let p2 = ActorProfileInput { cup: Some("E".into()), ..Default::default() };
+        Database::update_actor_profile(&conn, 1, &p2).unwrap();
+        let (h2, cup2): (Option<i64>, Option<String>) = conn
+            .query_row("SELECT height, cup FROM actors WHERE id=1", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(h2, Some(160)); // 保留
+        assert_eq!(cup2.as_deref(), Some("E")); // 覆盖
+    }
+
+    #[test]
+    fn reads_star_code_from_json() {
+        let conn = setup();
+        assert_eq!(
+            Database::get_actor_star_code(&conn, 1).unwrap().as_deref(),
+            Some("xyz")
+        );
+        assert_eq!(Database::get_actor_star_code(&conn, 2).unwrap(), None); // star_codes 为空
+    }
+
+    #[test]
+    fn sets_work_count() {
+        let conn = setup();
+        Database::set_actor_work_count(&conn, 1, 42).unwrap();
+        let c: Option<i64> = conn
+            .query_row("SELECT work_count FROM actors WHERE id=1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(c, Some(42));
     }
 }

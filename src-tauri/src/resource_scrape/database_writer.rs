@@ -278,6 +278,15 @@ impl DatabaseWriter {
                     .map_err(|e| e.to_string())?;
             }
 
+            // 2.5 演员头像：用详情页 .avatar-box 抓到的头像/star code 补全 actors 档案
+            for av in &metadata.actor_avatars {
+                if av.avatar_url.is_empty() && av.star_code.is_empty() {
+                    continue;
+                }
+                Database::update_actor_avatar(&tx, &av.name, &av.avatar_url, &av.star_code)
+                    .map_err(|e| e.to_string())?;
+            }
+
             // 3. 标签
             Database::clear_video_tags(&tx, &video_id).map_err(|e| e.to_string())?;
             for tag_name in &metadata.tags {
@@ -293,6 +302,16 @@ impl DatabaseWriter {
                     Database::get_or_create_genre(&tx, genre_name).map_err(|e| e.to_string())?;
                 Database::add_video_genre(&tx, &video_id, genre_id).map_err(|e| e.to_string())?;
             }
+
+            // 4.5 维度：片商 / 系列(番号前缀) / 导演
+            Database::sync_video_dimensions(
+                &tx,
+                &video_id,
+                Some(metadata.studio.as_str()),
+                Some(metadata.director.as_str()),
+                Some(metadata.local_id.as_str()),
+            )
+            .map_err(|e| e.to_string())?;
 
             // 5. 跨语言别名：同番号关联（片商每片唯一→总是；女优仅单人作才归并，避免误并合演者）。
             //    best-effort：别名失败不应阻断刮削保存。

@@ -733,12 +733,9 @@ fn parse_fanart_index(path: &Path) -> Option<usize> {
     suffix.parse::<usize>().ok()
 }
 
-pub fn collect_extrafanart_paths(video_path: &Path) -> Vec<(usize, String)> {
-    let extrafanart_dir = match extrafanart_dir_for_video(video_path) {
-        Ok(dir) => dir,
-        Err(_) => return Vec::new(),
-    };
-
+/// 收集指定资产目录下 extrafanart/fanartN.* 的 (序号, 路径)，按序号升序。
+pub fn collect_extrafanart_in(asset_dir: &Path) -> Vec<(usize, String)> {
+    let extrafanart_dir = extrafanart_dir_in(asset_dir);
     if !extrafanart_dir.exists() || !extrafanart_dir.is_dir() {
         return Vec::new();
     }
@@ -760,13 +757,28 @@ pub fn collect_extrafanart_paths(video_path: &Path) -> Vec<(usize, String)> {
     paths
 }
 
-pub fn next_extrafanart_index(video_path: &Path) -> usize {
-    collect_extrafanart_paths(video_path)
+pub fn collect_extrafanart_paths(video_path: &Path) -> Vec<(usize, String)> {
+    match video_path.parent() {
+        Some(parent) => collect_extrafanart_in(parent),
+        None => Vec::new(),
+    }
+}
+
+/// 指定资产目录下的下一个可用 extrafanart 序号（追加预览图，不覆盖已有）。
+pub fn next_extrafanart_index_in(asset_dir: &Path) -> usize {
+    collect_extrafanart_in(asset_dir)
         .into_iter()
         .map(|(index, _)| index)
         .max()
         .unwrap_or(0)
         + 1
+}
+
+pub fn next_extrafanart_index(video_path: &Path) -> usize {
+    video_path
+        .parent()
+        .map(next_extrafanart_index_in)
+        .unwrap_or(1)
 }
 
 pub async fn sync_extrafanart_from_urls(

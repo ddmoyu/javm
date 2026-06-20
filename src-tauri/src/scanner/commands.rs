@@ -54,12 +54,16 @@ pub async fn scan_directory(app: AppHandle, path: String) -> Result<ScanSummary,
         tauri::async_runtime::spawn_blocking(move || {
             if let Ok(conn) = db_for_update.get_connection() {
                 for r in &results_owned {
+                    let (cover_width, cover_height) =
+                        crate::media::artwork::read_image_dimensions(r.artwork.primary_dimension_path());
                     let _ = Database::update_video_cover_paths(
                         &conn,
                         &r.video_id,
                         r.artwork.poster.as_deref(),
                         r.artwork.thumb.as_deref(),
                         r.artwork.fanart.as_deref(),
+                        cover_width,
+                        cover_height,
                     );
                 }
             }

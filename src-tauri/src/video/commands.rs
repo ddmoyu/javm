@@ -252,6 +252,38 @@ pub async fn get_videos(db: State<'_, crate::db::Database>) -> AppResult<Vec<ser
     Ok(enrich_videos_with_file_times(videos).await)
 }
 
+/// 获取演员列表（含头像与本地作品数），供「发现」页演员分面显示头像。
+/// avatarPath 为本地下载头像、avatarUrl 为远程头像（前端优先本地、回退远程）。
+#[tauri::command]
+pub async fn get_actors(db: State<'_, crate::db::Database>) -> AppResult<Vec<serde_json::Value>> {
+    let conn = db.get_connection()?;
+
+    tokio::task::spawn_blocking(move || -> AppResult<Vec<serde_json::Value>> {
+        let mut stmt = conn.prepare(
+            "SELECT a.id, a.name, a.avatar_path, a.avatar_url,
+                    (SELECT COUNT(*) FROM video_actors va WHERE va.actor_id = a.id) AS video_count
+             FROM actors a",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(serde_json::json!({
+                "id": row.get::<_, i64>(0)?,
+                "name": row.get::<_, String>(1)?,
+                "avatarPath": row.get::<_, Option<String>>(2)?,
+                "avatarUrl": row.get::<_, Option<String>>(3)?,
+                "videoCount": row.get::<_, i64>(4)?,
+            }))
+        })?;
+
+        let mut actors = Vec::new();
+        for r in rows {
+            actors.push(r?);
+        }
+        Ok(actors)
+    })
+    .await
+    .map_err(|e| AppError::TaskJoin(e.to_string()))?
+}
+
 /// 回填存量视频的封面尺寸：扫描有 poster 但缺 cover_width/cover_height 的记录，
 /// 仅读图头补算尺寸写回。瀑布流等高画廊布局/虚拟化需要封面比例。
 /// 返回成功补算的数量。
@@ -673,6 +705,23 @@ pub async fn update_video(app: AppHandle, db: State<'_, crate::db::Database>, id
             }
         }
 
+        // 维度同步：从更新后的行重建片商 / 系列 / 导演关联（番号/片商/导演任一变更都生效）
+        {
+            let (studio, director, local_id): (Option<String>, Option<String>, Option<String>) =
+                tx.query_row(
+                    "SELECT studio, director, local_id FROM videos WHERE id = ?",
+                    [&id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )?;
+            crate::db::Database::sync_video_dimensions(
+                &tx,
+                &id,
+                studio.as_deref(),
+                director.as_deref(),
+                local_id.as_deref(),
+            )?;
+        }
+
         if let Some(title) = &title_to_store {
             if let Some(relocated) = crate::media::assets::rename_video_assets_with_title(
                 &final_video_path,
@@ -957,6 +1006,59 @@ pub async fn delete_videos(
         let _ = update_all_directories_count(&conn);
 
         Ok(())
+    })
+    .await
+    .map_err(|e| AppError::TaskJoin(e.to_string()))?
+}
+
+/// 库健康诊断：各诊断项计数
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryHealth {
+    /// 视频总数
+    pub total: i64,
+    /// 识别失败（scan_status=3）
+    pub recognize_failed: i64,
+    /// 刮削失败（scan_status=4）
+    pub scrape_failed: i64,
+    /// 缺封面（poster/thumb/fanart 均空）
+    pub missing_cover: i64,
+    /// 缺 NFO（nfo_mtime 空）
+    pub missing_nfo: i64,
+    /// 缺番号（local_id 空，无法刮削/取图）
+    pub missing_code: i64,
+}
+
+/// 聚合媒体库的元数据缺口与失败项计数（库健康诊断总览）。
+#[tauri::command]
+pub async fn get_library_health(db: State<'_, crate::db::Database>) -> AppResult<LibraryHealth> {
+    let db = db.inner().clone();
+    tokio::task::spawn_blocking(move || -> AppResult<LibraryHealth> {
+        let conn = db.get_connection()?;
+        let health = conn.query_row(
+            "SELECT
+                COUNT(*),
+                SUM(CASE WHEN scan_status = 3 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN scan_status = 4 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN (poster IS NULL OR poster = '')
+                          AND (thumb IS NULL OR thumb = '')
+                          AND (fanart IS NULL OR fanart = '') THEN 1 ELSE 0 END),
+                SUM(CASE WHEN nfo_mtime IS NULL THEN 1 ELSE 0 END),
+                SUM(CASE WHEN local_id IS NULL OR local_id = '' THEN 1 ELSE 0 END)
+             FROM videos",
+            [],
+            |row| {
+                Ok(LibraryHealth {
+                    total: row.get(0)?,
+                    recognize_failed: row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                    scrape_failed: row.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                    missing_cover: row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                    missing_nfo: row.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                    missing_code: row.get::<_, Option<i64>>(5)?.unwrap_or(0),
+                })
+            },
+        )?;
+        Ok(health)
     })
     .await
     .map_err(|e| AppError::TaskJoin(e.to_string()))?

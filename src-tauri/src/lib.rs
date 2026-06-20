@@ -10,6 +10,7 @@ mod settings;
 mod analytics;
 // 功能模块
 pub mod video;
+pub mod actor;
 pub mod media;
 pub mod download;
 pub mod nfo;
@@ -317,6 +318,9 @@ pub fn run() {
             proxy_hls_request,
             // 视频 + 目录
             video::commands::get_videos,
+            video::commands::get_actors,
+            actor::commands::fetch_actor_profile,
+            actor::commands::get_actor_detail,
             video::commands::backfill_cover_dimensions,
             video::commands::get_duplicate_videos,
             video::commands::delete_video_db,
@@ -325,6 +329,7 @@ pub fn run() {
             video::commands::update_video,
             video::commands::find_ad_videos,
             video::commands::delete_videos,
+            video::commands::get_library_health,
             video::commands::download_remote_image,
             video::commands::get_directories,
             video::commands::add_directory,
@@ -339,6 +344,9 @@ pub fn run() {
             media::commands::delete_thumb,
             media::commands::clear_thumbs,
             media::commands::probe_video_duration,
+            media::commands::get_image_candidates,
+            media::commands::apply_image_candidates,
+            media::commands::batch_fetch_covers,
             // 扫描
             scanner::commands::scan_directory,
             // 设置
@@ -379,6 +387,7 @@ pub fn run() {
             resource_scrape::commands::rs_scrape_fused,
             resource_scrape::commands::rs_cancel_search,
             resource_scrape::commands::rs_proxy_image,
+            resource_scrape::commands::rs_get_magnets,
             resource_scrape::commands::get_resource_sites,
             resource_scrape::commands::rs_scrape_save,
             resource_scrape::commands::rs_get_scrape_tasks,

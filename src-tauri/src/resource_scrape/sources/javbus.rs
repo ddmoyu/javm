@@ -10,7 +10,7 @@
 
 use scraper::{Html, Selector};
 use super::common::{extract_head_meta, select_all_attr, select_all_text, select_attr, select_text};
-use super::{SearchResult, Source};
+use super::{ActorAvatar, SearchResult, Source};
 
 pub struct Javbus;
 
@@ -101,6 +101,9 @@ impl Source for Javbus {
         // 女优
         let actors = select_all_text(&doc, ".star-name a").join(", ");
 
+        // 女优头像（详情页 .avatar-box 即含：名字 + 头像URL + star code，顺手抓取补 actors 表）
+        let actor_avatars = parse_actor_avatars(&doc);
+
         // 预览截图：a.sample-box 的 href 指向 dmm 大图
         let thumbs = select_all_attr(&doc, "a.sample-box", "href")
             .into_iter()
@@ -119,6 +122,7 @@ impl Source for Javbus {
             title,
             poster_url,
             actors,
+            actor_avatars,
             duration,
             studio: studio.clone(),
             source: self.name().to_string(),
@@ -149,6 +153,68 @@ impl Source for Javbus {
 }
 
 // ============ 辅助函数 ============
+
+/// 把可能的相对 URL 补全为绝对 URL（javbus 站点）
+fn absolutize(u: &str) -> String {
+    if u.is_empty() || u.starts_with("http") {
+        u.to_string()
+    } else {
+        format!("https://www.javbus.com{}", u)
+    }
+}
+
+/// 解析详情页 `.avatar-box` 列表为演员头像信息。
+///
+/// 结构（站点惯例）：`a.avatar-box[href=/star/{code}]` > `.photo-frame img[src,title]` + `span`。
+/// 名字优先取 `img title`，回退 `span` 文本;占位图（nowprinting）视为无头像。
+fn parse_actor_avatars(doc: &Html) -> Vec<ActorAvatar> {
+    let box_sel = match Selector::parse("a.avatar-box") {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+    let img_sel = Selector::parse(".photo-frame img").ok();
+    let span_sel = Selector::parse("span").ok();
+
+    doc.select(&box_sel)
+        .filter_map(|el| {
+            // star code：/star/{code} 取末段
+            let star_code = el
+                .value()
+                .attr("href")
+                .unwrap_or("")
+                .trim_end_matches('/')
+                .rsplit('/')
+                .next()
+                .unwrap_or("")
+                .to_string();
+
+            let img = img_sel.as_ref().and_then(|s| el.select(s).next());
+            let avatar_url = img
+                .and_then(|i| i.value().attr("src"))
+                .map(absolutize)
+                .filter(|u| !u.to_lowercase().contains("nowprinting"))
+                .unwrap_or_default();
+
+            // 名字：img title 优先，回退 span 文本
+            let name = img
+                .and_then(|i| i.value().attr("title"))
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    span_sel
+                        .as_ref()
+                        .and_then(|s| el.select(s).next())
+                        .map(|e| e.text().collect::<String>().trim().to_string())
+                })
+                .unwrap_or_default();
+
+            if name.is_empty() {
+                return None;
+            }
+            Some(ActorAvatar { name, avatar_url, star_code })
+        })
+        .collect()
+}
 
 /// 选择所有匹配元素中 href 包含指定路径的文本
 fn select_all_text_by_href(doc: &Html, selector_str: &str, href_contains: &str) -> Vec<String> {
@@ -181,4 +247,41 @@ fn extract_field(text: &str, labels: &[&str]) -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_avatar_box_name_url_starcode() {
+        let html = r#"
+            <a class="avatar-box" href="https://www.javbus.com/star/abc">
+              <div class="photo-frame"><img src="https://img/abc.jpg" title="三上悠亜"></div>
+              <span>三上悠亜</span>
+            </a>
+            <a class="avatar-box" href="/star/def">
+              <div class="photo-frame"><img src="/pics/actress/nowprinting.gif" title="葵つかさ"></div>
+              <span>葵つかさ</span>
+            </a>
+        "#;
+        let doc = Html::parse_document(html);
+        let avatars = parse_actor_avatars(&doc);
+
+        assert_eq!(avatars.len(), 2);
+        assert_eq!(avatars[0].name, "三上悠亜");
+        assert_eq!(avatars[0].avatar_url, "https://img/abc.jpg");
+        assert_eq!(avatars[0].star_code, "abc");
+        // 第二个：nowprinting 占位图被过滤为空，但相对 star 链接仍取到 code
+        assert_eq!(avatars[1].name, "葵つかさ");
+        assert_eq!(avatars[1].avatar_url, "");
+        assert_eq!(avatars[1].star_code, "def");
+    }
+
+    #[test]
+    fn ignores_box_without_name() {
+        let html = r#"<a class="avatar-box" href="/star/x"><div class="photo-frame"><img src="/a.jpg"></div></a>"#;
+        let doc = Html::parse_document(html);
+        assert!(parse_actor_avatars(&doc).is_empty());
+    }
 }

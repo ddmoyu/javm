@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 
-use super::types::SearchResult;
+use super::types::{ActorAvatar, SearchResult};
 
 /// 把多源结果融合为一条。空输入返回 `None`；单条原样返回。
 pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
@@ -71,8 +71,37 @@ pub fn merge_sources(mut results: Vec<SearchResult>) -> Option<SearchResult> {
     base.tags = union_csv(results.iter().map(|r| r.tags.as_str()));
     base.genres = union_csv(results.iter().map(|r| r.genres.as_str()));
     base.thumbs = union_vec(results.iter().flat_map(|r| r.thumbs.iter().cloned()));
+    base.actor_avatars = merge_actor_avatars(&results);
 
     Some(base)
+}
+
+/// 合并各源演员头像：按名字去重，保留首个非空 `avatar_url` / `star_code`（多源补全）。
+fn merge_actor_avatars(results: &[SearchResult]) -> Vec<ActorAvatar> {
+    let mut out: Vec<ActorAvatar> = Vec::new();
+    for r in results {
+        for a in &r.actor_avatars {
+            let name = a.name.trim();
+            if name.is_empty() {
+                continue;
+            }
+            if let Some(existing) = out.iter_mut().find(|e| e.name == name) {
+                if existing.avatar_url.is_empty() && !a.avatar_url.is_empty() {
+                    existing.avatar_url = a.avatar_url.clone();
+                }
+                if existing.star_code.is_empty() && !a.star_code.is_empty() {
+                    existing.star_code = a.star_code.clone();
+                }
+            } else {
+                out.push(ActorAvatar {
+                    name: name.to_string(),
+                    avatar_url: a.avatar_url.clone(),
+                    star_code: a.star_code.clone(),
+                });
+            }
+        }
+    }
+    out
 }
 
 fn fill_if_empty<F>(target: &mut String, rest: &[SearchResult], get: F)

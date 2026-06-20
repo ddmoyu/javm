@@ -58,6 +58,7 @@ export interface VideoFilter {
     resolution?: string[]
     scraped?: string[] // 刮削状态筛选：'scraped' 已刮削, 'unscraped' 未刮削
     censorship?: string[] // 有码无码筛选：'censored' 有码, 'uncensored' 无码
+    libraryType?: string[] // 库类型筛选：'standard' 标准库(有番号), 'nonStandard' 非标准库(无番号)
     fileCreatedAfter?: string
     sortBy?: 'premiered' | 'rating' | 'createdAt' | 'fileCreatedAt' | 'title' | 'duration' | 'fileSize'
     sortOrder?: 'asc' | 'desc'

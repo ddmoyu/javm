@@ -1,6 +1,6 @@
 use crate::db::Database;
 use crate::error::{AppError, AppResult};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 /// 视频截图任务的取消令牌管理
@@ -123,12 +123,16 @@ pub async fn save_captured_cover(
         // 更新数据库
         let conn = db.get_connection()?;
 
+        let (cover_width, cover_height) =
+            crate::media::artwork::read_image_dimensions(artwork.primary_dimension_path());
         crate::db::Database::update_video_cover_paths(
             &conn,
             &video_id,
             artwork.poster.as_deref(),
             artwork.thumb.as_deref(),
             artwork.fanart.as_deref(),
+            cover_width,
+            cover_height,
         )?;
 
         // 返回代表封面路径供前端刷新（横版优先）
@@ -333,4 +337,332 @@ pub async fn probe_video_duration(video_path: String) -> AppResult<f64> {
     })
     .await
     .map_err(|e| AppError::TaskJoin(e.to_string()))?
+}
+
+/// 候选图片（封面/截图），供「获取封面/截图」预览选用
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageCandidate {
+    /// 来源：`dmm`（后续接 `scrape` / `frame`）
+    pub source: String,
+    /// 类型：`cover`（横版封面）/ `screenshot`（截图）
+    pub kind: String,
+    /// 远程图片 URL（前端经 `rs_proxy_image` 预览，选定后下载落地）
+    pub url: String,
+}
+
+/// 聚合某视频可选的封面/截图候选。
+///
+/// 当前来源：DMM 官方 CDN 直拼（零爬取，仅有码主流）。后续接刮削源、ffmpeg 截帧。
+#[tauri::command]
+pub async fn get_image_candidates(
+    db: State<'_, Database>,
+    video_id: String,
+) -> AppResult<Vec<ImageCandidate>> {
+    use rusqlite::OptionalExtension;
+
+    // 取番号
+    let db_inner = db.inner().clone();
+    let vid = video_id.clone();
+    let local_id: Option<String> = tokio::task::spawn_blocking(move || -> AppResult<Option<String>> {
+        let conn = db_inner.get_connection()?;
+        let id = conn
+            .query_row(
+                "SELECT local_id FROM videos WHERE id = ?",
+                [&vid],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten();
+        Ok(id)
+    })
+    .await
+    .map_err(|e| AppError::TaskJoin(e.to_string()))??;
+
+    let code = local_id.unwrap_or_default();
+    let code = code.trim();
+    if code.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut candidates = Vec::new();
+
+    // DMM 官方直拼（探测 digital/mono 海报 + 截图）
+    if let Ok(client) = crate::resource_scrape::fingerprint_client::shared_client() {
+        if let Some(dmm) = crate::media::dmm::probe_dmm_images(&client, code).await {
+            log::info!(
+                "[image_fetch] event=dmm_probed video_id={} cid={} screenshots={}",
+                video_id, dmm.cid, dmm.screenshot_urls.len()
+            );
+            candidates.push(ImageCandidate {
+                source: "dmm".to_string(),
+                kind: "cover".to_string(),
+                url: dmm.cover_url,
+            });
+            for url in dmm.screenshot_urls {
+                candidates.push(ImageCandidate {
+                    source: "dmm".to_string(),
+                    kind: "screenshot".to_string(),
+                    url,
+                });
+            }
+        } else {
+            log::info!("[image_fetch] event=dmm_no_match video_id={} code={}", video_id, code);
+        }
+    }
+
+    Ok(candidates)
+}
+
+/// 应用所选候选图的结果
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyImagesResult {
+    /// 新封面代表路径（横版优先），供前端刷新；未设封面则为 None
+    pub cover: Option<String>,
+    /// 新增的截图（extrafanart）路径
+    pub screenshots: Vec<String>,
+}
+
+/// 应用所选的封面/截图候选（核心实现，单视频命令与批量补全共用）。
+///
+/// - `cover_url`：横版封面 URL → 产出 poster(竖)/fanart(横)/thumb(横) 并写库。
+/// - `screenshot_urls`：截图 URL → 追加到 extrafanart（不覆盖已有）。
+pub(crate) async fn apply_images(
+    app: &AppHandle,
+    db: Database,
+    video_id: &str,
+    cover_url: Option<&str>,
+    screenshot_urls: &[String],
+) -> AppResult<ApplyImagesResult> {
+    use rusqlite::OptionalExtension;
+
+    // 取 video_path / 番号 / 标题（独立目录落地需要）
+    let db_inner = db.clone();
+    let vid = video_id.to_string();
+    let (video_path, local_id, title): (String, String, String) =
+        tokio::task::spawn_blocking(move || -> AppResult<(String, String, String)> {
+            let conn = db_inner.get_connection()?;
+            let row = conn
+                .query_row(
+                    "SELECT video_path, local_id, title FROM videos WHERE id = ?",
+                    [&vid],
+                    |row| {
+                        Ok((
+                            row.get::<_, String>(0)?,
+                            row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                            row.get::<_, Option<String>>(2)?.unwrap_or_default(),
+                        ))
+                    },
+                )
+                .optional()?;
+            row.ok_or_else(|| AppError::Business("未找到视频".to_string()))
+        })
+        .await
+        .map_err(|e| AppError::TaskJoin(e.to_string()))??;
+
+    // 解析落地目标（独立目录/.strm 或视频同级），与刮削落地一致
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
+    let target = crate::media::storage::resolve_asset_target(&video_path, &local_id, &title, &cfg)
+        .map_err(AppError::Business)?;
+    if let Err(e) = crate::media::storage::ensure_asset_dir_and_strm(&target) {
+        log::error!("[image_fetch] event=ensure_dir_failed video_id={} error={}", video_id, e);
+    }
+    let dir = target.dir;
+    let stem = target.stem;
+
+    let client = crate::resource_scrape::fingerprint_client::shared_client().ok();
+    let mut result = ApplyImagesResult { cover: None, screenshots: Vec::new() };
+
+    // 封面：下载横版 → 标准图集(fanart+thumb+裁 poster) → 写库
+    if let Some(url) = cover_url.map(str::trim).filter(|u| !u.is_empty()) {
+        let artwork = crate::media::artwork::produce_artwork(&dir, &stem, url, "", client.as_ref()).await;
+        if artwork.fanart.is_some() || artwork.poster.is_some() {
+            let db_inner = db.clone();
+            let vid = video_id.to_string();
+            let (poster, thumb, fanart) =
+                (artwork.poster.clone(), artwork.thumb.clone(), artwork.fanart.clone());
+            let (cover_width, cover_height) =
+                crate::media::artwork::read_image_dimensions(artwork.primary_dimension_path());
+            tokio::task::spawn_blocking(move || -> AppResult<()> {
+                let conn = db_inner.get_connection()?;
+                crate::db::Database::update_video_cover_paths(
+                    &conn,
+                    &vid,
+                    poster.as_deref(),
+                    thumb.as_deref(),
+                    fanart.as_deref(),
+                    cover_width,
+                    cover_height,
+                )?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| AppError::TaskJoin(e.to_string()))??;
+            result.cover = artwork.primary_dimension_path().map(|s| s.to_string());
+            log::info!("[image_fetch] event=cover_applied video_id={}", video_id);
+        } else {
+            log::error!("[image_fetch] event=cover_download_failed video_id={} url={}", video_id, url);
+            return Err(AppError::Business("封面下载失败".to_string()));
+        }
+    }
+
+    // 截图：追加到 extrafanart（不覆盖已有）
+    let screenshots: Vec<String> = screenshot_urls
+        .iter()
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty())
+        .collect();
+    if !screenshots.is_empty() {
+        let start = crate::media::assets::next_extrafanart_index_in(&dir);
+        let items: Vec<(usize, String)> = screenshots
+            .into_iter()
+            .enumerate()
+            .map(|(i, url)| (start + i, url))
+            .collect();
+        match crate::media::assets::sync_extrafanart_to_dir(&dir, items).await {
+            Ok(paths) => result.screenshots = paths,
+            Err(e) => log::error!("[image_fetch] event=screenshots_failed video_id={} error={}", video_id, e),
+        }
+    }
+
+    Ok(result)
+}
+
+/// 应用所选的封面/截图候选（前端单视频换图）。
+#[tauri::command]
+pub async fn apply_image_candidates(
+    app: AppHandle,
+    db: State<'_, Database>,
+    video_id: String,
+    cover_url: Option<String>,
+    screenshot_urls: Vec<String>,
+) -> AppResult<ApplyImagesResult> {
+    apply_images(&app, db.inner().clone(), &video_id, cover_url.as_deref(), &screenshot_urls).await
+}
+
+/// 批量获取封面结果汇总
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchFetchResult {
+    pub total: usize,
+    /// 命中 DMM 并应用官方封面的数量
+    pub applied: usize,
+    /// DMM 无匹配（番号无法转 cid / 无码 / 素人等）而跳过的数量
+    pub skipped: usize,
+    /// 处理出错的数量
+    pub failed: usize,
+}
+
+/// 取某视频的番号（best-effort，失败/无番号返回空串）。
+async fn query_local_id(db: Database, video_id: String) -> String {
+    tokio::task::spawn_blocking(move || {
+        use rusqlite::OptionalExtension;
+        db.get_connection().ok().and_then(|conn| {
+            conn.query_row(
+                "SELECT local_id FROM videos WHERE id = ?",
+                [&video_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .flatten()
+        })
+    })
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or_default()
+}
+
+/// 批量从 DMM 官方 CDN 补全封面（仅封面、不含截图，开销小）。
+///
+/// 对每个 video_id：探测 DMM 海报 → 命中则下载并产出标准图集写库；未命中则跳过（保留现状）。
+/// 进度通过 `batch-fetch-cover-progress` 事件推送。无码 / FC2 / 素人 DMM 无图，建议用「截取封面」补全。
+#[tauri::command]
+pub async fn batch_fetch_covers(
+    app: AppHandle,
+    db: State<'_, Database>,
+    video_ids: Vec<String>,
+) -> AppResult<BatchFetchResult> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    let total = video_ids.len();
+    let db = db.inner().clone();
+    let client = crate::resource_scrape::fingerprint_client::shared_client()
+        .ok()
+        .map(Arc::new);
+
+    let applied = Arc::new(AtomicUsize::new(0));
+    let skipped = Arc::new(AtomicUsize::new(0));
+    let failed = Arc::new(AtomicUsize::new(0));
+    let done = Arc::new(AtomicUsize::new(0));
+    // 同一时刻最多并发 3 个视频（每个视频内部 DMM 探测仍有少量并发 HEAD）
+    let semaphore = Arc::new(tokio::sync::Semaphore::new(3));
+
+    let mut handles = Vec::new();
+    for video_id in video_ids {
+        let app = app.clone();
+        let db = db.clone();
+        let client = client.clone();
+        let (applied, skipped, failed, done) =
+            (applied.clone(), skipped.clone(), failed.clone(), done.clone());
+        let semaphore = semaphore.clone();
+
+        handles.push(tokio::spawn(async move {
+            let _permit = semaphore.acquire_owned().await.ok();
+
+            let code = query_local_id(db.clone(), video_id.clone()).await;
+            let status = if code.trim().is_empty() {
+                skipped.fetch_add(1, Ordering::Relaxed);
+                "skipped"
+            } else {
+                let cover = match client.as_ref() {
+                    Some(c) => crate::media::dmm::probe_dmm_cover(c, code.trim()).await,
+                    None => None,
+                };
+                match cover {
+                    Some(url) => match apply_images(&app, db.clone(), &video_id, Some(&url), &[]).await {
+                        Ok(_) => {
+                            applied.fetch_add(1, Ordering::Relaxed);
+                            "applied"
+                        }
+                        Err(_) => {
+                            failed.fetch_add(1, Ordering::Relaxed);
+                            "failed"
+                        }
+                    },
+                    None => {
+                        skipped.fetch_add(1, Ordering::Relaxed);
+                        "skipped"
+                    }
+                }
+            };
+
+            let d = done.fetch_add(1, Ordering::Relaxed) + 1;
+            let _ = app.emit(
+                "batch-fetch-cover-progress",
+                serde_json::json!({
+                    "videoId": video_id,
+                    "status": status,
+                    "done": d,
+                    "total": total,
+                }),
+            );
+        }));
+    }
+
+    for handle in handles {
+        let _ = handle.await;
+    }
+
+    Ok(BatchFetchResult {
+        total,
+        applied: applied.load(Ordering::Relaxed),
+        skipped: skipped.load(Ordering::Relaxed),
+        failed: failed.load(Ordering::Relaxed),
+    })
 }

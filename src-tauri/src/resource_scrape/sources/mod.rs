@@ -26,7 +26,7 @@ pub mod threexplanet;
 mod parser_robustness_test;
 
 use serde::{Deserialize, Serialize};
-pub use super::types::SearchResult;
+pub use super::types::{ActorAvatar, SearchResult};
 
 /// 数据源对有码/无码作品的支持能力（有码无码分轨：按番号类型路由数据源）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

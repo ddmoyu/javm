@@ -2,6 +2,7 @@
 import { RouterLink, useRoute } from 'vue-router'
 import {
   Film,
+  Compass,
   FolderOpen,
   Download,
   Radar,
@@ -25,6 +26,11 @@ const navItems = [
     title: '媒体库',
     icon: Film,
     path: '/',
+  },
+  {
+    title: '发现',
+    icon: Compass,
+    path: '/discover',
   },
   {
     title: '目录管理',

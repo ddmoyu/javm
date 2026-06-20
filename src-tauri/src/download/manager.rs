@@ -495,12 +495,16 @@ async fn capture_cover_as_fallback(app: &tauri::AppHandle, video_path: &str) -> 
         let artwork = cover_result?;
         let db = crate::db::Database::new(&app_handle).map_err(|e| e.to_string())?;
         let conn = db.get_connection().map_err(|e| e.to_string())?;
+        let (cover_width, cover_height) =
+            crate::media::artwork::read_image_dimensions(artwork.primary_dimension_path());
         crate::db::Database::update_video_cover_paths(
             &conn,
             &video_id,
             artwork.poster.as_deref(),
             artwork.thumb.as_deref(),
             artwork.fanart.as_deref(),
+            cover_width,
+            cover_height,
         )
         .map_err(|e| e.to_string())?;
 

@@ -604,6 +604,7 @@ pub(crate) fn build_nfo_metadata_for_update(
             .or_else(|| parsed_nfo.and_then(|nfo| nfo.poster_url.clone()))
             .unwrap_or_default(),
         actors,
+        actor_avatars: Vec::new(),
         director,
         score,
         critic_rating: parsed_nfo.and_then(|nfo| nfo.critic_rating),

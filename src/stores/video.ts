@@ -161,6 +161,19 @@ export const useVideoStore = defineStore('video', () => {
             })
         }
 
+        // 库类型过滤：标准库(有番号) / 非标准库(无番号)
+        if (filter.value.libraryType && filter.value.libraryType.length > 0) {
+            result = result.filter(v => {
+                const isStandard = !!(v.localId && v.localId.trim() !== '')
+                const hasStandard = filter.value.libraryType!.includes('standard')
+                const hasNonStandard = filter.value.libraryType!.includes('nonStandard')
+                if (hasStandard && hasNonStandard) return true
+                if (hasStandard && !hasNonStandard) return isStandard
+                if (!hasStandard && hasNonStandard) return !isStandard
+                return true
+            })
+        }
+
         // 状态过滤
         if (filter.value.status !== undefined) {
             result = result.filter(v => v.scanStatus === filter.value.status)

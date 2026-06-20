@@ -1158,6 +1158,47 @@ pub async fn rs_proxy_image(url: String) -> Result<String, String> {
     proxy_image_to_file(&client, &url).await
 }
 
+/// 获取番号的磁力链接（javbus）：详情页取 gid/uc/img → ajax 取磁力表 → 解析排序（字幕>高清>体积）。
+/// 纯 HTTP，与视频链接获取并行；首条即「最优磁力」。
+#[tauri::command]
+pub async fn rs_get_magnets(code: String) -> Result<Vec<super::magnet::MagnetItem>, String> {
+    let client = fingerprint_client::shared_client()?;
+    let detail_url = format!("https://www.javbus.com/{}", code);
+    let html = fingerprint_client::fetch_html(&client, &detail_url).await?;
+
+    let (gid, uc, img) = super::magnet::extract_magnet_vars(&html)
+        .ok_or_else(|| "未找到磁力参数（可能无磁力或页面结构变化）".to_string())?;
+
+    // floor 为缓存破坏参数，用毫秒时间戳后三位即可
+    let floor = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| (d.as_millis() % 1000) as u64)
+        .unwrap_or(0);
+    let floor_s = floor.to_string();
+
+    let resp = client
+        .get("https://www.javbus.com/ajax/uncledatoolsbyajax.php")
+        .query(&[
+            ("gid", gid.as_str()),
+            ("lang", "zh"),
+            ("img", img.as_str()),
+            ("uc", uc.as_str()),
+            ("floor", floor_s.as_str()),
+        ])
+        .header("Referer", detail_url.as_str())
+        .send()
+        .await
+        .map_err(|e| format!("磁力请求失败: {}", e))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| format!("磁力响应读取失败: {}", e))?;
+
+    let mut magnets = super::magnet::parse_magnet_table(&body);
+    super::magnet::sort_magnets(&mut magnets);
+    Ok(magnets)
+}
+
 /// 获取资源网站列表
 ///
 /// 返回所有支持的资源网站及其配置信息。
@@ -1270,6 +1311,7 @@ pub fn search_result_to_metadata(sr: &SearchResult) -> ScrapeMetadata {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect(),
+        actor_avatars: sr.actor_avatars.clone(),
         director: sr.director.clone(),
         score: sr.rating,
         critic_rating: sr.critic_rating,

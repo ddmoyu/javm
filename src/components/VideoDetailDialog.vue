@@ -49,7 +49,9 @@ import { useResourceScrapeStore } from '@/stores/resourceScrape'
 import { useSettingsStore } from '@/stores/settings'
 import { invoke } from '@tauri-apps/api/core'
 import CaptureCoverDialog from './CaptureCoverDialog.vue'
+import ImageFetchDialog from './ImageFetchDialog.vue'
 import DeleteVideoDialog from './DeleteVideoDialog.vue'
+import MagnetList from './MagnetList.vue'
 
 interface Props {
     open: boolean
@@ -81,6 +83,7 @@ const hasScrapedData = ref(false) // 标记是否刮削了新数据
 const aiRecognizing = ref(false) // AI识别番号状态
 const probingDuration = ref(false) // 探测时长状态
 const captureCoverDialogOpen = ref(false) // 截取封面对话框状态
+const imageFetchDialogOpen = ref(false) // 获取封面/截图(DMM)对话框状态
 const captureThumbsDialogOpen = ref(false) // 截取预览图对话框状态
 const showDeleteConfirm = ref(false) // 删除确认对话框状态
 const coverCacheBuster = ref(0) // 封面缓存刷新标记
@@ -665,6 +668,31 @@ const openCaptureCoverDialog = () => {
     captureCoverDialogOpen.value = true
 }
 
+// 打开「获取封面/截图(DMM)」对话框
+const openImageFetchDialog = () => {
+    if (!props.video) return
+    imageFetchDialogOpen.value = true
+}
+
+// 应用 DMM 封面/截图成功 → 刷新封面与预览
+const handleImageFetchSuccess = async () => {
+    coverCacheBuster.value = Date.now()
+    if (props.video) {
+        videoStore.bumpCoverVersion(props.video.id)
+    }
+    await videoStore.fetchVideos()
+    if (props.video) {
+        const fresh = videoStore.videos.find((v) => v.id === props.video!.id)
+        if (fresh) {
+            formData.value.poster = fresh.poster
+            formData.value.thumb = fresh.thumb
+            formData.value.fanart = fresh.fanart
+            pendingPosterSource.value = undefined
+        }
+        void loadResolvedPreviewSources(currentVideoPath.value)
+    }
+}
+
 // 处理截取封面成功
 const handleCaptureCoverSuccess = async (payload: { paths: string | string[]; videoPath: string }) => {
     // 确保是字符串类型
@@ -873,15 +901,26 @@ const downloadLongScreenshot = async () => {
                                         class="flex flex-col items-center justify-center text-muted-foreground p-8 gap-3">
                                         <ImageIcon class="size-12 opacity-20" />
                                         <span class="text-xs">暂无封面</span>
-                                        <Button variant="outline" size="sm" @click.stop="openCaptureCoverDialog"
-                                            class="h-7 text-xs">
-                                            <Camera class="mr-1.5 size-3" />
-                                            截取封面
-                                        </Button>
+                                        <div class="flex gap-2">
+                                            <Button variant="outline" size="sm" @click.stop="openImageFetchDialog"
+                                                class="h-7 text-xs">
+                                                <Download class="mr-1.5 size-3" />
+                                                获取封面
+                                            </Button>
+                                            <Button variant="outline" size="sm" @click.stop="openCaptureCoverDialog"
+                                                class="h-7 text-xs">
+                                                <Camera class="mr-1.5 size-3" />
+                                                截取封面
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
                             </ContextMenuTrigger>
                             <ContextMenuContent>
+                                <ContextMenuItem @click="openImageFetchDialog">
+                                    <Download class="mr-2 size-4" />
+                                    获取封面/截图(DMM)
+                                </ContextMenuItem>
                                 <ContextMenuItem @click="openCaptureCoverDialog">
                                     <Camera class="mr-2 size-4" />
                                     重新选取封面
@@ -1070,6 +1109,10 @@ const downloadLongScreenshot = async () => {
                                 </div>
                             </div>
 
+                            <!-- 磁力链接 -->
+                            <div class="pt-3 border-t">
+                                <MagnetList :code="formData.localId" />
+                            </div>
 
                         </div>
                     </ScrollArea>
@@ -1132,6 +1175,10 @@ const downloadLongScreenshot = async () => {
 
         </DialogContent>
     </Dialog>
+
+    <!-- 获取封面/截图(DMM) 对话框 -->
+    <ImageFetchDialog v-if="props.video" v-model:open="imageFetchDialogOpen" :video-id="props.video.id"
+        @success="handleImageFetchSuccess" />
 
     <!-- 截取封面对话框 -->
     <CaptureCoverDialog v-if="props.video" v-model:open="captureCoverDialogOpen" :video-id="props.video.id"

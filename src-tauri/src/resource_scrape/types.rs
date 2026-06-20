@@ -2,6 +2,17 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+/// 演员头像信息（从详情页 `.avatar-box` 抓取：名字 + 头像 URL + star 链接 code）。
+/// 随刮削顺手取得（详情页已含），用于补全 actors 表的 avatar_url / star_codes。
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct ActorAvatar {
+    pub name: String,
+    #[serde(default)]
+    pub avatar_url: String,
+    #[serde(default)]
+    pub star_code: String,
+}
+
 /// 单个数据源的搜索结果
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct SearchResult {
@@ -11,6 +22,9 @@ pub struct SearchResult {
     pub title: String,
     /// 演员（逗号分隔）
     pub actors: String,
+    /// 演员头像（名字+头像URL+star code，从详情页 .avatar-box 抓取）
+    #[serde(default)]
+    pub actor_avatars: Vec<ActorAvatar>,
     /// 时长（如 "120分钟"）
     pub duration: String,
     /// 制作商
@@ -189,6 +203,10 @@ pub struct ScrapeMetadata {
     /// 演员列表
     #[serde(default, deserialize_with = "deserialize_null_as_empty_vec")]
     pub actors: Vec<String>,
+
+    /// 演员头像信息（随刮削落地写入 actors 表的 avatar_url / star_codes）
+    #[serde(default)]
+    pub actor_avatars: Vec<ActorAvatar>,
 
     /// 导演
     #[serde(default, deserialize_with = "deserialize_null_as_empty_string")]

@@ -632,6 +632,16 @@ impl ScannerService {
                     }
                 }
             }
+
+            // 维度关联（片商 / 系列 / 导演）：与 actors/genres 同步重建
+            Database::sync_video_dimensions(
+                tx,
+                &video_id,
+                studio.as_deref(),
+                director.as_deref(),
+                local_id.as_deref(),
+            )
+            .map_err(|e| e.to_string())?;
         }
 
         // 无封面 → 派发截帧任务（与扫描并行执行）；库内独立目录已有封面则跳过
