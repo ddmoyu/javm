@@ -24,7 +24,10 @@ const MAX_CONSECUTIVE_FAILURES: u32 = 5;
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(30);
 
 struct Inner {
-    binary: Option<PathBuf>,
+    /// 二进制路径（可在运行时下载后经 [`reresolve_binary`](MetaTubeManager::reresolve_binary) 重解析）
+    binary: RwLock<Option<PathBuf>>,
+    /// 应用数据 `bin/` 目录（运行时下载落地处，也是重解析的优先候选）
+    bin_dir: Option<PathBuf>,
     db_path: PathBuf,
     token: String,
     config: RwLock<MetaTubeConfig>,
@@ -59,7 +62,9 @@ pub struct MetaTubeManager {
 impl MetaTubeManager {
     /// 创建管理器（解析二进制、生成随机 token）。不自动启动，需调用 [`start`](Self::start)。
     pub fn new(db_path: PathBuf, config: MetaTubeConfig) -> Self {
-        let binary = super::binary::resolve_binary_path();
+        // 应用数据 bin/ 目录（= metatube.db 同级的 bin/），运行时下载的二进制落地于此
+        let bin_dir = db_path.parent().map(|p| p.join("bin"));
+        let binary = super::binary::resolve_binary_path(bin_dir.as_deref());
         let token = uuid::Uuid::new_v4().simple().to_string();
         let initial = if !config.enabled {
             MetaTubeStatus::Disabled
@@ -70,7 +75,8 @@ impl MetaTubeManager {
         };
         Self {
             inner: Arc::new(Inner {
-                binary,
+                binary: RwLock::new(binary),
+                bin_dir,
                 db_path,
                 token,
                 config: RwLock::new(config),
@@ -92,7 +98,7 @@ impl MetaTubeManager {
             log::info!("[metatube] event=start_skipped reason=disabled");
             return;
         }
-        if self.inner.binary.is_none() {
+        if read(&self.inner.binary).is_none() {
             self.inner.set_error("未找到 metatube-server 二进制（未打包/下载）");
             log::warn!("[metatube] event=start_skipped reason=binary_missing");
             return;
@@ -100,9 +106,20 @@ impl MetaTubeManager {
         spawn_supervisor_if_idle(self.inner.clone());
     }
 
+    /// 重新解析二进制路径（运行时下载完成后调用）。若由「缺二进制」导致的 `Failed`
+    /// 现已就位，则把状态恢复为 `Stopped`，便于随后 [`start`](Self::start)/[`restart`](Self::restart)。
+    pub fn reresolve_binary(&self) {
+        let resolved = super::binary::resolve_binary_path(self.inner.bin_dir.as_deref());
+        let present = resolved.is_some();
+        *write(&self.inner.binary) = resolved;
+        if present && self.status() == MetaTubeStatus::Failed {
+            self.inner.set_status(MetaTubeStatus::Stopped);
+        }
+    }
+
     /// 手动重启：杀掉当前进程促其重启周期；若监督已放弃（Failed）则重新拉起一个监督任务。
     pub fn restart(&self) {
-        if self.inner.shutdown.is_cancelled() || self.inner.binary.is_none() {
+        if self.inner.shutdown.is_cancelled() || read(&self.inner.binary).is_none() {
             return;
         }
         log::info!("[metatube] event=manual_restart");
@@ -157,7 +174,7 @@ impl MetaTubeManager {
         MetaTubeStatusSnapshot {
             status: self.status(),
             port: *read(&self.inner.port),
-            binary_present: self.inner.binary.is_some(),
+            binary_present: read(&self.inner.binary).is_some(),
             restarts: self.inner.restarts.load(Ordering::Relaxed),
             last_error: read(&self.inner.last_error).clone(),
         }
@@ -187,8 +204,8 @@ fn spawn_supervisor_if_idle(inner: Arc<Inner>) {
 
 /// 监督循环：拉起 → 健康检查 → 等待退出/取消 → 重启/放弃。
 async fn supervise(inner: Arc<Inner>) {
-    let binary = match &inner.binary {
-        Some(b) => b.clone(),
+    let binary = match read(&inner.binary).clone() {
+        Some(b) => b,
         None => return,
     };
     let cfg = read(&inner.config).clone();

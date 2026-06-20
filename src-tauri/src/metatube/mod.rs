@@ -14,6 +14,7 @@
 pub mod binary;
 pub mod client;
 pub mod commands;
+pub mod installer;
 pub mod supervisor;
 pub mod types;
 

@@ -409,6 +409,7 @@ pub fn run() {
             // MetaTube sidecar
             metatube::commands::metatube_status,
             metatube::commands::metatube_restart,
+            metatube::commands::metatube_download_latest,
             // 跨语言别名
             entity_alias::commands::entity_alias_expand,
             entity_alias::commands::entity_alias_inspect,

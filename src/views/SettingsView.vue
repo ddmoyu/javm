@@ -74,6 +74,7 @@ interface MetaTubeStatusSnapshot {
 }
 const metatubeStatus = ref<MetaTubeStatusSnapshot | null>(null)
 const metatubeRestarting = ref(false)
+const metatubeDownloading = ref(false)
 const metatubeStatusText = computed(() => {
   const map: Record<string, string> = {
     ready: '运行中', starting: '启动中', failed: '启动失败', stopped: '已停止', disabled: '已禁用',
@@ -97,6 +98,19 @@ async function restartMetatube() {
     toast.error(`重启失败: ${(e as Error).message || e}`)
   } finally {
     metatubeRestarting.value = false
+  }
+}
+async function downloadMetatube() {
+  metatubeDownloading.value = true
+  const tid = toast.loading('正在下载最新 MetaTube...')
+  try {
+    metatubeStatus.value = await invoke<MetaTubeStatusSnapshot>('metatube_download_latest')
+    toast.success('MetaTube 下载完成', { id: tid })
+    setTimeout(loadMetatubeStatus, 2500)
+  } catch (e) {
+    toast.error(`下载失败: ${(e as Error).message || e}`, { id: tid })
+  } finally {
+    metatubeDownloading.value = false
   }
 }
 function saveMetatube(patch: Partial<import('@/types').MetaTubeSettings>) {
@@ -1211,6 +1225,10 @@ watch(() => settingsStore.settings, async (newSettings) => {
                   </div>
                   <div class="flex shrink-0 items-center gap-2">
                     <Badge :variant="metatubeStatus?.status === 'ready' ? 'default' : 'secondary'">{{ metatubeStatusText }}</Badge>
+                    <Button v-if="metatubeStatus && (!metatubeStatus.binaryPresent || metatubeStatus.status === 'failed')"
+                      variant="default" size="sm" :disabled="metatubeDownloading" @click="downloadMetatube">
+                      {{ metatubeDownloading ? '下载中...' : (metatubeStatus.binaryPresent ? '重新下载' : '下载 MetaTube') }}
+                    </Button>
                     <Button variant="outline" size="sm" :disabled="metatubeRestarting" @click="restartMetatube">
                       {{ metatubeRestarting ? '重启中...' : '重启' }}
                     </Button>
