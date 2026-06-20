@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Loader2, Download } from 'lucide-vue-next'
 import type { Video } from '@/types'
-import { dmmCoverUrl } from '@/utils/dmm'
+import { dmmCoverUrl, dmmMonoCoverUrl } from '@/utils/dmm'
 
 interface Props {
     actorId: number | null
@@ -161,8 +161,30 @@ const displayCards = computed<Card[]>(() => {
 const onCardClick = (c: Card) => {
     if (c.videoId) emit('open-video', c.videoId)
 }
+
+// 作品卡片大小（网格 min 列宽 px），拖拽条控制并记忆到 localStorage
+const cardSize = ref(Number(localStorage.getItem('actorCardSize')) || 160)
+watch(cardSize, (v) => localStorage.setItem('actorCardSize', String(v)))
 const hideBrokenImg = (e: Event) => {
     ;(e.target as HTMLImageElement).style.visibility = 'hidden'
+}
+
+// 作品封面加载失败 → 依次尝试 DMM digital → mono → 隐藏。
+// 能正常加载的(已有封面)不会触发，等于「已有的跳过」。WebView 自带 HTTP 缓存。
+const onCoverError = (e: Event, code: string) => {
+    const img = e.target as HTMLImageElement
+    const cur = img.getAttribute('src') || ''
+    const digital = dmmCoverUrl(code)
+    const mono = dmmMonoCoverUrl(code)
+    if (digital && cur !== digital && img.dataset.dmm !== 'digital' && img.dataset.dmm !== 'mono') {
+        img.dataset.dmm = 'digital'
+        img.src = digital
+    } else if (mono && cur !== mono && img.dataset.dmm !== 'mono') {
+        img.dataset.dmm = 'mono'
+        img.src = mono
+    } else {
+        img.style.visibility = 'hidden'
+    }
 }
 </script>
 
@@ -201,18 +223,35 @@ const hideBrokenImg = (e: Event) => {
             </div>
         </div>
 
-        <!-- 作品 Tab（仅在已抓全集时显示） -->
-        <div v-if="hasWorks" class="flex items-center gap-1 border-b px-4 py-2">
-            <Button
-                v-for="t in (['all', 'local', 'missing'] as const)"
-                :key="t"
-                :variant="activeTab === t ? 'default' : 'ghost'"
-                size="sm"
-                class="h-7 text-xs"
-                @click="activeTab = t"
-            >
-                {{ t === 'all' ? `全部 ${works.length}` : t === 'local' ? `本地 ${localCount}` : `缺失 ${missingCount}` }}
-            </Button>
+        <!-- 作品 Tab + 卡片大小拖拽条 -->
+        <div
+            v-if="hasWorks || localVideos.length"
+            class="flex items-center gap-1 border-b px-4 py-2"
+        >
+            <template v-if="hasWorks">
+                <Button
+                    v-for="t in (['all', 'local', 'missing'] as const)"
+                    :key="t"
+                    :variant="activeTab === t ? 'default' : 'ghost'"
+                    size="sm"
+                    class="h-7 text-xs"
+                    @click="activeTab = t"
+                >
+                    {{ t === 'all' ? `全部 ${works.length}` : t === 'local' ? `本地 ${localCount}` : `缺失 ${missingCount}` }}
+                </Button>
+            </template>
+            <div class="ml-auto flex items-center gap-2">
+                <span class="text-xs text-muted-foreground">卡片</span>
+                <input
+                    v-model.number="cardSize"
+                    type="range"
+                    min="110"
+                    max="300"
+                    step="10"
+                    class="w-28 cursor-pointer accent-primary"
+                    title="封面大小"
+                />
+            </div>
         </div>
 
         <!-- 作品网格 -->
@@ -229,7 +268,11 @@ const hideBrokenImg = (e: Event) => {
             >
                 暂无作品，点击「抓取档案 / 全集」获取
             </div>
-            <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3 p-4">
+            <div
+                v-else
+                class="grid gap-3 p-4"
+                :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }"
+            >
                 <div
                     v-for="c in displayCards"
                     :key="c.key"
@@ -244,7 +287,7 @@ const hideBrokenImg = (e: Event) => {
                             referrerpolicy="no-referrer"
                             loading="lazy"
                             class="size-full object-cover transition group-hover:scale-105"
-                            @error="hideBrokenImg"
+                            @error="onCoverError($event, c.code)"
                         />
                         <span
                             class="absolute right-1 top-1 rounded px-1 text-[10px] text-white"
