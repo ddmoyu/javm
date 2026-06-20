@@ -87,6 +87,18 @@ const toggleScreenshot = (url: string) => {
     selectedScreenshots.value = new Set(selectedScreenshots.value)
 }
 
+// 截图全选 / 取消全选（仅针对当前未失效的截图候选）
+const allScreenshotsSelected = computed(
+    () =>
+        screenshotCandidates.value.length > 0 &&
+        screenshotCandidates.value.every((c) => selectedScreenshots.value.has(c.url)),
+)
+const toggleSelectAllScreenshots = () => {
+    selectedScreenshots.value = allScreenshotsSelected.value
+        ? new Set()
+        : new Set(screenshotCandidates.value.map((c) => c.url))
+}
+
 const apply = async () => {
     if (!selectedCover.value && selectedScreenshots.value.size === 0) {
         toast.error('请至少选择一个封面或截图')
@@ -167,7 +179,14 @@ watch(
 
                     <!-- 截图候选 -->
                     <template v-if="screenshotCandidates.length">
-                        <p class="text-sm font-medium mb-2">截图（可多选，追加为预览图）</p>
+                        <div class="flex items-center justify-between mb-2">
+                            <p class="text-sm font-medium">
+                                截图（可多选，追加为预览图）<span class="text-muted-foreground">· 已选 {{ selectedScreenshots.size }}/{{ screenshotCandidates.length }}</span>
+                            </p>
+                            <Button variant="ghost" size="sm" class="h-7 text-xs" @click="toggleSelectAllScreenshots">
+                                {{ allScreenshotsSelected ? '取消全选' : '全选' }}
+                            </Button>
+                        </div>
                         <div class="grid grid-cols-3 gap-3">
                             <div
                                 v-for="c in screenshotCandidates"
