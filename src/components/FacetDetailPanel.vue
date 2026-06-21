@@ -280,7 +280,7 @@ const onCoverError = (e: Event, code: string) => {
                     v-model.number="cardSize"
                     type="range"
                     min="110"
-                    max="500"
+                    max="800"
                     step="10"
                     class="w-28 cursor-pointer accent-primary"
                     title="封面大小"
