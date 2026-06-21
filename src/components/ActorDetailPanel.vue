@@ -157,6 +157,9 @@ const works = ref<ActorWork[]>([])
 const loading = ref(false)
 const fetching = ref(false)
 const activeTab = ref<'all' | 'local' | 'missing'>('all')
+// 番号/名字过滤词。必须在下方 actorId 的 immediate watch 之前声明：
+// 该 watch 在 setup 阶段就会执行并重置它，声明靠后会触发 TDZ、导致 loadDetail 不执行。
+const filterText = ref('')
 
 // silent=true：增量刷新时不切 loading（避免抓取过程中网格闪烁）
 const loadDetail = async (silent = false) => {
@@ -313,7 +316,7 @@ const displayCards = computed<Card[]>(() => {
 })
 
 // 番号/名字过滤：边输入边过滤，作用于当前 Tab 的卡片（番号或标题部分匹配，忽略大小写）
-const filterText = ref('')
+// filterText 已在上方前置声明
 const filteredCards = computed<Card[]>(() => {
     const kw = filterText.value.trim().toLowerCase()
     if (!kw) return displayCards.value
