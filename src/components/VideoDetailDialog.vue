@@ -41,7 +41,9 @@ import {
     Trash2,
     Download,
     ShieldAlert,
-    Link as LinkIcon
+    Link as LinkIcon,
+    ChevronDown,
+    Search
 } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import type { Video } from '@/types'
@@ -54,6 +56,8 @@ import CaptureCoverDialog from './CaptureCoverDialog.vue'
 import ImageFetchDialog from './ImageFetchDialog.vue'
 import DeleteVideoDialog from './DeleteVideoDialog.vue'
 import MagnetList from './MagnetList.vue'
+import ScrapeDialog from './ScrapeDialog.vue'
+import FacetTagsField from './FacetTagsField.vue'
 
 interface Props {
     open: boolean
@@ -471,6 +475,38 @@ const handleScrape = async () => {
         console.error('刮削失败:', e)
         toast.error('刮削失败: ' + String(e))
         isScraping.value = false
+    }
+}
+
+// 手动刮削：打开「数据刮削」结果页（与卡片右键一致），番号已带入无需输入，用户自选数据源结果
+const manualScrapeRef = ref<InstanceType<typeof ScrapeDialog> | null>(null)
+const openManualScrape = () => {
+    manualScrapeRef.value?.open({
+        id: props.video?.id || '',
+        localId: formData.value.localId || '',
+        videoPath: currentVideoPath.value,
+    })
+}
+// 点击 导演/制作商/类别/演员 的 tag：关闭详情，跳到发现页对应维度并选中该取值
+const goToFacet = (payload: { facetType: string; value: string }) => {
+    if (!payload.value?.trim()) return
+    isOpen.value = false
+    router.push({ name: 'discover', query: { facet: payload.facetType, value: payload.value } })
+}
+
+// 手动刮削保存后（已落库）：刷新详情页数据与封面，同步到列表
+const handleManualScrapeSuccess = async () => {
+    await videoStore.fetchVideos()
+    coverCacheBuster.value = Date.now()
+    const id = props.video?.id
+    if (!id) return
+    videoStore.bumpCoverVersion(id)
+    const fresh = videoStore.videos.find((v) => v.id === id)
+    if (fresh) {
+        formData.value = { ...fresh }
+        resetScrapePendingState()
+        emit('video-updated', fresh)
+        await loadResolvedPreviewSources(fresh.videoPath)
     }
 }
 
@@ -1099,16 +1135,12 @@ const downloadLongScreenshot = async () => {
                                     </div>
                                 </div>
 
-                                <div class="space-y-1">
-                                    <Label class="text-[10px] text-muted-foreground uppercase tracking-wider">导演</Label>
-                                    <Input v-model="formData.director" class="h-8 text-sm" />
-                                </div>
+                                <FacetTagsField label="导演" :model-value="formData.director"
+                                    @update:model-value="formData.director = $event" facet-type="director"
+                                    @navigate="goToFacet" />
 
-                                <div class="space-y-1">
-                                    <Label
-                                        class="text-[10px] text-muted-foreground uppercase tracking-wider">制作商</Label>
-                                    <Input v-model="studioValue" class="h-8 text-sm" />
-                                </div>
+                                <FacetTagsField label="制作商" v-model="studioValue" facet-type="studio"
+                                    @navigate="goToFacet" />
 
                                 <div class="space-y-1">
                                     <Label
@@ -1120,16 +1152,11 @@ const downloadLongScreenshot = async () => {
 
                             <!-- Categories / Tags and Actors in one row -->
                             <div class="grid grid-cols-2 gap-x-4">
-                                <div class="space-y-1">
-                                    <Label class="text-[10px] text-muted-foreground uppercase tracking-wider">类别 /
-                                        标签</Label>
-                                    <Input v-model="tagsList" class="h-8 text-sm" />
-                                </div>
+                                <FacetTagsField label="类别 / 标签" v-model="tagsList" facet-type="genre" multi
+                                    @navigate="goToFacet" />
 
-                                <div class="space-y-1">
-                                    <Label class="text-[10px] text-muted-foreground uppercase tracking-wider">演员</Label>
-                                    <Input v-model="actorsList" class="h-8 text-sm" />
-                                </div>
+                                <FacetTagsField label="演员" v-model="actorsList" facet-type="actor" multi
+                                    @navigate="goToFacet" />
                             </div>
 
                             <!-- Rating -->
@@ -1200,11 +1227,27 @@ const downloadLongScreenshot = async () => {
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        <Button variant="outline" size="sm" @click="handleScrape" :disabled="isScraping">
-                            <Loader2 v-if="isScraping" class="mr-2 size-4 animate-spin" />
-                            <RefreshCw v-else class="mr-2 size-4" />
-                            {{ isScraping ? '刮削中...' : '重新刮削' }}
-                        </Button>
+                        <!-- 刮削：默认自动（融合择优），下拉可选手动（数据源结果页自选） -->
+                        <div class="flex items-center">
+                            <Button variant="outline" size="sm" class="rounded-r-none" @click="handleScrape" :disabled="isScraping">
+                                <Loader2 v-if="isScraping" class="mr-2 size-4 animate-spin" />
+                                <RefreshCw v-else class="mr-2 size-4" />
+                                {{ isScraping ? '刮削中...' : '自动刮削' }}
+                            </Button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger as-child>
+                                    <Button variant="outline" size="sm" class="rounded-l-none border-l-0 px-1.5" :disabled="isScraping">
+                                        <ChevronDown class="size-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="start">
+                                    <DropdownMenuItem @click="openManualScrape">
+                                        <Search class="mr-2 size-4" />
+                                        手动刮削
+                                    </DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
 
                         <Button v-if="hasLocalFile" :variant="hasScrapedData ? 'default' : 'outline'" size="sm" @click="handleSave"
                             :disabled="isSaving || !isTitleValid"
@@ -1242,4 +1285,7 @@ const downloadLongScreenshot = async () => {
 
     <!-- 删除确认对话框 -->
     <DeleteVideoDialog v-model:open="showDeleteConfirm" :video="props.video" @success="handleDeleteSuccess" />
+
+    <!-- 手动刮削：数据源结果页（番号已带入） -->
+    <ScrapeDialog ref="manualScrapeRef" @success="handleManualScrapeSuccess" />
 </template>

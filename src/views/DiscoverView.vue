@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
     Building2,
     Layers,
@@ -68,10 +69,26 @@ const ICONS: Record<FacetType, any> = {
     genre: Tag,
 }
 
+const route = useRoute()
+// 从详情页 tag 跳转过来：?facet=<维度>&value=<取值> → 直接进入对应维度并选中
+const applyRouteFacet = () => {
+    const f = route.query.facet
+    const v = route.query.value
+    if (typeof f === 'string' && FACET_TYPES.some((t) => t.type === f)) {
+        facetType.value = f as FacetType
+        selectedValue.value = typeof v === 'string' && v.trim() ? v : null
+        search.value = ''
+    }
+}
+
 onMounted(() => {
     if (videoStore.videos.length === 0) videoStore.fetchVideos()
     fetchActors()
+    applyRouteFacet()
 })
+
+// 已在发现页时再次点击 tag（同路由仅 query 变化）也要响应
+watch(() => route.query, applyRouteFacet)
 
 const switchFacet = (t: FacetType) => {
     facetType.value = t
@@ -115,15 +132,18 @@ const handleVideoSelect = (video: Video) => {
     selectedVideo.value = video
     detailDialogOpen.value = true
 }
-// 缺失作品卡：用只含番号的合成视频开详情，自动刮削，靠磁力/资源链接获取
-const openMissing = (payload: { code: string; title: string }) => {
-    detailAutoScrape.value = true
+// 缺失作品卡：用只含番号的合成视频开详情，靠磁力/资源链接获取。
+// 已有封面（落库过）→ 直接展示已有数据，不再每次点开自动刮削（不满意用户可手动重新刮削）；
+// 无封面 → 开即自动刮削补全。已有封面带入 poster 供详情展示。
+const openMissing = (payload: { code: string; title: string; cover?: string; hasData?: boolean }) => {
+    detailAutoScrape.value = !payload.hasData
     selectedVideo.value = {
         id: '',
         localId: payload.code,
         title: payload.title || payload.code,
         originalTitle: payload.code,
         videoPath: '',
+        poster: payload.cover || '',
         scanStatus: 0,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

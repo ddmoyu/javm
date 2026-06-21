@@ -20,7 +20,7 @@ interface Props {
 const props = defineProps<Props>()
 const emit = defineEmits<{
     (e: 'open-video', videoId: string): void
-    (e: 'open-missing', payload: { code: string; title: string }): void
+    (e: 'open-missing', payload: { code: string; title: string; cover: string; hasData: boolean }): void
     (e: 'refreshed'): void
 }>()
 
@@ -148,6 +148,8 @@ interface Card {
     title: string
     status: 'local' | 'missing'
     videoId: string | null
+    // 是否已有落库封面（区别于 DMM 兜底猜测）：有则点开缺失卡不再自动刮削
+    hasStoredCover: boolean
 }
 
 // 已抓全集 → 显示全集（可切 Tab）；未抓 → 显示本地作品（来自媒体库）
@@ -164,6 +166,7 @@ const displayCards = computed<Card[]>(() => {
             title: w.title || '',
             status: w.status === 'local' ? 'local' : 'missing',
             videoId: w.localVideoId || null,
+            hasStoredCover: !!w.coverUrl,
         }))
     }
     return props.localVideos.map((v) => ({
@@ -173,12 +176,20 @@ const displayCards = computed<Card[]>(() => {
         title: v.title || '',
         status: 'local' as const,
         videoId: v.id,
+        hasStoredCover: !!coverOf(v),
     }))
 })
 
 const onCardClick = (c: Card) => {
     if (c.videoId) emit('open-video', c.videoId)
-    else if (c.code) emit('open-missing', { code: c.code, title: c.title })
+    // 已有封面 → 直接展示不刮削；无封面 → 开即自动刮削补全
+    else if (c.code)
+        emit('open-missing', {
+            code: c.code,
+            title: c.title,
+            cover: c.coverSrc ?? '',
+            hasData: c.hasStoredCover,
+        })
 }
 
 // 作品卡片大小（网格 min 列宽 px）：持久化到设置（disk，重启保留）。
