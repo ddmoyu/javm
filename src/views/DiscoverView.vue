@@ -14,6 +14,7 @@ import {
     Star,
     Download,
     Loader2,
+    X,
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -166,6 +167,12 @@ const facetValues = computed(() => {
             ? (name: string) => actorNameResolve.value.get(name) ?? { key: name, display: name }
             : undefined
     let arr = aggregateFacet(videoStore.videos, facetType.value, resolve)
+    const favs = favoritesStore.favoriteSet(facetType.value)
+    // 把"已收藏但本地无作品"的取值并入（count 0）：在线搜索收藏的演员/片商/分类等也能显示在列表
+    if (favs.size) {
+        const present = new Set(arr.map((x) => x.name))
+        for (const f of favs) if (!present.has(f)) arr.push({ name: f, count: 0 })
+    }
     const kw = search.value.trim().toLowerCase()
     if (kw)
         arr = arr.filter((x) => {
@@ -177,7 +184,6 @@ const facetValues = computed(() => {
             }
             return false
         })
-    const favs = favoritesStore.favoriteSet(facetType.value)
     if (showFavoritesOnly.value) arr = arr.filter((x) => favs.has(x.name))
     arr.sort((a, b) => {
         const fa = favs.has(a.name) ? 1 : 0
@@ -430,7 +436,16 @@ const handleWorkMetaSaved = () => {
                 </Button>
                 <div class="relative">
                     <Search class="absolute left-2 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input v-model="search" :placeholder="`搜索${currentFacetLabel}`" class="h-8 w-48 pl-8" />
+                    <Input v-model="search" :placeholder="`搜索${currentFacetLabel}`" class="h-8 w-48 pl-8 pr-7" />
+                    <button
+                        v-if="search"
+                        type="button"
+                        class="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        title="清除"
+                        @click="search = ''"
+                    >
+                        <X class="size-4" />
+                    </button>
                 </div>
                 <Button variant="ghost" size="sm" class="h-8 gap-1" @click="sortByCount = !sortByCount">
                     <component :is="sortByCount ? ArrowDown01 : ArrowDownAZ" class="size-4" />
