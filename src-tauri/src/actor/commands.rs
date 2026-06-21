@@ -412,11 +412,22 @@ pub async fn get_actor_detail(
             },
         )?;
 
-        // 汇总当前 id + 所有别名对应的 actor_id（去重）
+        // 汇总当前 id + 别名对应的 actor_id（去重）。别名来源：前端传入 alias_names +
+        // 后端按本演员名展开整簇。后者不依赖前端 alias_names 到位的时机 ——
+        // 保证「进入即合并显示已抓过的全集」，不必等别名异步加载或点击抓取才刷新。
+        let mut cand_names: Vec<String> = alias_names.unwrap_or_default();
+        if let Some(self_name) = profile.get("name").and_then(|v| v.as_str()) {
+            if let Ok(rows) =
+                crate::entity_alias::expand(&conn, crate::entity_alias::ENTITY_ACTOR, self_name)
+            {
+                cand_names.extend(rows.into_iter().map(|a| a.name));
+            }
+        }
+
         let mut ids: Vec<i64> = vec![actor_id];
-        if let Some(names) = &alias_names {
+        {
             let mut id_stmt = conn.prepare("SELECT id FROM actors WHERE name = ?")?;
-            for name in names {
+            for name in &cand_names {
                 let trimmed = name.trim();
                 if trimmed.is_empty() {
                     continue;
