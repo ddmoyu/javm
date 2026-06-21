@@ -50,8 +50,12 @@ const aliasEditing = ref(false)
 const editText = ref('') // 编辑态：所有名字逗号分隔（第一个为主名 = 当前名）
 const aliasBusy = ref(false)
 const allAliases = computed<AliasRow[]>(() => props.aliases ?? [])
-// 除当前查看名外的其它名字（展示态浅色小字列出）
-const otherAliases = computed(() => allAliases.value.filter((a) => a.name !== props.actorName))
+// 主名（默认名）：固定为 canonical 的名字；未固定时回退到当前查看名
+const primaryName = computed(() => allAliases.value.find((a) => a.isCanonical)?.name ?? props.actorName)
+// 除主名外的其它名字（展示态浅色小字列出）
+const otherNames = computed(() =>
+    allAliases.value.map((a) => a.name).filter((n) => n !== primaryName.value),
+)
 
 // 把编辑框文本拆成去重后的名字数组（支持中英文逗号、顿号、换行分隔）
 function parseNames(text: string): string[] {
@@ -67,25 +71,32 @@ function parseNames(text: string): string[] {
     return out
 }
 
-// 进入编辑：预填所有名字（当前名在前），逗号分隔
+// 进入编辑：预填所有名字（主名在前），逗号分隔
 function startEdit() {
-    editText.value = [props.actorName, ...otherAliases.value.map((a) => a.name)].join('，')
+    editText.value = [primaryName.value, ...otherNames.value].join('，')
     aliasEditing.value = true
 }
 
-// 保存：解析名字 → 新增的归并、删除的拉黑；当前名恒为锚点不删
+// 保存：解析名字 → 新增的归并、删除的拉黑；第一个名字固定为主名（默认名）
 async function saveAliases() {
     if (aliasBusy.value) return
     const names = parseNames(editText.value)
-    // 当前名始终保留为主名（第一个）
-    if (!names.includes(props.actorName)) names.unshift(props.actorName)
+    // 锚点：当前查看名必须在集合内（否则与本地视频归属脱节），缺失则补在末尾，不抢主名
+    if (!names.includes(props.actorName)) names.push(props.actorName)
+    if (names.length === 0) {
+        aliasEditing.value = false
+        return
+    }
+    const primary = names[0] // 第一个 = 主名（默认名）
 
     const currentNames = new Set([props.actorName, ...allAliases.value.map((a) => a.name)])
     const nextNames = new Set(names)
     const added = names.filter((n) => !currentNames.has(n))
     const removed = [...currentNames].filter((n) => n !== props.actorName && !nextNames.has(n))
+    const currentPrimary = allAliases.value.find((a) => a.isCanonical)?.name ?? props.actorName
+    const primaryChanged = primary !== currentPrimary
 
-    if (added.length === 0 && removed.length === 0) {
+    if (added.length === 0 && removed.length === 0 && !primaryChanged) {
         aliasEditing.value = false
         return
     }
@@ -99,6 +110,10 @@ async function saveAliases() {
         // 删除的名字逐个拉黑（永不复活）
         for (const n of removed) {
             await invoke('entity_alias_block', { entityType: 'actor', name: n })
+        }
+        // 第一个名字固定为主名：展示标题用它，抓取档案也优先用它搜源
+        if (primaryChanged) {
+            await invoke('entity_alias_pin_canonical', { entityType: 'actor', name: primary })
         }
         emit('aliases-changed')
         toast.success('已保存名字')
@@ -204,7 +219,8 @@ const fetchProfile = async () => {
         )
         const r = await invoke<{ profileUpdated: boolean; worksTotal: number; worksLocal: number }>(
             'fetch_actor_profile',
-            { actorId: props.actorId },
+            // 传名字候选（主名在前）：后端逐个搜源，主名搜不到再回退其它别名
+            { actorId: props.actorId, nameCandidates: [primaryName.value, ...otherNames.value] },
         )
         toast.success(`已抓取：${r.worksTotal} 部作品，本地 ${r.worksLocal} 部`)
         await loadDetail()
@@ -390,12 +406,12 @@ const onCoverError = (e: Event, code: string) => {
                     @keyup.enter="saveAliases"
                 />
                 <div v-else class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <span class="text-lg font-semibold">{{ actorName }}</span>
+                    <span class="text-lg font-semibold">{{ primaryName }}</span>
                     <span
-                        v-for="a in otherAliases"
-                        :key="a.name"
+                        v-for="n in otherNames"
+                        :key="n"
                         class="text-sm text-muted-foreground/70"
-                    >{{ a.name }}</span>
+                    >{{ n }}</span>
                 </div>
 
                 <div class="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">

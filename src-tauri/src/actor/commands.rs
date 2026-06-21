@@ -117,6 +117,8 @@ fn actor_info_to_profile(info: &crate::metatube::types::ActorInfo) -> crate::db:
 pub async fn fetch_actor_profile(
     app: AppHandle,
     actor_id: i64,
+    // 抓取用名字候选（主名在前），逐个搜源，命中即止。空则只用库内名。
+    name_candidates: Option<Vec<String>>,
     db: State<'_, Database>,
     cancel: State<'_, FetchCancelState>,
 ) -> AppResult<ActorFetchResult> {
@@ -154,6 +156,24 @@ pub async fn fetch_actor_profile(
         (name, code)
     };
 
+    // 名字候选：前端传入（主名在前）优先，库内名兜底；去重保序。让用户把正确源名放前面即可搜到。
+    let candidates: Vec<String> = {
+        let mut v: Vec<String> = Vec::new();
+        if let Some(list) = name_candidates {
+            for c in list {
+                let t = c.trim().to_string();
+                if !t.is_empty() && !v.contains(&t) {
+                    v.push(t);
+                }
+            }
+        }
+        let nt = name.trim().to_string();
+        if !nt.is_empty() && !v.contains(&nt) {
+            v.push(nt);
+        }
+        v
+    };
+
     // 1.5 MetaTube 档案（就绪时优先）：结构化 JSON 拿头像/身高/三围/生日，比抓 star 页可靠、免年龄门；
     //      并尽量取 JavBus provider 的演员 id 当 star code（用于后续全集抓取）。
     let mut mt_profile: Option<crate::db::ActorProfileInput> = None;
@@ -161,8 +181,11 @@ pub async fn fetch_actor_profile(
         .try_state::<crate::metatube::MetaTubeManager>()
         .and_then(|m| m.client())
     {
-        if let Ok(cands) = client.search_actor(&name, &[]).await {
-            let want = name.trim();
+        for cand in &candidates {
+            let Ok(cands) = client.search_actor(cand, &[]).await else {
+                continue;
+            };
+            let want = cand.trim();
             let pick = cands
                 .iter()
                 .find(|c| c.name.trim() == want && c.provider.eq_ignore_ascii_case("javbus"))
@@ -181,18 +204,26 @@ pub async fn fetch_actor_profile(
                     let _ = Database::update_actor_avatar(&conn, &name, avatar, &c.id);
                     star_code = Some(c.id.clone());
                 }
+                break; // 命中一个候选即止
             }
         }
     }
 
-    // star code 仍无 → JavBus searchstar 兜底（经 fetcher 过年龄门）
+    // star code 仍无 → JavBus searchstar 兜底（经 fetcher 过年龄门），逐个候选名搜
     if star_code.is_none() {
-        let search_url = actor_provider::build_search_url(&name);
-        if let Ok(html) = fetcher.fetch(&app, &search_url, &site, options, &token).await {
-            if let Some(hit) = actor_provider::pick_star_from_search(&html, &name) {
-                let conn = db.get_connection()?;
-                let _ = Database::update_actor_avatar(&conn, &name, &hit.avatar_url, &hit.star_code);
-                star_code = Some(hit.star_code);
+        for cand in &candidates {
+            if token.is_cancelled() {
+                break;
+            }
+            let search_url = actor_provider::build_search_url(cand);
+            if let Ok(html) = fetcher.fetch(&app, &search_url, &site, options, &token).await {
+                if let Some(hit) = actor_provider::pick_star_from_search(&html, cand) {
+                    let conn = db.get_connection()?;
+                    let _ =
+                        Database::update_actor_avatar(&conn, &name, &hit.avatar_url, &hit.star_code);
+                    star_code = Some(hit.star_code);
+                    break;
+                }
             }
         }
     }
