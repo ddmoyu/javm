@@ -445,8 +445,13 @@ const handleScrape = async () => {
             actors: best.actors || formData.value.actors,
             tags: best.tags || formData.value.tags,
         }
-        pendingPosterSource.value = best.coverUrl || formData.value.poster
-        pendingRemoteCoverUrl.value = best.remoteCoverUrl || best.coverUrl || ''
+        // 一键刮削不替换已有封面：有封面则只补元数据，封面保持不变
+        //（要换封面用「手动刮削」或「获取封面」）；原本无封面才用刮到的填充
+        const keepCover = !!imageSrc.value
+        if (!keepCover) {
+            pendingPosterSource.value = best.coverUrl || formData.value.poster
+            pendingRemoteCoverUrl.value = best.remoteCoverUrl || best.coverUrl || ''
+        }
         pendingPreviewThumbs.value = best.thumbs || []
         pendingRemotePreviewThumbs.value = best.remoteThumbs || best.thumbs || []
 
@@ -454,16 +459,20 @@ const handleScrape = async () => {
         isDirty.value = true
         isScraping.value = false
 
-        // 缺失作品（不在库、无 id）没有可保存的库记录：把刮到的标题/封面存回作品全集条目，关窗不丢
+        // 缺失作品（不在库、无 id）：把标题/封面存回作品全集条目，关窗不丢，并据此标记「已刮削」
+        // ——下次点开不再自动刮（gate 依据 coverUrl）。已有封面则保留原封面，不被刮到的替换。
         if (!props.video?.id && localId) {
             try {
+                const coverToSave = keepCover
+                    ? formData.value.poster || best.remoteCoverUrl || best.coverUrl || ''
+                    : best.remoteCoverUrl || best.coverUrl || ''
                 await invoke('save_scraped_work_meta', {
                     code: localId,
                     title: best.title || '',
-                    coverUrl: best.remoteCoverUrl || best.coverUrl || '',
+                    coverUrl: coverToSave,
                 })
                 emit('work-meta-saved', localId)
-                toast.success('刮削完成，已保存到该作品（封面/标题）')
+                toast.success(keepCover ? '刮削完成（保留原封面）' : '刮削完成，已保存到该作品')
             } catch (e) {
                 console.error('保存作品信息失败:', e)
                 toast.success('刮削成功')
@@ -1232,7 +1241,7 @@ const downloadLongScreenshot = async () => {
                             <Button variant="outline" size="sm" class="rounded-r-none" @click="handleScrape" :disabled="isScraping">
                                 <Loader2 v-if="isScraping" class="mr-2 size-4 animate-spin" />
                                 <RefreshCw v-else class="mr-2 size-4" />
-                                {{ isScraping ? '刮削中...' : '自动刮削' }}
+                                {{ isScraping ? '刮削中...' : '一键刮削' }}
                             </Button>
                             <DropdownMenu>
                                 <DropdownMenuTrigger as-child>

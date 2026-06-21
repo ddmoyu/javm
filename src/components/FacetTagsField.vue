@@ -69,7 +69,7 @@ const onNavigate = (value: string) => {
         <!-- 展示态：可点击 tag（进入发现对应维度） + 末尾编辑图标 -->
         <div v-else class="flex min-h-8 flex-wrap items-center gap-1">
             <button v-for="(it, i) in items" :key="i" type="button"
-                class="rounded-full bg-muted px-2 py-0.5 text-xs transition hover:bg-accent hover:text-accent-foreground"
+                class="cursor-pointer rounded-full bg-muted px-2 py-0.5 text-xs transition hover:bg-accent hover:text-accent-foreground"
                 :title="`在发现中查看：${it}`" @click="onNavigate(it)">
                 {{ it }}
             </button>
