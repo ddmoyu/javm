@@ -203,21 +203,10 @@ const selectValue = (name: string) => {
     onlineFetchPending.value = false
     selectedValue.value = name
 }
-const enterOnlineSearch = async () => {
+const enterOnlineSearch = () => {
     const q = search.value.trim()
     if (!q) return
-    // 演员：库里没有就先按名建档拿到 id，详情页才能定位并抓档案/全集
-    if (facetType.value === 'actor') {
-        try {
-            const id = await invoke<number>('ensure_actor', { name: q })
-            // 合并写入：保留已有头像等字段，仅补 id（避免覆盖列表头像）
-            actorMap.value.set(q, { ...(actorMap.value.get(q) ?? { name: q }), id, name: q })
-        } catch (e) {
-            console.error('在线搜索建档失败:', e)
-            toast.error('在线搜索失败: ' + String(e))
-            return
-        }
-    }
+    // 演员建档由下方 selectedValue 的 watch（ensureActorId）统一处理
     onlineFetchPending.value = true
     selectedValue.value = q
 }
@@ -321,11 +310,28 @@ const loadActorAliases = async (name: string) => {
         selectedAliasRows.value = []
     }
 }
+// 选中演员若本地无记录（如从作品 tag 跳来的非本地演员）：按名建档拿 id，
+// 否则详情页解析不到 actorId → 抓取按钮禁用、也无法抓档案/全集。
+const ensureActorId = async (name: string) => {
+    if (actorMap.value.get(name)?.id != null) return
+    try {
+        const id = await invoke<number>('ensure_actor', { name })
+        const m = new Map(actorMap.value)
+        m.set(name, { ...(m.get(name) ?? { name }), id, name })
+        actorMap.value = m // 重新赋值触发 selectedActorId 重算
+    } catch (e) {
+        console.error('演员建档失败:', e)
+    }
+}
 watch(
     [facetType, selectedValue],
     ([ft, sv]) => {
-        if (ft === 'actor' && sv) loadActorAliases(sv)
-        else selectedAliasRows.value = []
+        if (ft === 'actor' && sv) {
+            void ensureActorId(sv)
+            loadActorAliases(sv)
+        } else {
+            selectedAliasRows.value = []
+        }
     },
     { immediate: true },
 )
