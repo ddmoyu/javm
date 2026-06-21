@@ -52,7 +52,7 @@ import { useVideoStore } from '@/stores'
 import { useResourceScrapeStore } from '@/stores/resourceScrape'
 import { useSettingsStore } from '@/stores/settings'
 import { invoke } from '@tauri-apps/api/core'
-import { isDmmPlaceholderSize, isDmmImageUrl } from '@/utils/dmm'
+import { isDmmPlaceholderSize, isDmmImageUrl, dmmMonoCoverUrl } from '@/utils/dmm'
 import CaptureCoverDialog from './CaptureCoverDialog.vue'
 import ImageFetchDialog from './ImageFetchDialog.vue'
 import DeleteVideoDialog from './DeleteVideoDialog.vue'
@@ -117,9 +117,12 @@ function resetPendingPreviewState() {
     pendingRemotePreviewThumbs.value = []
 }
 
+// 详情封面是否已回退到 DMM mono 版（占位图回退用，随视频/弹窗重置）
+const coverTriedMono = ref(false)
 function resetPendingCoverState() {
     pendingPosterSource.value = undefined
     pendingRemoteCoverUrl.value = ''
+    coverTriedMono.value = false
 }
 
 function resetScrapePendingState(options: { previews?: boolean } = {}) {
@@ -524,15 +527,37 @@ const openManualScrape = () => {
         videoPath: currentVideoPath.value,
     })
 }
-// 详情封面其实是 DMM 占位图（缺失卡兜底，封面不存在时 302 跳过去的）：按固定尺寸精准识别后清空，
-// 详情页不显示占位图；imageSrc 随之变空 → 一键刮削视为"无封面"，会去数据源刮真封面替换。
+// 详情封面是 DMM 占位图（缺失卡兜底，数字版封面不存在时 302 跳到的 now_printing）时，
+// 与列表卡片一致：先回退到 mono 版而非清空 —— 卡片有图详情页也有图，且 keepCover 保持 true，
+// 一键刮削不会替换这张已有封面。mono 也是占位/加载失败才清空（视为真无封面，刮削去取真封面）。
+const fallbackCoverToMono = (): boolean => {
+    const code = formData.value.localId?.trim()
+    if (!code || coverTriedMono.value) return false
+    const mono = dmmMonoCoverUrl(code)
+    if (!mono) return false
+    coverTriedMono.value = true
+    pendingPosterSource.value = mono
+    pendingRemoteCoverUrl.value = mono
+    return true
+}
+const clearDetailCover = () => {
+    pendingPosterSource.value = undefined
+    pendingRemoteCoverUrl.value = ''
+    if (formData.value.poster) formData.value.poster = ''
+}
 const onCoverImgLoad = (e: Event) => {
     const img = e.target as HTMLImageElement
     const src = img.currentSrc || img.src || ''
     if (isDmmImageUrl(src) && isDmmPlaceholderSize(img.naturalWidth, img.naturalHeight)) {
-        pendingPosterSource.value = undefined
-        pendingRemoteCoverUrl.value = ''
-        if (formData.value.poster) formData.value.poster = ''
+        if (!fallbackCoverToMono()) clearDetailCover()
+    }
+}
+const onCoverImgError = (e: Event) => {
+    const img = e.target as HTMLImageElement
+    const src = img.currentSrc || img.src || ''
+    // DMM 封面加载失败：数字版失败 → 试 mono；mono 也失败 → 清空
+    if (isDmmImageUrl(src) && !fallbackCoverToMono()) {
+        clearDetailCover()
     }
 }
 
@@ -1028,7 +1053,7 @@ const downloadLongScreenshot = async () => {
                                     @click="imageSrc && openImageViewer(0)">
                                     <img v-if="imageSrc" :src="imageSrc"
                                         class="w-full h-auto object-contain max-h-[280px]"
-                                        referrerPolicy="no-referrer" @load="onCoverImgLoad" />
+                                        referrerPolicy="no-referrer" @load="onCoverImgLoad" @error="onCoverImgError" />
                                     <div v-else
                                         class="flex flex-col items-center justify-center text-muted-foreground p-8 gap-3">
                                         <ImageIcon class="size-12 opacity-20" />
