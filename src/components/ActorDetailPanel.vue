@@ -57,6 +57,22 @@ const otherNames = computed(() =>
     allAliases.value.map((a) => a.name).filter((n) => n !== primaryName.value),
 )
 
+// 归一化匹配键（镜像后端 normalize_name）：全角→半角、去所有空白、小写。
+// 用于判断两个写法是否同一别名（如「山岸 あや花」与「山岸あや花」），
+// 避免"只改空格/大小写"被当成删除而误拉黑同一个名字。
+function normalizeName(name: string): string {
+    let out = ''
+    for (const ch of name) {
+        const cp = ch.codePointAt(0) ?? 0
+        let mapped = ch
+        if (cp === 0x3000) mapped = ' '
+        else if (cp >= 0xff01 && cp <= 0xff5e) mapped = String.fromCodePoint(cp - 0xfee0)
+        if (/\s/u.test(mapped)) continue
+        out += mapped.toLowerCase()
+    }
+    return out
+}
+
 // 把编辑框文本拆成去重后的名字数组（支持中英文逗号、顿号、换行分隔）
 function parseNames(text: string): string[] {
     const seen = new Set<string>()
@@ -90,9 +106,12 @@ async function saveAliases() {
     const primary = names[0] // 第一个 = 主名（默认名）
 
     const currentNames = new Set([props.actorName, ...allAliases.value.map((a) => a.name)])
-    const nextNames = new Set(names)
+    const nextNorms = new Set(names.map(normalizeName))
     const added = names.filter((n) => !currentNames.has(n))
-    const removed = [...currentNames].filter((n) => n !== props.actorName && !nextNames.has(n))
+    // 删除判定按归一化键：只改空格/大小写（同键）不算删除，避免误拉黑导致名字丢失
+    const removed = [...currentNames].filter(
+        (n) => n !== props.actorName && !nextNorms.has(normalizeName(n)),
+    )
     const currentPrimary = allAliases.value.find((a) => a.isCanonical)?.name ?? props.actorName
     const primaryChanged = primary !== currentPrimary
 

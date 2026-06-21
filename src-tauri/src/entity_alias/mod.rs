@@ -391,6 +391,30 @@ mod tests {
     }
 
     #[test]
+    fn force_merge_clears_prior_block_and_refreshes_writing() {
+        let conn = mem();
+        scrape(&conn, "AAA-1", &[("s", &[], &["山岸逢花"])]);
+        // 编辑里把「山岸 あや花」改成「山岸あや花」=> 旧逻辑会拉黑同归一化键（含空格被去掉），名字消失
+        add_force_merge(&conn, ENTITY_ACTOR, &["山岸逢花".into(), "山岸 あや花".into()]).unwrap();
+        add_block(&conn, ENTITY_ACTOR, "山岸 あや花").unwrap();
+        rebuild(&conn).unwrap();
+        assert!(
+            resolve_entity(&conn, ENTITY_ACTOR, "山岸あや花").unwrap().is_none(),
+            "构造的误拉黑应已发生"
+        );
+        // 再次显式归并（最新写法，无空格）：应解除拉黑、名字回归，且以新写法展示
+        add_force_merge(&conn, ENTITY_ACTOR, &["山岸逢花".into(), "山岸あや花".into()]).unwrap();
+        rebuild(&conn).unwrap();
+        assert!(
+            resolve_entity(&conn, ENTITY_ACTOR, "山岸あや花").unwrap().is_some(),
+            "显式归并应解除拉黑、名字回归"
+        );
+        let aliases = expand(&conn, ENTITY_ACTOR, "山岸逢花").unwrap();
+        assert!(aliases.iter().any(|a| a.name == "山岸あや花"), "应以最新无空格写法存在");
+        assert!(!aliases.iter().any(|a| a.name == "山岸 あや花"), "旧带空格写法应被替换掉");
+    }
+
+    #[test]
     fn rebuild_corrects_overeager_live_merge() {
         let conn = mem();
         // 第一次只看到 1 个女优（实时误判为单人作 → 绑定）

@@ -94,6 +94,14 @@ pub fn add_force_merge(
     let group_key = format!("manual:{}", normalize_name(valid[0]));
     for name in valid {
         let norm = normalize_name(name);
+        // 显式归并 = 用户最新意图：先按归一化键清掉该名字旧的「拉黑」与旧写法的「归并」，
+        // 既解除可能存在的拉黑（恢复被误删的名字），又让最新书写形态成为展示名
+        // （否则同键的旧写法——如带空格版——因 id 更小会在 rebuild 时盖住新写法）。
+        conn.execute(
+            "DELETE FROM alias_overrides
+             WHERE entity_type = ?1 AND name_norm = ?2 AND kind IN (?3, ?4)",
+            params![entity_type, norm, KIND_MERGE, KIND_BLOCK],
+        )?;
         conn.execute(
             "INSERT INTO alias_overrides (kind, entity_type, group_key, name, name_norm)
              VALUES (?1, ?2, ?3, ?4, ?5)",
