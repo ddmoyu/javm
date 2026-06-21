@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed, watchEffect, ref, watch, nextTick } from 'vue'
+import { onMounted, onActivated, computed, watchEffect, ref, watch, nextTick } from 'vue'
 import {
   Play,
   Square,
@@ -321,7 +321,11 @@ const activeTab = ref('search')
 
 onMounted(async () => {
   store.fetchTasks()
-  // 从详情页「获取视频链接」跳转而来：自动进资源链接 Tab 并搜索该番号
+})
+
+// 从详情页「获取视频链接」跳转而来：自动进资源链接 Tab 并搜索该番号
+// 本视图被 <KeepAlive> 缓存，二次进入不会重新 onMounted，故用 onActivated（首次挂载也会触发）
+onActivated(() => {
   const pending = sessionStorage.getItem('rsPendingCode')
   if (pending) {
     sessionStorage.removeItem('rsPendingCode')
