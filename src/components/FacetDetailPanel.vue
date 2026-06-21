@@ -19,7 +19,7 @@ const isFav = computed(() => favoritesStore.isFavorite(props.facetType, props.fa
 const toggleFav = () => favoritesStore.toggle(props.facetType, props.facetName)
 
 interface Props {
-    facetType: 'studio' | 'series' | 'director'
+    facetType: 'studio' | 'series' | 'director' | 'genre'
     facetName: string
     localVideos: Video[]
 }

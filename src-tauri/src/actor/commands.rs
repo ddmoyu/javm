@@ -674,6 +674,7 @@ fn facet_metadata_table(facet_type: &str) -> Option<MetadataTable> {
         "studio" => Some(MetadataTable::Studios),
         "series" => Some(MetadataTable::Series),
         "director" => Some(MetadataTable::Directors),
+        "genre" => Some(MetadataTable::Genres),
         _ => None,
     }
 }
@@ -731,7 +732,15 @@ pub async fn fetch_facet_works(
         if let Some(code) = code {
             let detail_url = format!("https://www.javbus.com/{}", code);
             if let Ok(html) = fetcher.fetch(&app, &detail_url, &site, options, &token).await {
-                if let Some(sid) = actor_provider::parse_facet_source_id(&html, &facet_type) {
+                // 分类一片多值，必须按名字认准目标链接；其余维度单值取首个即可
+                let want_name = if facet_type == "genre" {
+                    Some(facet_name.trim())
+                } else {
+                    None
+                };
+                if let Some(sid) =
+                    actor_provider::parse_facet_source_id(&html, &facet_type, want_name)
+                {
                     let conn = db.get_connection()?;
                     let _ = Database::set_facet_source_id(&conn, &facet_type, facet_id, &sid);
                     source_id = Some(sid);

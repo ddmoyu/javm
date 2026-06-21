@@ -42,24 +42,40 @@ pub fn build_facet_url(facet_type: &str, source_id: &str, page: u32) -> String {
 }
 
 /// 从影片详情页解析某维度在数据源的 id（`.info` 内 `<a href="/{facet_type}/{id}">`）。
-pub fn parse_facet_source_id(detail_html: &str, facet_type: &str) -> Option<String> {
+///
+/// `want_name` 提供时（如分类，一片多值）：仅取**链接文本等于该名字**的那条，
+/// 避免在多分类影片里误取到别的分类；不提供时（片商/系列/导演，一片单值）：取首个匹配链接。
+pub fn parse_facet_source_id(
+    detail_html: &str,
+    facet_type: &str,
+    want_name: Option<&str>,
+) -> Option<String> {
     let doc = Html::parse_document(detail_html);
     let needle = format!("/{}/", facet_type);
     let sel = Selector::parse(".info a[href]").ok()?;
+    let want = want_name.map(str::trim);
     for a in doc.select(&sel) {
         let href = match a.value().attr("href") {
             Some(h) => h,
             None => continue,
         };
-        if let Some(pos) = href.find(&needle) {
-            let id = href[pos + needle.len()..]
-                .split(['/', '?', '#'])
-                .next()
-                .unwrap_or("")
-                .trim();
-            if !id.is_empty() {
-                return Some(id.to_string());
+        let Some(pos) = href.find(&needle) else {
+            continue;
+        };
+        // 指定名字时按链接文本精确匹配（多值维度必须认准目标）
+        if let Some(want) = want {
+            let text = a.text().collect::<String>();
+            if text.trim() != want {
+                continue;
             }
+        }
+        let id = href[pos + needle.len()..]
+            .split(['/', '?', '#'])
+            .next()
+            .unwrap_or("")
+            .trim();
+        if !id.is_empty() {
+            return Some(id.to_string());
         }
     }
     None
@@ -312,9 +328,9 @@ mod tests {
             <p><span>系列:</span><a href="https://www.javbus.com/series/9kx">系列A</a></p>
             <p><a href="/director/3dd">导演A</a></p>
         </div>"#;
-        assert_eq!(parse_facet_source_id(html, "studio").as_deref(), Some("2xs"));
-        assert_eq!(parse_facet_source_id(html, "series").as_deref(), Some("9kx"));
-        assert_eq!(parse_facet_source_id(html, "director").as_deref(), Some("3dd"));
-        assert_eq!(parse_facet_source_id(html, "label"), None);
+        assert_eq!(parse_facet_source_id(html, "studio", None).as_deref(), Some("2xs"));
+        assert_eq!(parse_facet_source_id(html, "series", None).as_deref(), Some("9kx"));
+        assert_eq!(parse_facet_source_id(html, "director", None).as_deref(), Some("3dd"));
+        assert_eq!(parse_facet_source_id(html, "label", None), None);
     }
 }

@@ -21,9 +21,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { invoke, convertFileSrc } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { toast } from 'vue-sonner'
-import VirtualGrid from '@/components/VirtualGrid.vue'
 import VideoDetailDialog from '@/components/VideoDetailDialog.vue'
-import ScrapeDialog from '@/components/ScrapeDialog.vue'
 import ActorDetailPanel from '@/components/ActorDetailPanel.vue'
 import FacetDetailPanel from '@/components/FacetDetailPanel.vue'
 import { useVideoStore, useFavoritesStore } from '@/stores'
@@ -314,27 +312,10 @@ const detailVideos = computed<Video[]>(() => {
     )
 })
 
-// 分类详情用本地网格（VirtualGrid），单独做番号/标题过滤：边输入边过滤
-const genreFilter = ref('')
-const filteredGenreVideos = computed<Video[]>(() => {
-    const kw = genreFilter.value.trim().toLowerCase()
-    if (!kw) return detailVideos.value
-    return detailVideos.value.filter(
-        (v) =>
-            (v.localId || '').toLowerCase().includes(kw) ||
-            (v.title || '').toLowerCase().includes(kw),
-    )
-})
-// 切换维度取值/返回时清空过滤词
-watch(selectedValue, () => {
-    genreFilter.value = ''
-})
-
 // 视频详情 / 刮削
 const detailDialogOpen = ref(false)
 const selectedVideo = ref<Video | null>(null)
 const detailAutoScrape = ref(false) // 缺失作品：开即自动刮削
-const scrapeDialogRef = ref<InstanceType<typeof ScrapeDialog> | null>(null)
 
 const handleVideoSelect = (video: Video) => {
     detailAutoScrape.value = false
@@ -361,9 +342,6 @@ const openMissing = (payload: { code: string; title: string; cover?: string; has
 }
 const handleVideoUpdated = (video: Video) => {
     selectedVideo.value = video
-}
-const handleScrape = (video: Video) => {
-    scrapeDialogRef.value?.open(video)
 }
 
 // 演员详情面板：当前选中演员的 id（用于抓取档案/全集）。
@@ -514,12 +492,9 @@ const handleWorkMetaSaved = () => {
                 </Button>
                 <span class="text-sm font-medium">{{ currentFacetLabel }}：{{ selectedValue }}</span>
                 <span v-if="facetType !== 'actor'" class="text-xs text-muted-foreground">{{ detailVideos.length }} 部</span>
-                <div v-if="facetType === 'genre'" class="ml-auto">
-                    <Input v-model="genreFilter" placeholder="过滤番号/名字" class="h-7 w-40 text-xs" />
-                </div>
             </div>
 
-            <!-- 演员：档案 + 全集；片商/系列/导演：全集；分类：本地网格 -->
+            <!-- 演员：档案 + 全集；片商/系列/导演/分类：全集 -->
             <ActorDetailPanel
                 v-if="facetType === 'actor'"
                 ref="actorPanelRef"
@@ -534,7 +509,7 @@ const handleWorkMetaSaved = () => {
                 @aliases-changed="selectedValue && loadActorAliases(selectedValue)"
             />
             <FacetDetailPanel
-                v-else-if="facetType === 'studio' || facetType === 'series' || facetType === 'director'"
+                v-else
                 ref="facetPanelRef"
                 class="min-h-0 flex-1"
                 :facet-type="facetType"
@@ -543,9 +518,6 @@ const handleWorkMetaSaved = () => {
                 @open-video="openVideoById"
                 @open-missing="openMissing"
             />
-            <div v-else class="flex-1 overflow-hidden py-4">
-                <VirtualGrid :items="filteredGenreVideos" @select="handleVideoSelect" @scrape="handleScrape" />
-            </div>
         </template>
 
         <VideoDetailDialog
@@ -555,6 +527,5 @@ const handleWorkMetaSaved = () => {
             @video-updated="handleVideoUpdated"
             @work-meta-saved="handleWorkMetaSaved"
         />
-        <ScrapeDialog ref="scrapeDialogRef" @success="videoStore.fetchVideos()" />
     </div>
 </template>

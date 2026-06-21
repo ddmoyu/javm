@@ -495,7 +495,7 @@ impl Database {
             [],
         )?;
         // 维度表缓存其在数据源的 id（如 javbus `/studio/{id}`），用于抓全集
-        for t in ["studios", "series", "directors"] {
+        for t in ["studios", "series", "directors", "genres"] {
             let _ = conn.execute(&format!("ALTER TABLE {} ADD COLUMN source_id TEXT", t), []);
         }
 
@@ -773,6 +773,7 @@ impl Database {
             "studio" => Some(("studios", "video_studios", "studio_id")),
             "series" => Some(("series", "video_series", "series_id")),
             "director" => Some(("directors", "video_directors", "director_id")),
+            "genre" => Some(("genres", "video_genres", "genre_id")),
             _ => None,
         }
     }
