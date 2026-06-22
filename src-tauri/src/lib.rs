@@ -330,6 +330,8 @@ pub fn run() {
             actor::commands::fetch_facet_works,
             actor::commands::get_facet_detail,
             actor::commands::cancel_facet_fetch,
+            actor::commands::search_works_by_code,
+            actor::commands::cancel_code_search,
             actor::commands::save_scraped_work_meta,
             actor::commands::toggle_favorite,
             actor::commands::list_favorites,

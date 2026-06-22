@@ -7,6 +7,7 @@ import {
     Clapperboard,
     Users,
     Tag,
+    Hash,
     ArrowLeft,
     Search,
     ArrowDownAZ,
@@ -122,6 +123,7 @@ const ICONS: Record<FacetType, any> = {
     director: Clapperboard,
     actor: Users,
     genre: Tag,
+    code: Hash,
 }
 
 const route = useRoute()
@@ -495,7 +497,8 @@ const handleWorkMetaSaved = () => {
                 v-if="facetValues.length === 0 && !search.trim()"
                 class="flex flex-1 items-center justify-center text-muted-foreground"
             >
-                <p>暂无{{ currentFacetLabel }}数据</p>
+                <p v-if="facetType === 'code'">输入完整或残缺番号，再点「在线搜索」抓取结果</p>
+                <p v-else>暂无{{ currentFacetLabel }}数据</p>
             </div>
             <ScrollArea v-else class="min-h-0 flex-1">
                 <div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 p-4">
@@ -548,7 +551,7 @@ const handleWorkMetaSaved = () => {
                     <ArrowLeft class="size-4" /> 返回
                 </Button>
                 <span class="text-sm font-medium">{{ currentFacetLabel }}：{{ selectedValue }}</span>
-                <span v-if="facetType !== 'actor'" class="text-xs text-muted-foreground">{{ detailVideos.length }} 部</span>
+                <span v-if="facetType !== 'actor' && facetType !== 'code'" class="text-xs text-muted-foreground">{{ detailVideos.length }} 部</span>
             </div>
 
             <!-- 演员：档案 + 全集；片商/系列/导演/分类：全集 -->

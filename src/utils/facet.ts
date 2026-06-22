@@ -1,7 +1,10 @@
 import type { Video } from '@/types'
 
-/** 分面维度类型（本地数据可直接派生） */
-export type FacetType = 'studio' | 'series' | 'director' | 'actor' | 'genre'
+/**
+ * 分面维度类型。actor/studio/series/director/genre 可由本地库直接派生取值列表；
+ * `code`（番号）是纯在线搜索维度——无本地取值列表，靠输入完整/残缺番号去数据源搜结果。
+ */
+export type FacetType = 'studio' | 'series' | 'director' | 'actor' | 'genre' | 'code'
 
 export interface FacetTypeMeta {
     type: FacetType
@@ -15,6 +18,7 @@ export const FACET_TYPES: FacetTypeMeta[] = [
     { type: 'series', label: '系列' },
     { type: 'director', label: '导演' },
     { type: 'genre', label: '分类' },
+    { type: 'code', label: '番号' },
 ]
 
 /**
@@ -53,6 +57,9 @@ export function facetValuesOf(v: Video, type: FacetType): string[] {
             return splitCsv(v.actors)
         case 'genre':
             return splitCsv(v.genres)
+        case 'code':
+            // 番号维度纯在线搜索，不从本地库聚合取值列表
+            return []
     }
 }
 

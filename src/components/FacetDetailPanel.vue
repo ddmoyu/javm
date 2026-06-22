@@ -29,7 +29,7 @@ const isFav = computed(() => favoritesStore.isFavorite(props.facetType, props.fa
 const toggleFav = () => favoritesStore.toggle(props.facetType, props.facetName)
 
 interface Props {
-    facetType: 'studio' | 'series' | 'director' | 'genre'
+    facetType: 'studio' | 'series' | 'director' | 'genre' | 'code'
     facetName: string
     localVideos: Video[]
     // 在线搜索进入：进面板即自动抓全集（无需手动点抓取）
@@ -40,6 +40,9 @@ const emit = defineEmits<{
     (e: 'open-video', videoId: string): void
     (e: 'open-missing', payload: { code: string; title: string; cover: string; hasData: boolean }): void
 }>()
+
+// 番号维度：纯在线搜索（输入完整/残缺番号搜结果），无本地取值、不落库、不可收藏
+const isCode = computed(() => props.facetType === 'code')
 
 interface FacetWork {
     code: string
@@ -61,6 +64,12 @@ const filterText = ref('')
 
 // silent=true：增量刷新时不切 loading（避免抓取过程中网格闪烁）
 const loadDetail = async (silent = false) => {
+    // 番号维度无本地维度数据（结果走在线搜索）：仅切换关键词时清空旧结果；
+    // silent 重载（如缺失作品刮削落库后的刷新）不动已搜到的结果，避免被清空。
+    if (isCode.value) {
+        if (!silent) works.value = []
+        return
+    }
     if (!silent) loading.value = true
     try {
         const res = await invoke<{ works: FacetWork[] }>('get_facet_detail', {
@@ -82,7 +91,7 @@ watch(
         filterText.value = ''
         // 取值切换后内容重载完再恢复该取值上次的滚动位置
         void loadDetail().then(() => restoreScroll())
-        favoritesStore.load(props.facetType)
+        if (!isCode.value) favoritesStore.load(props.facetType)
     },
     { immediate: true },
 )
@@ -95,6 +104,21 @@ const fetchWorks = async () => {
     fetching.value = true
     let unlisten: (() => void) | null = null
     try {
+        if (isCode.value) {
+            // 番号在线搜索：搜索列表页分页结果经 code-search-progress 累计回传（payload.works 直接覆盖）
+            works.value = []
+            unlisten = await listen<{ keyword: string; works: FacetWork[] }>(
+                'code-search-progress',
+                (e) => {
+                    if (e.payload?.keyword === props.facetName) works.value = e.payload.works ?? []
+                },
+            )
+            const r = await invoke<{ worksTotal: number; worksLocal: number }>('search_works_by_code', {
+                keyword: props.facetName,
+            })
+            toast.success(`搜到 ${r.worksTotal} 部作品，本地 ${r.worksLocal} 部`)
+            return
+        }
         // 边抓边显示：后端每页发进度，这里增量刷新
         unlisten = await listen<{ facetName: string; worksTotal: number }>(
             'facet-fetch-progress',
@@ -109,17 +133,21 @@ const fetchWorks = async () => {
         toast.success(`已抓取：${r.worksTotal} 部作品，本地 ${r.worksLocal} 部`)
         await loadDetail()
     } catch (e) {
-        console.error('抓取全集失败:', e)
-        toast.error('抓取失败: ' + String(e))
+        console.error(isCode.value ? '番号搜索失败:' : '抓取全集失败:', e)
+        toast.error((isCode.value ? '搜索失败: ' : '抓取失败: ') + String(e))
     } finally {
         if (unlisten) unlisten()
         fetching.value = false
     }
 }
 
-// 停止抓取：通知后端取消，已抓到的页（每页已落库）会保留
+// 停止抓取：通知后端取消，已抓到的页（每页已落库 / 番号搜索已回传）会保留
 const cancelWorks = async () => {
     try {
+        if (isCode.value) {
+            await invoke('cancel_code_search', { keyword: props.facetName })
+            return
+        }
         await invoke('cancel_facet_fetch', {
             facetType: props.facetType,
             facetName: props.facetName,
@@ -141,6 +169,16 @@ watch(
 const hasWorks = computed(() => works.value.length > 0)
 const localCount = computed(() => works.value.filter((w) => w.status === 'local').length)
 const missingCount = computed(() => works.value.filter((w) => w.status !== 'local').length)
+
+// 抓取按钮文案：番号维度是「搜索」，其余维度是「抓全集」
+const fetchBtnText = computed(() => {
+    if (fetching.value) return isCode.value ? '搜索中…' : '抓取中…'
+    if (isCode.value) return hasWorks.value ? '重新搜索' : '搜索'
+    return hasWorks.value ? '重新抓取' : '抓取全集'
+})
+const emptyHint = computed(() =>
+    isCode.value ? '暂无结果' : '暂无作品，点击「抓取全集」获取',
+)
 
 // 卡片大小（与演员面板共用一个设置）
 const cardSize = ref(settingsStore.settings.general.actorCardSize || 160)
@@ -253,6 +291,7 @@ const onCoverError = (e: Event, code: string) => {
                 <div class="flex items-center gap-2">
                     <span class="truncate text-lg font-semibold">{{ facetName }}</span>
                     <button
+                        v-if="!isCode"
                         type="button"
                         class="shrink-0 text-muted-foreground transition hover:text-yellow-500"
                         :class="isFav ? 'text-yellow-500' : ''"
@@ -264,15 +303,16 @@ const onCoverError = (e: Event, code: string) => {
                 </div>
                 <div class="mt-0.5 text-sm text-muted-foreground">
                     <template v-if="hasWorks">
-                        全集 {{ works.length }} 部 · 本地 {{ localCount }} · 缺失 {{ missingCount }}
+                        {{ isCode ? '搜到' : '全集' }} {{ works.length }} 部 · 本地 {{ localCount }} · 缺失 {{ missingCount }}
                     </template>
+                    <template v-else-if="isCode">在线搜索番号（支持完整或残缺番号）</template>
                     <template v-else>本地 {{ localVideos.length }} 部（未抓取全集）</template>
                 </div>
             </div>
             <Button size="sm" class="gap-1" :disabled="fetching" @click="fetchWorks">
                 <Loader2 v-if="fetching" class="size-4 animate-spin" />
                 <Download v-else class="size-4" />
-                {{ fetching ? '抓取中…' : hasWorks ? '重新抓取' : '抓取全集' }}
+                {{ fetchBtnText }}
             </Button>
             <Button v-if="fetching" size="sm" variant="outline" class="gap-1" @click="cancelWorks">
                 <X class="size-4" />
@@ -316,14 +356,17 @@ const onCoverError = (e: Event, code: string) => {
 
         <!-- 作品网格 -->
         <ScrollArea ref="scrollAreaRef" class="min-h-0 flex-1">
-            <div v-if="loading" class="flex items-center justify-center py-12 text-muted-foreground">
+            <div
+                v-if="loading || (isCode && fetching && !hasWorks)"
+                class="flex items-center justify-center py-12 text-muted-foreground"
+            >
                 <Loader2 class="size-6 animate-spin" />
             </div>
             <div
                 v-else-if="displayCards.length === 0"
                 class="flex items-center justify-center py-12 text-sm text-muted-foreground"
             >
-                暂无作品，点击「抓取全集」获取
+                {{ emptyHint }}
             </div>
             <div
                 v-else-if="filteredCards.length === 0"

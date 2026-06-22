@@ -122,6 +122,23 @@ pub fn build_search_url(name: &str) -> String {
     }
 }
 
+/// 按关键词搜作品的 URL（`/search/{keyword}` (+ `/{page}`)，路径段百分号编码）。
+/// 用途：① 维度无本地作品时在线搜任一作品借其详情页定位数据源链接；② 番号在线搜索分页列结果。
+pub fn build_movie_search_url(keyword: &str, page: u32) -> String {
+    let path = if page <= 1 {
+        format!("search/{keyword}")
+    } else {
+        format!("search/{keyword}/{page}")
+    };
+    match url::Url::parse(&format!("{HOST}/")) {
+        Ok(mut u) => {
+            u.set_path(&path);
+            u.to_string()
+        }
+        Err(_) => format!("{HOST}/{path}"),
+    }
+}
+
 /// 从 searchstar 结果页挑出 star（名字优先精确匹配，否则取首个有 star code 的）。
 /// 结果页结构与详情页演员区一致（`.avatar-box`），复用同一解析。
 pub fn pick_star_from_search(html: &str, want_name: &str) -> Option<super::types::ActorAvatar> {

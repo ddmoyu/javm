@@ -762,10 +762,21 @@ pub async fn fetch_facet_works(
         Database::get_facet_source_id(&conn, &facet_type, facet_id)?
     };
     if source_id.is_none() {
-        let code = {
+        // 番号来源：库内该维度任一本地作品；本地没有则去数据源在线搜「维度名」取首个结果作品。
+        // —— 不要求本地存在，发现页对任意维度的在线搜索都能定位数据源并抓全集。
+        let mut code = {
             let conn = db.get_connection()?;
             Database::find_local_code_for_facet(&conn, &facet_type, facet_id)?
         };
+        if code.is_none() && !token.is_cancelled() {
+            let search_url = actor_provider::build_movie_search_url(facet_name.trim(), 1);
+            if let Ok(html) = fetcher.fetch(&app, &search_url, &site, options, &token).await {
+                code = actor_provider::parse_works(&html)
+                    .into_iter()
+                    .next()
+                    .map(|w| w.code);
+            }
+        }
         if let Some(code) = code {
             let detail_url = format!("https://www.javbus.com/{}", code);
             if let Ok(html) = fetcher.fetch(&app, &detail_url, &site, options, &token).await {
@@ -795,7 +806,7 @@ pub async fn fetch_facet_works(
         }
     }
     let source_id = source_id.ok_or_else(|| {
-        AppError::Business(format!("无法定位「{facet_name}」的数据源链接（需先刮削其下任一作品）"))
+        AppError::Business(format!("无法定位「{facet_name}」的数据源链接（数据源未搜到相关作品）"))
     })?;
 
     // 3. 分页抓全集：**边抓边存边发进度**，前端每页即增量显示，不等全部结束
@@ -887,6 +898,110 @@ pub async fn cancel_facet_fetch(
     cancel
         .cancel(&format!("facet:{}:{}", facet_type, facet_name.trim()))
         .await;
+    Ok(())
+}
+
+/// 按（完整或残缺）番号在线搜索作品：走数据源搜索列表页 `/search/{keyword}` 分页抓取，
+/// 结果与本地库按番号匹配标 local/missing。**不落库**（番号检索是临时结果，不写 facet_works）：
+/// 每页结果经 `code-search-progress` 事件增量回传（payload.works 为累计列表），末尾返回总数。
+#[tauri::command]
+pub async fn search_works_by_code(
+    app: AppHandle,
+    keyword: String,
+    db: State<'_, Database>,
+    cancel: State<'_, FetchCancelState>,
+) -> AppResult<FacetFetchResult> {
+    let kw = keyword.trim().to_string();
+    if kw.is_empty() {
+        return Err(AppError::Business("请输入番号".to_string()));
+    }
+
+    let app_settings = settings::get_settings(app.clone()).await.unwrap_or_default();
+    let fetch_settings = settings::resolve_scrape_fetch_settings(&app_settings.scrape);
+    let options = FetchOptions {
+        webview_enabled: fetch_settings.webview_enabled,
+        webview_fallback_enabled: fetch_settings.webview_fallback_enabled,
+        show_webview: fetch_settings.dev_show_webview,
+        max_webview_windows: fetch_settings.max_webview_windows,
+    };
+    let site = ResourceSite {
+        id: "javbus".to_string(),
+        name: "javbus".to_string(),
+        enabled: true,
+        avg_score: None,
+        scrape_count: None,
+    };
+    let token = cancel.begin(format!("code:{}", kw)).await;
+    let fetcher = Fetcher::new();
+
+    let mut works_total = 0usize;
+    let mut works_local = 0i64;
+    let mut acc: Vec<serde_json::Value> = Vec::new();
+    let mut page = 1u32;
+    loop {
+        if token.is_cancelled() {
+            break;
+        }
+        let url = actor_provider::build_movie_search_url(&kw, page);
+        let html = match fetcher.fetch(&app, &url, &site, options, &token).await {
+            Ok(h) => h,
+            Err(e) => {
+                if token.is_cancelled() {
+                    break;
+                }
+                return Err(AppError::Business(e));
+            }
+        };
+        let page_works = actor_provider::parse_works(&html);
+        let has_next = actor_provider::parse_has_next_page(&html);
+        if page_works.is_empty() {
+            break;
+        }
+
+        // 本地匹配（仅查 id 标 local/missing，不落库）
+        {
+            let conn = db.get_connection()?;
+            for w in &page_works {
+                let local_id = Database::find_local_video_id_by_code(&conn, &w.code)?;
+                if local_id.is_some() {
+                    works_local += 1;
+                }
+                let is_unc = designation_recognizer::is_uncensored_designation(&w.code);
+                acc.push(serde_json::json!({
+                    "code": w.code,
+                    "title": opt(&w.title),
+                    "coverUrl": opt(&w.cover_url),
+                    "releaseDate": opt(&w.release_date),
+                    "status": if local_id.is_some() { "local" } else { "missing" },
+                    "localVideoId": local_id,
+                    "isUncensored": is_unc,
+                }));
+            }
+        }
+        works_total += page_works.len();
+
+        // 累计列表增量回传，前端每页即刷新（payload.works 直接覆盖，无需前端去重）
+        let _ = app.emit(
+            "code-search-progress",
+            serde_json::json!({ "keyword": kw, "works": acc }),
+        );
+
+        if !has_next || page >= MAX_STAR_PAGES {
+            break;
+        }
+        page += 1;
+    }
+
+    Ok(FacetFetchResult { works_total, works_local })
+}
+
+/// 停止番号在线搜索（触发已注册的取消令牌）。
+#[tauri::command]
+pub async fn cancel_code_search(
+    keyword: String,
+    cancel: State<'_, FetchCancelState>,
+) -> AppResult<()> {
+    cancel.cancel(&format!("code:{}", keyword.trim())).await;
     Ok(())
 }
 

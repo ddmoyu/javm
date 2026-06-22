@@ -932,6 +932,16 @@ impl Database {
         rows.collect()
     }
 
+    /// 按番号取本地视频 id（番号在线搜索：在线结果与本地库按番号匹配标 local/missing，结果不落库）。
+    pub fn find_local_video_id_by_code(conn: &Connection, code: &str) -> Result<Option<String>> {
+        conn.query_row(
+            "SELECT id FROM videos WHERE UPPER(TRIM(local_id)) = UPPER(TRIM(?1)) LIMIT 1",
+            params![code],
+            |r| r.get(0),
+        )
+        .optional()
+    }
+
     /// 找该维度下任一本地视频的番号（用于刮其详情页解析维度的数据源 id）。
     pub fn find_local_code_for_facet(
         conn: &Connection,
