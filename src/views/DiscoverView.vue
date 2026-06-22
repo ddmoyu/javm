@@ -33,6 +33,35 @@ import { FACET_TYPES, type FacetType, facetValuesOf, aggregateFacet } from '@/ut
 const videoStore = useVideoStore()
 const favoritesStore = useFavoritesStore()
 
+// 硬编码 JavBus 全量分类列表（后端启动时返回，发现页 genre 维度展示用）
+interface GenreGroup {
+    category: string
+    genres: string[]
+}
+interface JavbusGenreData {
+    censored: GenreGroup[]
+    uncensored: GenreGroup[]
+}
+const javbusGenreData = ref<JavbusGenreData>({ censored: [], uncensored: [] })
+const loadJavbusGenres = async () => {
+    try {
+        javbusGenreData.value = await invoke<JavbusGenreData>('get_javbus_genre_list')
+    } catch (e) {
+        console.error('获取 JavBus 分类列表失败:', e)
+        javbusGenreData.value = { censored: [], uncensored: [] }
+    }
+}
+// 扁平化：所有分类名集合（用于搜索匹配）
+const javbusGenreNames = computed(() => {
+    const s = new Set<string>()
+    for (const g of javbusGenreData.value.censored) {
+        for (const n of g.genres) s.add(n)
+    }
+    for (const g of javbusGenreData.value.uncensored) {
+        for (const n of g.genres) s.add(n)
+    }
+    return s
+})
 // 演员头像（刮削时从详情页 .avatar-box 收割写入 actors 表）
 interface ActorInfo {
     id: number
@@ -114,6 +143,10 @@ const search = ref('')
 const sortByCount = ref(true) // true=按作品数, false=按名称
 const showFavoritesOnly = ref(false) // 只看收藏
 
+// 首次加载 JavBus 硬编码分类 + 切换到分类维度时刷新
+watch(facetType, (t) => { if (t === 'genre' && javbusGenreData.value.censored.length === 0) loadJavbusGenres() })
+loadJavbusGenres() // 启动时预加载
+
 const isFav = (name: string) => favoritesStore.isFavorite(facetType.value, name)
 const toggleFavorite = (name: string) => favoritesStore.toggle(facetType.value, name)
 
@@ -174,6 +207,13 @@ const facetValues = computed(() => {
     if (favs.size) {
         const present = new Set(arr.map((x) => x.name))
         for (const f of favs) if (!present.has(f)) arr.push({ name: f, count: 0 })
+    }
+    // 分类维度：合并 JavBus 硬编码全量分类（本地没有的 count=0，确保全部可浏览）
+    if (facetType.value === 'genre' && javbusGenreNames.value.size > 0) {
+        const present = new Set(arr.map((x) => x.name))
+        for (const n of javbusGenreNames.value) {
+            if (!present.has(n)) arr.push({ name: n, count: 0 })
+        }
     }
     const kw = search.value.trim().toLowerCase()
     if (kw)
@@ -501,6 +541,75 @@ const handleWorkMetaSaved = () => {
                 <p v-else>暂无{{ currentFacetLabel }}数据</p>
             </div>
             <ScrollArea v-else class="min-h-0 flex-1">
+                <!-- genre 维度：按大类别分组展示（有码 → 无码） -->
+                <template v-if="facetType === 'genre' && (javbusGenreData.censored.length > 0 || javbusGenreData.uncensored.length > 0)">
+                    <!-- 有码 -->
+                    <div v-for="group in javbusGenreData.censored" :key="'c-' + group.category" class="mb-1">
+                        <h4 class="sticky top-0 z-10 bg-background px-4 py-2 text-sm font-semibold text-muted-foreground border-b">
+                            {{ group.category }}
+                            <span class="ml-1 text-xs font-normal">({{ group.genres.length }})</span>
+                        </h4>
+                        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2 px-4 py-2">
+                            <div
+                                v-for="name in group.genres"
+                                :key="name"
+                                class="flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left transition hover:border-primary hover:bg-accent"
+                                @click="selectValue(name)"
+                            >
+                                <span class="min-w-0 flex-1 truncate text-sm" :title="name">{{ name }}</span>
+                                <span class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+                                    {{ facetValues.find(fv => fv.name === name)?.count ?? 0 }}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="shrink-0 text-muted-foreground transition hover:text-yellow-500"
+                                    :class="isFav(name) ? 'text-yellow-500' : ''"
+                                    title="收藏"
+                                    @click.stop="toggleFavorite(name)"
+                                >
+                                    <Star class="size-3.5" :fill="isFav(name) ? 'currentColor' : 'none'" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 无码分隔 -->
+                    <div v-if="javbusGenreData.uncensored.length > 0" class="mx-4 my-3 flex items-center gap-2">
+                        <div class="h-px flex-1 bg-border" />
+                        <span class="text-xs font-medium text-orange-500 bg-orange-500/10 px-2 py-0.5 rounded-full">無碼</span>
+                        <div class="h-px flex-1 bg-border" />
+                    </div>
+                    <!-- 无码 -->
+                    <div v-for="group in javbusGenreData.uncensored" :key="'u-' + group.category" class="mb-1">
+                        <h4 class="sticky top-0 z-10 bg-background px-4 py-2 text-sm font-semibold text-muted-foreground border-b">
+                            {{ group.category }}
+                            <span class="ml-1 text-xs font-normal">({{ group.genres.length }})</span>
+                        </h4>
+                        <div class="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2 px-4 py-2">
+                            <div
+                                v-for="name in group.genres"
+                                :key="name"
+                                class="flex cursor-pointer items-center gap-2 rounded-lg border bg-card px-3 py-2 text-left transition hover:border-primary hover:bg-accent"
+                                @click="selectValue(name)"
+                            >
+                                <span class="min-w-0 flex-1 truncate text-sm" :title="name">{{ name }}</span>
+                                <span class="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs tabular-nums text-muted-foreground">
+                                    {{ facetValues.find(fv => fv.name === name)?.count ?? 0 }}
+                                </span>
+                                <button
+                                    type="button"
+                                    class="shrink-0 text-muted-foreground transition hover:text-yellow-500"
+                                    :class="isFav(name) ? 'text-yellow-500' : ''"
+                                    title="收藏"
+                                    @click.stop="toggleFavorite(name)"
+                                >
+                                    <Star class="size-3.5" :fill="isFav(name) ? 'currentColor' : 'none'" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
+                <!-- 其他维度：平铺网格（保留原有逻辑） -->
+                <template v-else>
                 <div class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 p-4">
                     <!-- 在线搜索：搜索非空时置顶，点击进详情页并在线抓取 -->
                     <div
@@ -541,6 +650,7 @@ const handleWorkMetaSaved = () => {
                         </button>
                     </div>
                 </div>
+                </template>
             </ScrollArea>
         </template>
 

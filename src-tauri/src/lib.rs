@@ -327,6 +327,7 @@ pub fn run() {
             actor::commands::ensure_actor,
             actor::commands::get_actor_detail,
             actor::commands::cancel_actor_fetch,
+            actor::commands::get_javbus_genre_list,
             actor::commands::fetch_facet_works,
             actor::commands::get_facet_detail,
             actor::commands::cancel_facet_fetch,

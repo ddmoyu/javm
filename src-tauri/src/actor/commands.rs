@@ -11,6 +11,7 @@ use crate::error::{AppError, AppResult};
 use crate::resource_scrape::actor_provider;
 use crate::resource_scrape::actor_provider::Lane;
 use crate::resource_scrape::fetcher::{FetchOptions, Fetcher};
+use crate::resource_scrape::javbus_genres;
 use crate::resource_scrape::sources::ResourceSite;
 use crate::settings;
 use crate::utils::designation_recognizer;
@@ -809,6 +810,12 @@ fn resolve_genre_by_elimination(
     None
 }
 
+/// 返回 JavBus 全部硬编码分类，按大类别分组，有码/无码分开。
+#[tauri::command]
+pub fn get_javbus_genre_list() -> javbus_genres::JavbusGenreData {
+    javbus_genres::all_genre_groups()
+}
+
 /// 抓取某维度（片商/系列/导演）的作品全集：定位其数据源 id（缓存优先，否则刮该维度下任一本地番号的
 /// 详情页解析），分页爬全集 → 落库 + 本地匹配。经 Fetcher 过年龄门。
 #[tauri::command]
@@ -857,6 +864,27 @@ pub async fn fetch_facet_works(
         Database::get_facet_source_id(&conn, &facet_type, facet_id)?
     };
     let mut lane = Lane::Censored;
+
+    // 分类维度优先查硬编码表（JavBus 全量 genre 名→source_id），避免动态刮削详情页做排除法。
+    if source_id.is_none() && facet_type == "genre" {
+        let name = facet_name.trim();
+        // 先查有码表
+        if let Some(sid) = javbus_genres::lookup_genre_source_id(name, Lane::Censored) {
+            lane = Lane::Censored;
+            source_id = Some(sid.to_string());
+            // 缓存以便下次直接命中
+            let conn = db.get_connection()?;
+            let _ = Database::set_facet_source_id(&conn, &facet_type, facet_id, sid);
+        }
+        // 有码没命中再查无码表（无码 source_id 不缓存，每次现查表即可）
+        if source_id.is_none() {
+            if let Some(sid) = javbus_genres::lookup_genre_source_id(name, Lane::Uncensored) {
+                lane = Lane::Uncensored;
+                source_id = Some(sid.to_string());
+            }
+        }
+    }
+
     if source_id.is_none() {
         // 番号来源：库内该维度任一本地作品；本地没有则在线搜「维度名」(先有码后无码) 取首个结果作品。
         // —— 不要求本地存在，发现页对任意维度的在线搜索都能定位数据源并抓全集；无码区覆盖原生无码厂牌。
@@ -946,6 +974,7 @@ pub async fn fetch_facet_works(
         // 持久化本页 + 本地匹配
         let db_inner = db.inner().clone();
         let ft = facet_type.clone();
+        let fn_name = facet_name.trim().to_string();
         let batch = page_works;
         let n = batch.len();
         tokio::task::spawn_blocking(move || -> AppResult<()> {
@@ -968,6 +997,28 @@ pub async fn fetch_facet_works(
                 )?;
             }
             Database::relink_facet_works_local(&tx, &ft, facet_id)?;
+
+            // 把分面维度名反哺到已匹配的本地视频 metadata
+            {
+                let mut stmt = tx.prepare(
+                    "SELECT local_video_id FROM facet_works
+                     WHERE facet_type = ?1 AND facet_id = ?2
+                       AND status = 'local' AND local_video_id IS NOT NULL",
+                )?;
+                let vids: Vec<String> = stmt
+                    .query_map(rusqlite::params![&ft, facet_id], |r| r.get::<_, String>(0))?
+                    .filter_map(|r| r.ok())
+                    .collect();
+                for vid in &vids {
+                    Database::enrich_local_video_from_facet(
+                        &tx,
+                        &ft,
+                        &fn_name,
+                        vid,
+                    )?;
+                }
+            }
+
             tx.commit()?;
             Ok(())
         })

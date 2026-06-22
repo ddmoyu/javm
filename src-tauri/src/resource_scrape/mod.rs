@@ -19,6 +19,7 @@ pub mod magnet;
 pub mod cf_detection;
 pub mod fetcher;
 pub mod commands;
+pub mod javbus_genres;
 pub mod queue_manager;
 pub mod video_finder;
 pub mod fingerprint_client;

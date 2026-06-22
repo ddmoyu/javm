@@ -828,6 +828,57 @@ impl Database {
         Ok(affected)
     }
 
+    /// 根据分面类型将维度名反哺到已匹配本地视频的 metadata 中。
+    ///
+    /// - `genre`：追加 genre（INSERT OR IGNORE 避免重复）
+    /// - `studio`：追加 maker/studio
+    /// - `series`：追加 series
+    /// - `director`：追加 director
+    ///
+    /// 调用时机：`relink_facet_works_local` 匹配到本地视频后按 video_id 逐条调用。
+    pub fn enrich_local_video_from_facet(
+        conn: &Connection,
+        facet_type: &str,
+        facet_name: &str,
+        video_id: &str,
+    ) -> Result<()> {
+        match facet_type {
+            "genre" => {
+                let genre_id = Self::get_or_create_genre(conn, facet_name)?;
+                conn.execute(
+                    "INSERT OR IGNORE INTO video_genres (video_id, genre_id) VALUES (?1, ?2)",
+                    params![video_id, genre_id],
+                )?;
+            }
+            "studio" => {
+                let studio_id =
+                    Self::get_or_create_metadata(conn, MetadataTable::Studios, facet_name)?;
+                conn.execute(
+                    "INSERT OR IGNORE INTO video_studios (video_id, studio_id) VALUES (?1, ?2)",
+                    params![video_id, studio_id],
+                )?;
+            }
+            "series" => {
+                let series_id =
+                    Self::get_or_create_metadata(conn, MetadataTable::Series, facet_name)?;
+                conn.execute(
+                    "INSERT OR IGNORE INTO video_series (video_id, series_id) VALUES (?1, ?2)",
+                    params![video_id, series_id],
+                )?;
+            }
+            "director" => {
+                let director_id =
+                    Self::get_or_create_metadata(conn, MetadataTable::Directors, facet_name)?;
+                conn.execute(
+                    "INSERT OR IGNORE INTO video_directors (video_id, director_id) VALUES (?1, ?2)",
+                    params![video_id, director_id],
+                )?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// 切换收藏（不存在则加、存在则删），返回切换后的收藏态（true=已收藏）。
     pub fn toggle_favorite(conn: &Connection, entity_type: &str, name: &str) -> Result<bool> {
         let name = name.trim();
