@@ -22,22 +22,41 @@ pub struct StarWork {
 
 const HOST: &str = "https://www.javbus.com";
 
-/// 构建演员页 URL。`page<=1` 为首页，否则 `/star/{code}/{page}`。
-pub fn build_star_url(star_code: &str, page: u32) -> String {
-    if page <= 1 {
-        format!("{}/star/{}", HOST, star_code)
-    } else {
-        format!("{}/star/{}/{}", HOST, star_code, page)
+/// javbus 抓取分区：有码主库 / 无码（`/uncensored` 分库，原生无码厂牌：加勒比/一本道/Heyzo/素人系等）。
+/// 两区页面结构完全相同，仅 URL 路径前缀不同，解析器（parse_works / parse_profile /
+/// parse_facet_source_id 等）通用。
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Lane {
+    Censored,
+    Uncensored,
+}
+
+impl Lane {
+    /// 拼在 HOST 之后、功能路径段之前的前缀（无码 `/uncensored`，有码空）。
+    pub fn prefix(self) -> &'static str {
+        match self {
+            Lane::Censored => "",
+            Lane::Uncensored => "/uncensored",
+        }
     }
 }
 
-/// 维度（片商/系列/导演）列表页 URL：`/{facet_type}/{source_id}` (+ `/{page}`)。
-/// `facet_type` 直接作路径段（studio/series/director，与站点一致）。
-pub fn build_facet_url(facet_type: &str, source_id: &str, page: u32) -> String {
+/// 构建演员页 URL。`page<=1` 为首页，否则 `/star/{code}/{page}`（无码区加 `/uncensored` 前缀）。
+pub fn build_star_url(lane: Lane, star_code: &str, page: u32) -> String {
     if page <= 1 {
-        format!("{}/{}/{}", HOST, facet_type, source_id)
+        format!("{}{}/star/{}", HOST, lane.prefix(), star_code)
     } else {
-        format!("{}/{}/{}/{}", HOST, facet_type, source_id, page)
+        format!("{}{}/star/{}/{}", HOST, lane.prefix(), star_code, page)
+    }
+}
+
+/// 维度（片商/系列/导演）列表页 URL：`/{facet_type}/{source_id}` (+ `/{page}`)，无码区加 `/uncensored` 前缀。
+/// `facet_type` 直接作路径段（studio/series/director，与站点一致）。
+pub fn build_facet_url(lane: Lane, facet_type: &str, source_id: &str, page: u32) -> String {
+    if page <= 1 {
+        format!("{}{}/{}/{}", HOST, lane.prefix(), facet_type, source_id)
+    } else {
+        format!("{}{}/{}/{}/{}", HOST, lane.prefix(), facet_type, source_id, page)
     }
 }
 
@@ -111,31 +130,31 @@ pub fn parse_facet_links(detail_html: &str, facet_type: &str) -> Vec<(String, St
     out
 }
 
-/// 按演员名搜索的 URL（`/searchstar/{name}`，路径段百分号编码以支持日文名）。
-pub fn build_search_url(name: &str) -> String {
+/// 按演员名搜索的 URL（`/searchstar/{name}`，无码区加 `/uncensored` 前缀，路径段百分号编码以支持日文名）。
+pub fn build_search_url(lane: Lane, name: &str) -> String {
     match url::Url::parse(&format!("{HOST}/")) {
         Ok(mut u) => {
-            u.set_path(&format!("searchstar/{name}"));
+            u.set_path(&format!("{}/searchstar/{name}", lane.prefix()));
             u.to_string()
         }
-        Err(_) => format!("{HOST}/searchstar/{name}"),
+        Err(_) => format!("{HOST}{}/searchstar/{name}", lane.prefix()),
     }
 }
 
-/// 按关键词搜作品的 URL（`/search/{keyword}` (+ `/{page}`)，路径段百分号编码）。
+/// 按关键词搜作品的 URL（`/search/{keyword}` (+ `/{page}`)，无码区加 `/uncensored` 前缀，路径段百分号编码）。
 /// 用途：① 维度无本地作品时在线搜任一作品借其详情页定位数据源链接；② 番号在线搜索分页列结果。
-pub fn build_movie_search_url(keyword: &str, page: u32) -> String {
+pub fn build_movie_search_url(lane: Lane, keyword: &str, page: u32) -> String {
     let path = if page <= 1 {
-        format!("search/{keyword}")
+        format!("{}/search/{keyword}", lane.prefix())
     } else {
-        format!("search/{keyword}/{page}")
+        format!("{}/search/{keyword}/{page}", lane.prefix())
     };
     match url::Url::parse(&format!("{HOST}/")) {
         Ok(mut u) => {
             u.set_path(&path);
             u.to_string()
         }
-        Err(_) => format!("{HOST}/{path}"),
+        Err(_) => format!("{HOST}{path}"),
     }
 }
 
@@ -288,9 +307,13 @@ mod tests {
 
     #[test]
     fn builds_star_url_with_pagination() {
-        assert_eq!(build_star_url("abc", 1), "https://www.javbus.com/star/abc");
-        assert_eq!(build_star_url("abc", 0), "https://www.javbus.com/star/abc");
-        assert_eq!(build_star_url("abc", 3), "https://www.javbus.com/star/abc/3");
+        assert_eq!(build_star_url(Lane::Censored, "abc", 1), "https://www.javbus.com/star/abc");
+        assert_eq!(build_star_url(Lane::Censored, "abc", 0), "https://www.javbus.com/star/abc");
+        assert_eq!(build_star_url(Lane::Censored, "abc", 3), "https://www.javbus.com/star/abc/3");
+        assert_eq!(
+            build_star_url(Lane::Uncensored, "abc", 1),
+            "https://www.javbus.com/uncensored/star/abc"
+        );
     }
 
     #[test]
@@ -364,8 +387,12 @@ mod tests {
 
     #[test]
     fn builds_facet_url() {
-        assert_eq!(build_facet_url("studio", "2xs", 1), "https://www.javbus.com/studio/2xs");
-        assert_eq!(build_facet_url("series", "abc", 3), "https://www.javbus.com/series/abc/3");
+        assert_eq!(build_facet_url(Lane::Censored, "studio", "2xs", 1), "https://www.javbus.com/studio/2xs");
+        assert_eq!(build_facet_url(Lane::Censored, "series", "abc", 3), "https://www.javbus.com/series/abc/3");
+        assert_eq!(
+            build_facet_url(Lane::Uncensored, "studio", "2xs", 1),
+            "https://www.javbus.com/uncensored/studio/2xs"
+        );
     }
 
     #[test]

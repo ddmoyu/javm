@@ -9,6 +9,7 @@ use tokio_util::sync::CancellationToken;
 use crate::db::{ActorWorkInput, Database, FacetWorkInput, MetadataTable};
 use crate::error::{AppError, AppResult};
 use crate::resource_scrape::actor_provider;
+use crate::resource_scrape::actor_provider::Lane;
 use crate::resource_scrape::fetcher::{FetchOptions, Fetcher};
 use crate::resource_scrape::sources::ResourceSite;
 use crate::settings;
@@ -244,7 +245,7 @@ async fn run_actor_fetch(
             if token.is_cancelled() {
                 break;
             }
-            let search_url = actor_provider::build_search_url(cand);
+            let search_url = actor_provider::build_search_url(Lane::Censored, cand);
             if let Ok(html) = fetcher.fetch(&app, &search_url, &site, options, &token).await {
                 if let Some(hit) = actor_provider::pick_star_from_search(&html, cand) {
                     let conn = db.get_connection()?;
@@ -257,8 +258,24 @@ async fn run_actor_fetch(
         }
     }
 
-    // 既无 star code 又无 MetaTube 档案 → 确实搜不到
-    if star_code.is_none() && mt_profile.is_none() {
+    // 无码分区 star id：原生无码女优（素人系等）只在 /uncensored 区，按候选名在无码区 searchstar 搜。
+    // 不缓存（库内 star_code 列仅存有码），每次现搜；用于后面抓无码全集合并。
+    let mut unc_star_code: Option<String> = None;
+    for cand in &candidates {
+        if token.is_cancelled() {
+            break;
+        }
+        let search_url = actor_provider::build_search_url(Lane::Uncensored, cand);
+        if let Ok(html) = fetcher.fetch(&app, &search_url, &site, options, &token).await {
+            if let Some(hit) = actor_provider::pick_star_from_search(&html, cand) {
+                unc_star_code = Some(hit.star_code);
+                break;
+            }
+        }
+    }
+
+    // 有码 star、无码 star、MetaTube 档案全无 → 确实搜不到
+    if star_code.is_none() && unc_star_code.is_none() && mt_profile.is_none() {
         return Err(AppError::Business(format!(
             "未在数据源搜到演员「{name}」，无法获取档案/全集"
         )));
@@ -290,7 +307,7 @@ async fn run_actor_fetch(
             if token.is_cancelled() {
                 break;
             }
-            let url = actor_provider::build_star_url(code, page);
+            let url = actor_provider::build_star_url(Lane::Censored, code, page);
             let html = match fetcher.fetch(&app, &url, &site, options, &token).await {
                 Ok(h) => h,
                 Err(e) => {
@@ -341,6 +358,82 @@ async fn run_actor_fetch(
                             release_date: opt(&w.release_date),
                             source: Some("javbus"),
                             is_uncensored: is_unc,
+                        },
+                    )?;
+                }
+                Database::relink_actor_works_local(&tx, actor_id)?;
+                tx.commit()?;
+                Ok(())
+            })
+            .await
+            .map_err(|e| AppError::TaskJoin(e.to_string()))??;
+            works_total += n;
+
+            let _ = app.emit(
+                "actor-fetch-progress",
+                serde_json::json!({ "actorId": actor_id, "worksTotal": works_total }),
+            );
+
+            if n == 0 || !has_next || page >= MAX_STAR_PAGES {
+                break;
+            }
+            page += 1;
+        }
+    }
+
+    // 4. 无码全集：抓 /uncensored star 页并合并进 actor_works（番号与有码不重叠，无冲突）。
+    //    若此前无任何档案（纯无码女优如素人系），用无码 star 页首页档案补头像/三围。
+    if let Some(ucode) = &unc_star_code {
+        let mut page = 1u32;
+        loop {
+            if token.is_cancelled() {
+                break;
+            }
+            let url = actor_provider::build_star_url(Lane::Uncensored, ucode, page);
+            let html = match fetcher.fetch(&app, &url, &site, options, &token).await {
+                Ok(h) => h,
+                Err(e) => {
+                    if token.is_cancelled() {
+                        break;
+                    }
+                    return Err(AppError::Business(e));
+                }
+            };
+            let page_profile = if page == 1 && !profile_updated {
+                Some(actor_provider::parse_profile(&html))
+            } else {
+                None
+            };
+            let page_works = actor_provider::parse_works(&html);
+            let has_next = actor_provider::parse_has_next_page(&html);
+            if page_profile.is_some() {
+                profile_updated = true;
+            }
+            let n = page_works.len();
+            if n == 0 && page_profile.is_none() {
+                break;
+            }
+
+            let db_inner = db.clone();
+            let batch = page_works;
+            let pp = page_profile;
+            tokio::task::spawn_blocking(move || -> AppResult<()> {
+                let mut conn = db_inner.get_connection()?;
+                let tx = conn.transaction()?;
+                if let Some(p) = &pp {
+                    Database::update_actor_profile(&tx, actor_id, p)?;
+                }
+                for w in &batch {
+                    Database::upsert_actor_work(
+                        &tx,
+                        &ActorWorkInput {
+                            actor_id,
+                            code: &w.code,
+                            title: opt(&w.title),
+                            cover_url: opt(&w.cover_url),
+                            release_date: opt(&w.release_date),
+                            source: Some("javbus"),
+                            is_uncensored: true,
                         },
                     )?;
                 }
@@ -756,20 +849,27 @@ pub async fn fetch_facet_works(
         Database::get_or_create_metadata(&conn, mt, facet_name.trim())?
     };
 
-    // 2. 数据源 id：缓存优先，否则刮该维度下任一本地番号的详情页解析并缓存
+    // 2. 数据源 id + 分区：缓存只存有码 source_id（命中即走有码区）；未命中则刮该维度任一番号的详情页解析。
+    //    番号天生无码（加勒比/一本道/Heyzo/素人等）→ 该维度走无码 /uncensored 区；无码 source_id 不缓存
+    //    （每次现定位，避免单列缓存分不清有码/无码）。
     let mut source_id = {
         let conn = db.get_connection()?;
         Database::get_facet_source_id(&conn, &facet_type, facet_id)?
     };
+    let mut lane = Lane::Censored;
     if source_id.is_none() {
-        // 番号来源：库内该维度任一本地作品；本地没有则去数据源在线搜「维度名」取首个结果作品。
-        // —— 不要求本地存在，发现页对任意维度的在线搜索都能定位数据源并抓全集。
+        // 番号来源：库内该维度任一本地作品；本地没有则在线搜「维度名」(先有码后无码) 取首个结果作品。
+        // —— 不要求本地存在，发现页对任意维度的在线搜索都能定位数据源并抓全集；无码区覆盖原生无码厂牌。
         let mut code = {
             let conn = db.get_connection()?;
             Database::find_local_code_for_facet(&conn, &facet_type, facet_id)?
         };
-        if code.is_none() && !token.is_cancelled() {
-            let search_url = actor_provider::build_movie_search_url(facet_name.trim(), 1);
+        for search_lane in [Lane::Censored, Lane::Uncensored] {
+            if code.is_some() || token.is_cancelled() {
+                break;
+            }
+            let search_url =
+                actor_provider::build_movie_search_url(search_lane, facet_name.trim(), 1);
             if let Ok(html) = fetcher.fetch(&app, &search_url, &site, options, &token).await {
                 code = actor_provider::parse_works(&html)
                     .into_iter()
@@ -778,6 +878,13 @@ pub async fn fetch_facet_works(
             }
         }
         if let Some(code) = code {
+            // 番号天生无码 → 该维度走无码区（其详情页的维度链接即 /uncensored/{type}/{id}）
+            lane = if designation_recognizer::is_uncensored_designation(&code) {
+                Lane::Uncensored
+            } else {
+                Lane::Censored
+            };
+            // 影片详情页在根路径 /{code}（有码无码同），其 .info 内维度链接已自带 /uncensored 前缀
             let detail_url = format!("https://www.javbus.com/{}", code);
             if let Ok(html) = fetcher.fetch(&app, &detail_url, &site, options, &token).await {
                 // 分类一片多值，必须按名字认准目标链接；其余维度单值取首个即可
@@ -798,8 +905,11 @@ pub async fn fetch_facet_works(
                     sid = resolve_genre_by_elimination(facet_name.trim(), &app_genres, &page_links);
                 }
                 if let Some(sid) = sid {
-                    let conn = db.get_connection()?;
-                    let _ = Database::set_facet_source_id(&conn, &facet_type, facet_id, &sid);
+                    // 仅缓存有码 source_id（命中即有码）；无码每次现定位
+                    if lane == Lane::Censored {
+                        let conn = db.get_connection()?;
+                        let _ = Database::set_facet_source_id(&conn, &facet_type, facet_id, &sid);
+                    }
                     source_id = Some(sid);
                 }
             }
@@ -817,7 +927,7 @@ pub async fn fetch_facet_works(
         if token.is_cancelled() {
             break;
         }
-        let url = actor_provider::build_facet_url(&facet_type, &source_id, page);
+        let url = actor_provider::build_facet_url(lane, &facet_type, &source_id, page);
         let html = match fetcher.fetch(&app, &url, &site, options, &token).await {
             Ok(h) => h,
             Err(e) => {
@@ -934,65 +1044,85 @@ pub async fn search_works_by_code(
     let token = cancel.begin(format!("code:{}", kw)).await;
     let fetcher = Fetcher::new();
 
-    let mut works_total = 0usize;
     let mut works_local = 0i64;
     let mut acc: Vec<serde_json::Value> = Vec::new();
-    let mut page = 1u32;
-    loop {
-        if token.is_cancelled() {
-            break;
-        }
-        let url = actor_provider::build_movie_search_url(&kw, page);
-        let html = match fetcher.fetch(&app, &url, &site, options, &token).await {
-            Ok(h) => h,
-            Err(e) => {
-                if token.is_cancelled() {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut last_err: Option<String> = None;
+
+    // 有码 + 无码两条分区都搜，按番号去重合并（无码区覆盖加勒比/一本道/Heyzo/素人等原生无码）
+    'lanes: for lane in [Lane::Censored, Lane::Uncensored] {
+        let mut page = 1u32;
+        loop {
+            if token.is_cancelled() {
+                break 'lanes;
+            }
+            let url = actor_provider::build_movie_search_url(lane, &kw, page);
+            let html = match fetcher.fetch(&app, &url, &site, options, &token).await {
+                Ok(h) => h,
+                Err(e) => {
+                    if token.is_cancelled() {
+                        break 'lanes;
+                    }
+                    // 单分区失败（该区无此番号 / 偶发）不致命：记下错误，换下一分区
+                    last_err = Some(e);
                     break;
                 }
-                return Err(AppError::Business(e));
+            };
+            let page_works = actor_provider::parse_works(&html);
+            let has_next = actor_provider::parse_has_next_page(&html);
+            if page_works.is_empty() {
+                break;
             }
-        };
-        let page_works = actor_provider::parse_works(&html);
-        let has_next = actor_provider::parse_has_next_page(&html);
-        if page_works.is_empty() {
-            break;
-        }
 
-        // 本地匹配（仅查 id 标 local/missing，不落库）
-        {
-            let conn = db.get_connection()?;
-            for w in &page_works {
-                let local_id = Database::find_local_video_id_by_code(&conn, &w.code)?;
-                if local_id.is_some() {
-                    works_local += 1;
+            // 本地匹配（仅查 id 标 local/missing，不落库），跨分区按番号去重
+            {
+                let conn = db.get_connection()?;
+                for w in &page_works {
+                    if !seen.insert(w.code.to_uppercase()) {
+                        continue;
+                    }
+                    let local_id = Database::find_local_video_id_by_code(&conn, &w.code)?;
+                    if local_id.is_some() {
+                        works_local += 1;
+                    }
+                    let is_unc = lane == Lane::Uncensored
+                        || designation_recognizer::is_uncensored_designation(&w.code);
+                    acc.push(serde_json::json!({
+                        "code": w.code,
+                        "title": opt(&w.title),
+                        "coverUrl": opt(&w.cover_url),
+                        "releaseDate": opt(&w.release_date),
+                        "status": if local_id.is_some() { "local" } else { "missing" },
+                        "localVideoId": local_id,
+                        "isUncensored": is_unc,
+                    }));
                 }
-                let is_unc = designation_recognizer::is_uncensored_designation(&w.code);
-                acc.push(serde_json::json!({
-                    "code": w.code,
-                    "title": opt(&w.title),
-                    "coverUrl": opt(&w.cover_url),
-                    "releaseDate": opt(&w.release_date),
-                    "status": if local_id.is_some() { "local" } else { "missing" },
-                    "localVideoId": local_id,
-                    "isUncensored": is_unc,
-                }));
             }
-        }
-        works_total += page_works.len();
 
-        // 累计列表增量回传，前端每页即刷新（payload.works 直接覆盖，无需前端去重）
-        let _ = app.emit(
-            "code-search-progress",
-            serde_json::json!({ "keyword": kw, "works": acc }),
-        );
+            // 累计列表增量回传，前端每页即刷新（payload.works 直接覆盖，无需前端去重）
+            let _ = app.emit(
+                "code-search-progress",
+                serde_json::json!({ "keyword": kw, "works": acc }),
+            );
 
-        if !has_next || page >= MAX_STAR_PAGES {
-            break;
+            if !has_next || page >= MAX_STAR_PAGES {
+                break;
+            }
+            page += 1;
         }
-        page += 1;
     }
 
-    Ok(FacetFetchResult { works_total, works_local })
+    // 两条分区都没搜到、且确有抓取错误 → 抛给前端提示；否则返回已合并结果
+    if acc.is_empty() {
+        if let Some(e) = last_err {
+            return Err(AppError::Business(e));
+        }
+    }
+
+    Ok(FacetFetchResult {
+        works_total: acc.len(),
+        works_local,
+    })
 }
 
 /// 停止番号在线搜索（触发已注册的取消令牌）。
