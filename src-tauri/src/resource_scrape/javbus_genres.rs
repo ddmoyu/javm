@@ -948,7 +948,9 @@ const UNCENSORED_ENTRIES: &[GenreEntry] = &[
 fn build_lookup(entries: &[GenreEntry]) -> HashMap<&'static str, &'static str> {
     let mut map = HashMap::with_capacity(entries.len());
     for e in entries {
-        map.insert(e.name, e.id);
+        // 同名分类在表中出现多次时（如「巨乳」既在「體型」又在「其他」），取**首次出现**的 id，
+        // 与列表顺序一致、结果稳定；否则 HashMap 后插入覆盖会随顺序得到非预期 id。
+        map.entry(e.name).or_insert(e.id);
     }
     map
 }
