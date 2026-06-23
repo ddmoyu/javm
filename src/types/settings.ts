@@ -238,7 +238,7 @@ export const defaultSettings: AppSettings = {
         scraperPriority: ['javbus', 'javmenu', 'javxx'],
         maxWebviewWindows: 3,
         linkFinderConcurrency: 3,
-        linkFinderSourceTimeoutSecs: 120,
+        linkFinderSourceTimeoutSecs: 60,
         webviewEnabled: false,
         webviewFallbackEnabled: false,
         devShowWebview: false,

@@ -43,36 +43,56 @@ pub struct VideoSite {
     pub url_template: String,
 }
 
-/// 默认下载源站点（id, 显示名, URL 模板）。`{code}`/`{CODE}` 替换番号。
-/// 列表为代码内置（保证模板可随版本修正）；启用状态与下载成功次数由用户配置
-/// `settings.download.sources` 叠加覆盖。
-pub const DEFAULT_DOWNLOAD_SITES: &[(&str, &str, &str)] = &[
-    ("missav", "MissAV", "https://missav.ws/{code}"),
-    ("thisav", "ThisAV", "https://thisav2.com/cn/{code}"),
-    ("njav", "NJAV", "https://www.njav.com/zh/xvideos/{code}"),
-    ("jable", "Jable.tv", "https://jable.tv/videos/{code}/"),
-    ("jptt", "JPTT.tv", "https://jptt.tv/video/{code}"),
-    ("javsb", "Jav.sb", "https://jav.sb/jav/{code}-1-1.html"),
-    ("123av", "123AV", "https://123av.com/zh/v/{code}"),
-    ("myjav", "MyJav.tv", "https://cn.myjav.tv/video/{code}"),
-    ("javgg", "JavGG", "https://javgg.net/jav/{code}/"),
-    ("javct", "JavCT", "https://javct.net/v/{code}"),
-    ("javmost", "JavMost", "https://www.javmost.ws/{CODE}/"),
-    ("javeng", "JavEng", "https://javeng.tv/jav-eng-sub/{code}/"),
-    ("javfull", "JavFull", "https://javfull.net/{code}/"),
+/// 默认下载源站点定义。`{code}`/`{CODE}` 替换番号。
+/// `fail_selector`（+ 可选 `fail_text`）= 该源的「失败检测规则」：页面 querySelector 命中该选择器
+/// （且元素 textContent 含 fail_text，若非空）即判该源失败、立即让槽，不等超时。空串=无规则，
+/// 仅走通用 404 兜底。规则是数据，按各站 404 页逐个补；没把握就留空，不要臆造（误填会误杀正片页）。
+/// 列表为代码内置（模板/规则随版本修正）；启用状态与下载成功次数由 `settings.download.sources` 叠加覆盖。
+pub struct DownloadSiteDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub url_template: &'static str,
+    pub fail_selector: &'static str,
+    pub fail_text: &'static str,
+}
+
+pub const DEFAULT_DOWNLOAD_SITES: &[DownloadSiteDef] = &[
+    DownloadSiteDef { id: "missav", name: "MissAV", url_template: "https://missav.ws/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "thisav", name: "ThisAV", url_template: "https://thisav2.com/cn/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "njav", name: "NJAV", url_template: "https://www.njav.com/zh/xvideos/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "jable", name: "Jable.tv", url_template: "https://jable.tv/videos/{code}/", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "jptt", name: "JPTT.tv", url_template: "https://jptt.tv/video/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "javsb", name: "Jav.sb", url_template: "https://jav.sb/jav/{code}-1-1.html", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "123av", name: "123AV", url_template: "https://123av.com/zh/v/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "myjav", name: "MyJav.tv", url_template: "https://cn.myjav.tv/video/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "javgg", name: "JavGG", url_template: "https://javgg.net/jav/{code}/", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "javct", name: "JavCT", url_template: "https://javct.net/v/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "javmost", name: "JavMost", url_template: "https://www.javmost.ws/{CODE}/", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "javeng", name: "JavEng", url_template: "https://javeng.tv/jav-eng-sub/{code}/", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "javfull", name: "JavFull", url_template: "https://javfull.net/{code}/", fail_selector: "", fail_text: "" },
 ];
 
 /// 根据网站 ID 和番号构建访问 URL
 ///
 /// URL 模板中 `{code}` 替换为小写番号，`{CODE}` 替换为大写番号
 pub fn build_site_url(site_id: &str, code: &str) -> Result<String, String> {
-    let (_, _, template) = DEFAULT_DOWNLOAD_SITES
+    let site = DEFAULT_DOWNLOAD_SITES
         .iter()
-        .find(|(id, _, _)| *id == site_id)
+        .find(|s| s.id == site_id)
         .ok_or_else(|| format!("未知的视频网站: {}", site_id))?;
-    Ok(template
+    Ok(site
+        .url_template
         .replace("{CODE}", &code.to_uppercase())
         .replace("{code}", &code.to_lowercase()))
+}
+
+/// 取某源的失败检测规则（CSS 选择器 + 可选文本包含）。无规则或未知源返回空串对。
+pub fn site_fail_rule(site_id: &str) -> (&'static str, &'static str) {
+    DEFAULT_DOWNLOAD_SITES
+        .iter()
+        .find(|s| s.id == site_id)
+        .map(|s| (s.fail_selector, s.fail_text))
+        .unwrap_or(("", ""))
 }
 
 /// WebView 窗口标识前缀
@@ -94,6 +114,9 @@ const VIDEO_FINDER_CF_STATE_EVENT: &str = "video-finder-cf-state";
 pub(crate) const INTERCEPT_JS: &str = r#"
 (function() {
     var __SITE__ = '__VIDEO_FINDER_SITE__';
+    // 每源失败检测规则（由后端 site_fail_rule 注入为 JS 字符串字面量；空串=无规则）
+    var __FAIL_SEL__ = __VIDEO_FINDER_FAIL_SEL__;
+    var __FAIL_TEXT__ = __VIDEO_FINDER_FAIL_TEXT__;
     if (window.__CF_CHALLENGE_ACTIVE__) return;
     if (window.__VIDEO_FINDER_INJECTED__) return;
     window.__VIDEO_FINDER_INJECTED__ = true;
@@ -274,6 +297,19 @@ pub(crate) const INTERCEPT_JS: &str = r#"
     function reportNotFound() {
         if (__notFoundReported) return;
         if (document.readyState !== 'complete') return;
+        // 每源失败规则优先：命中配置的选择器（且文本含 fail_text，若非空）即判失败，立即让槽
+        if (__FAIL_SEL__) {
+            try {
+                var __failEl = document.querySelector(__FAIL_SEL__);
+                if (__failEl && (!__FAIL_TEXT__ || (__failEl.textContent || '').indexOf(__FAIL_TEXT__) !== -1)) {
+                    __notFoundReported = true;
+                    if (window.__TAURI__ && window.__TAURI__.event) {
+                        window.__TAURI__.event.emit('video-finder-page-state', { site: __SITE__, state: 'not-found' });
+                    }
+                    return;
+                }
+            } catch(e) {}
+        }
         var title = document.title || '';
         var h1 = document.querySelector('h1');
         var h1text = h1 ? (h1.textContent || '') : '';
@@ -342,7 +378,18 @@ pub fn open_video_finder_webview(
         .map_err(|e: url::ParseError| format!("URL 解析失败: {}", e))?;
 
     let label = video_finder_label(&site_id_string);
-    let intercept = INTERCEPT_JS.replace("__VIDEO_FINDER_SITE__", &site_id_string);
+    // 注入失败规则：序列化成 JS 字符串字面量（含转义），避免选择器/文本里的引号破坏脚本。
+    let (fail_sel, fail_text) = site_fail_rule(site_id);
+    let intercept = INTERCEPT_JS
+        .replace("__VIDEO_FINDER_SITE__", &site_id_string)
+        .replace(
+            "__VIDEO_FINDER_FAIL_SEL__",
+            &serde_json::to_string(fail_sel).unwrap_or_else(|_| "\"\"".to_string()),
+        )
+        .replace(
+            "__VIDEO_FINDER_FAIL_TEXT__",
+            &serde_json::to_string(fail_text).unwrap_or_else(|_| "\"\"".to_string()),
+        );
 
     // 如果已有同 site 窗口，关闭后重建（确保干净状态）
     if let Some(existing) = app.get_webview_window(&label) {

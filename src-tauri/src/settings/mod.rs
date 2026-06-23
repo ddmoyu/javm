@@ -242,10 +242,10 @@ pub struct DownloadSource {
 fn default_download_sources() -> Vec<DownloadSource> {
     crate::resource_scrape::video_finder::DEFAULT_DOWNLOAD_SITES
         .iter()
-        .map(|(id, name, tpl)| DownloadSource {
-            id: id.to_string(),
-            name: name.to_string(),
-            url_template: tpl.to_string(),
+        .map(|s| DownloadSource {
+            id: s.id.to_string(),
+            name: s.name.to_string(),
+            url_template: s.url_template.to_string(),
             enabled: true,
             success_count: 0,
         })
@@ -424,7 +424,7 @@ fn default_link_finder_concurrency() -> u32 {
 }
 
 fn default_link_finder_source_timeout() -> u32 {
-    120
+    60
 }
 
 fn merge_scrape_sites(saved_sites: &[ResourceSite]) -> Vec<ResourceSite> {
