@@ -828,12 +828,13 @@ impl Database {
         Ok(affected)
     }
 
-    /// 根据分面类型将维度名反哺到已匹配本地视频的 metadata 中。
+    /// 根据分面类型将维度名反哺到已匹配本地视频的 metadata 中（原本缺失才补，不覆盖已有值）。
     ///
-    /// - `genre`：追加 genre（INSERT OR IGNORE 避免重复）
-    /// - `studio`：追加 maker/studio
-    /// - `series`：追加 series
-    /// - `director`：追加 director
+    /// - `genre`：分类多值，存 `video_genres` 关联表（前端 `v.genres` 即读这张表）→ INSERT OR IGNORE。
+    /// - `studio` / `director`：前端显示读的是 `videos.studio` / `videos.director` **列**，故主补该列
+    ///   （仅当为空），同时维护 `video_*` 关联表供后端 `find_local_code_for_facet` 匹配用。
+    /// - `series`：发现页「系列」= 番号前缀（`SSIS-001`→`SSIS`），由 `local_id` 实时派生、无存储列，
+    ///   只要有番号就自动归类，无需反哺；这里仅维护关联表供后端匹配。
     ///
     /// 调用时机：`relink_facet_works_local` 匹配到本地视频后按 video_id 逐条调用。
     pub fn enrich_local_video_from_facet(
@@ -857,6 +858,12 @@ impl Database {
                     "INSERT OR IGNORE INTO video_studios (video_id, studio_id) VALUES (?1, ?2)",
                     params![video_id, studio_id],
                 )?;
+                // 片商显示读的是 videos.studio 列：原本为空才补，不覆盖已有正确值
+                conn.execute(
+                    "UPDATE videos SET studio = ?2, updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?1 AND (studio IS NULL OR TRIM(studio) = '')",
+                    params![video_id, facet_name],
+                )?;
             }
             "series" => {
                 let series_id =
@@ -872,6 +879,12 @@ impl Database {
                 conn.execute(
                     "INSERT OR IGNORE INTO video_directors (video_id, director_id) VALUES (?1, ?2)",
                     params![video_id, director_id],
+                )?;
+                // 导演显示读的是 videos.director 列：原本为空才补，不覆盖已有正确值
+                conn.execute(
+                    "UPDATE videos SET director = ?2, updated_at = CURRENT_TIMESTAMP
+                     WHERE id = ?1 AND (director IS NULL OR TRIM(director) = '')",
+                    params![video_id, facet_name],
                 )?;
             }
             _ => {}
