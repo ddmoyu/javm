@@ -1,0 +1,368 @@
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+index 1b9d632..6a1889b 100644
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -411,20 +411,21 @@ pub fn run() {
+             resource_scrape::commands::rs_stop_task_queue,
+             resource_scrape::commands::rs_stop_scrape_task,
+             resource_scrape::commands::rs_reset_scrape_task,
+             resource_scrape::commands::rs_delete_scrape_task,
+             resource_scrape::commands::rs_delete_completed_scrape_tasks,
+             resource_scrape::commands::rs_delete_failed_scrape_tasks,
+             resource_scrape::commands::rs_delete_all_scrape_tasks,
+             resource_scrape::commands::rs_check_video_completely_scraped,
+             resource_scrape::commands::rs_find_video_links,
+             resource_scrape::commands::rs_close_video_finder,
++            resource_scrape::commands::close_all_video_finders,
+             resource_scrape::commands::rs_get_video_sites,
+             resource_scrape::commands::rs_analyze_hls,
+             resource_scrape::commands::rs_check_video_exists_by_code,
+             // MetaTube sidecar
+             metatube::commands::metatube_status,
+             metatube::commands::metatube_restart,
+             metatube::commands::metatube_download_latest,
+             // 跨语言别名
+             entity_alias::commands::entity_alias_expand,
+             entity_alias::commands::entity_alias_clusters,
+diff --git a/src-tauri/src/resource_scrape/commands.rs b/src-tauri/src/resource_scrape/commands.rs
+index 9f3b900..6cd23a4 100644
+--- a/src-tauri/src/resource_scrape/commands.rs
++++ b/src-tauri/src/resource_scrape/commands.rs
+@@ -2046,24 +2046,31 @@ pub async fn rs_find_video_links(
+     log::info!("[video_finder] event=open_requested code={} site={}", code, site);
+     analytics::record_search_resource_link(&app);
+     // 复用"HTTP 失败回退 WebView"开关：关闭时即使遇到 CF 也不弹窗
+     let show_on_cf = settings::get_settings(app.clone())
+         .await
+         .map(|s| settings::resolve_scrape_fetch_settings(&s.scrape).webview_fallback_enabled)
+         .unwrap_or(true);
+     super::video_finder::open_video_finder_webview(&app, &code, &site, show_on_cf)
+ }
+ 
+-/// 关闭视频查找 WebView 窗口
++/// 关闭指定 site 的视频查找 WebView 窗口
+ #[tauri::command]
+-pub async fn rs_close_video_finder(app: AppHandle) -> Result<(), String> {
+-    super::video_finder::close_video_finder_webview(&app)
++pub async fn rs_close_video_finder(app: AppHandle, site_id: String) -> Result<(), String> {
++    super::video_finder::close_video_finder_webview(&app, &site_id)
++}
++
++/// 关闭所有视频查找 WebView 窗口
++#[tauri::command]
++pub async fn close_all_video_finders(app: tauri::AppHandle) -> Result<(), String> {
++    super::video_finder::close_all_video_finders(&app);
++    Ok(())
+ }
+ 
+ /// 获取启用的下载源（资源链接站点），按下载成功次数从高到低排序
+ #[tauri::command]
+ pub async fn rs_get_video_sites(app: AppHandle) -> Result<Vec<super::video_finder::VideoSite>, String> {
+     let settings = crate::settings::get_settings(app).await?;
+     let mut sources: Vec<_> = settings
+         .download
+         .sources
+         .into_iter()
+diff --git a/src-tauri/src/resource_scrape/link_probe.rs b/src-tauri/src/resource_scrape/link_probe.rs
+index dbb3f34..7b81f16 100644
+--- a/src-tauri/src/resource_scrape/link_probe.rs
++++ b/src-tauri/src/resource_scrape/link_probe.rs
+@@ -15,21 +15,24 @@
+ //! 可选 `JAVM_LINK_PROBE_OUT=自定义结果路径`（默认 link_probe_results.json）。
+ //! 跑完会把结果写入 JSON 并自动退出。配置文件格式见 link_probe_targets.sample.json。
+ 
+ use std::collections::BTreeSet;
+ use std::sync::{Arc, Mutex};
+ use std::time::Duration;
+ 
+ use serde::{Deserialize, Serialize};
+ use tauri::{AppHandle, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
+ 
+-use super::video_finder::{INTERCEPT_JS, VIDEO_FINDER_LABEL};
++use super::video_finder::INTERCEPT_JS;
++
++/// link_probe 独占的 WebView 窗口标识（与 video_finder 的 per-site 窗口互不干扰）
++const PROBE_LABEL: &str = "video_finder_probe";
+ use super::webview_support;
+ 
+ fn default_code() -> String {
+     "SSIS-666".to_string()
+ }
+ fn default_secs() -> u64 {
+     18
+ }
+ 
+ #[derive(Deserialize)]
+@@ -175,31 +178,31 @@ async fn probe_one(
+     per_site_secs: u64,
+     captured: &Arc<Mutex<BTreeSet<String>>>,
+ ) -> ProbeResult {
+     let mut note = String::new();
+     let parsed: url::Url = match url.parse() {
+         Ok(u) => u,
+         Err(e) => return ProbeResult::fail(&target.name, url, format!("URL 无效: {e}")),
+     };
+ 
+     // 关闭可能残留的窗口
+-    if let Some(existing) = app.get_webview_window(VIDEO_FINDER_LABEL) {
++    if let Some(existing) = app.get_webview_window(PROBE_LABEL) {
+         let _ = existing.close();
+         tokio::time::sleep(Duration::from_millis(300)).await;
+     }
+ 
+     let data_directory = match webview_support::persistent_data_directory(app) {
+         Ok(d) => d,
+         Err(e) => return ProbeResult::fail(&target.name, url, format!("数据目录失败: {e}")),
+     };
+ 
+-    let builder = WebviewWindowBuilder::new(app, VIDEO_FINDER_LABEL, WebviewUrl::External(parsed))
++    let builder = WebviewWindowBuilder::new(app, PROBE_LABEL, WebviewUrl::External(parsed))
+         .title("link probe")
+         .inner_size(1920.0, 1080.0)
+         .visible(false)
+         .user_agent(webview_support::WEBVIEW_USER_AGENT)
+         .initialization_script(anti)
+         .data_directory(data_directory);
+ 
+     #[cfg(target_os = "windows")]
+     let builder = builder.additional_browser_args(webview_support::WEBVIEW_BROWSER_ARGS);
+ 
+diff --git a/src-tauri/src/resource_scrape/video_finder.rs b/src-tauri/src/resource_scrape/video_finder.rs
+index 067e1e7..747502b 100644
+--- a/src-tauri/src/resource_scrape/video_finder.rs
++++ b/src-tauri/src/resource_scrape/video_finder.rs
+@@ -68,33 +68,39 @@ pub const DEFAULT_DOWNLOAD_SITES: &[(&str, &str, &str)] = &[
+ pub fn build_site_url(site_id: &str, code: &str) -> Result<String, String> {
+     let (_, _, template) = DEFAULT_DOWNLOAD_SITES
+         .iter()
+         .find(|(id, _, _)| *id == site_id)
+         .ok_or_else(|| format!("未知的视频网站: {}", site_id))?;
+     Ok(template
+         .replace("{CODE}", &code.to_uppercase())
+         .replace("{code}", &code.to_lowercase()))
+ }
+ 
+-/// WebView 窗口标识
+-pub(crate) const VIDEO_FINDER_LABEL: &str = "video_finder_webview";
++/// WebView 窗口标识前缀
++pub(crate) const VIDEO_FINDER_LABEL_PREFIX: &str = "video_finder_";
++
++/// 根据 site_id 生成对应的 WebView 窗口标识
++pub(crate) fn video_finder_label(site_id: &str) -> String {
++    format!("{}{}", VIDEO_FINDER_LABEL_PREFIX, site_id)
++}
+ 
+ /// 视频链接查找最大运行时长（秒）
+ const FINDER_MAX_RUNTIME_SECS: u64 = 20 * 60;
+ 
+ /// 前端视频链接查找 CF 状态事件
+ const VIDEO_FINDER_CF_STATE_EVENT: &str = "video-finder-cf-state";
+ 
+ /// 注入到 WebView 的 JS 脚本
+ /// 拦截 XMLHttpRequest、fetch、HLS.js 等，捕获视频链接并通过 Tauri 事件发送
+ pub(crate) const INTERCEPT_JS: &str = r#"
+ (function() {
++    var __SITE__ = '__VIDEO_FINDER_SITE__';
+     if (window.__CF_CHALLENGE_ACTIVE__) return;
+     if (window.__VIDEO_FINDER_INJECTED__) return;
+     window.__VIDEO_FINDER_INJECTED__ = true;
+     window.__VIDEO_FINDER_URLS__ = new Set();
+ 
+     // 视频链接匹配正则（放宽后缀限制，包含txt）
+     var VIDEO_RE = /\.(m3u8|mp4|ts|txt)(?:[#\?].*)?$/i;
+     // 兼容像 /qc/v.m3u8 等路径
+     var URL_SCAN_RE = /https?:\/\/[^\s"'`<>\\\)\]\}]+\.(?:m3u8|mp4|ts|txt)(?:[#\?][^\s"'`<>\\\)\]\}]*)?/gi;
+ 
+@@ -106,21 +112,21 @@ pub(crate) const INTERCEPT_JS: &str = r#"
+ 
+     function reportUrl(url, force) {
+         if (!url || typeof url !== 'string') return;
+         // 清理 URL 末尾的特殊字符
+         url = url.replace(/["'`\\;,\s]+$/, '');
+         if (!force && !VIDEO_RE.test(url)) return;
+         if (window.__VIDEO_FINDER_URLS__.has(url)) return;
+         window.__VIDEO_FINDER_URLS__.add(url);
+         try {
+             if (window.__TAURI__ && window.__TAURI__.event) {
+-                window.__TAURI__.event.emit('video-finder-link', url);
++                window.__TAURI__.event.emit('video-finder-link', { site: __SITE__, url: url });
+             }
+         } catch(e) {
+             console.log('[VideoFinder] emit 失败:', e);
+         }
+     }
+ 
+     // 扫描文本中的视频链接
+     function scanText(text) {
+         if (!text || typeof text !== 'string') return;
+         var match;
+@@ -268,21 +274,21 @@ pub(crate) const INTERCEPT_JS: &str = r#"
+     function reportNotFound() {
+         if (__notFoundReported) return;
+         if (document.readyState !== 'complete') return;
+         var title = document.title || '';
+         var h1 = document.querySelector('h1');
+         var h1text = h1 ? (h1.textContent || '') : '';
+         if (NOT_FOUND_RE.test(title) || NOT_FOUND_RE.test(h1text)) {
+             __notFoundReported = true;
+             try {
+                 if (window.__TAURI__ && window.__TAURI__.event) {
+-                    window.__TAURI__.event.emit('video-finder-page-state', 'not-found');
++                    window.__TAURI__.event.emit('video-finder-page-state', { site: __SITE__, state: 'not-found' });
+                 }
+             } catch(e) {}
+         }
+     }
+ 
+     // ========== 定期扫描 ==========
+     function fullScan() {
+         // 顺带检测当前页面是否为 404 / 找不到
+         reportNotFound();
+         // 扫描所有 script 标签
+@@ -328,49 +334,52 @@ pub fn open_video_finder_webview(
+         "[video_finder] event=open_requested code={} site={} url={}",
+         code,
+         site_id_string,
+         url_str
+     );
+ 
+     let parsed_url: url::Url = url_str
+         .parse()
+         .map_err(|e: url::ParseError| format!("URL 解析失败: {}", e))?;
+ 
+-    // 如果已有窗口，关闭后重建（确保干净状态）
+-    if let Some(existing) = app.get_webview_window(VIDEO_FINDER_LABEL) {
++    let label = video_finder_label(&site_id_string);
++    let intercept = INTERCEPT_JS.replace("__VIDEO_FINDER_SITE__", &site_id_string);
++
++    // 如果已有同 site 窗口，关闭后重建（确保干净状态）
++    if let Some(existing) = app.get_webview_window(&label) {
+         let _ = existing.close();
+         // 等待窗口关闭
+         std::thread::sleep(std::time::Duration::from_millis(200));
+     }
+ 
+     // 默认可见但用真实视口尺寸并移到屏幕外：既保证 WebView2 正常渲染/执行 JS、
+     // 让自适应站点加载高清资源，又不打扰用户；仅在遇到 CF 验证时自动放大并居中。
+     let is_visible = true;
+     let data_directory = webview_support::persistent_data_directory(app)?;
+ 
+     let anti_detection_js = webview_support::build_anti_detection_script();
+     let builder =
+-        WebviewWindowBuilder::new(app, VIDEO_FINDER_LABEL, WebviewUrl::External(parsed_url.clone()))
++        WebviewWindowBuilder::new(app, &label, WebviewUrl::External(parsed_url.clone()))
+             .title(format!("查找视频链接 - {}", code.to_uppercase()))
+             .inner_size(
+                 webview_support::SCRAPER_VIEWPORT_WIDTH,
+                 webview_support::SCRAPER_VIEWPORT_HEIGHT,
+             )
+             .position(
+                 webview_support::SCRAPER_OFFSCREEN_POS,
+                 webview_support::SCRAPER_OFFSCREEN_POS,
+             )
+             .visible(is_visible)
+             .user_agent(webview_support::WEBVIEW_USER_AGENT)
+             .initialization_script(&anti_detection_js)
+             // 提前注入拦截脚本，确保在页面 JS 执行前就绪，不漏掉初始网络请求
+-            .initialization_script(INTERCEPT_JS)
++            .initialization_script(&intercept)
+             .data_directory(data_directory);
+ 
+     #[cfg(target_os = "windows")]
+     let builder = builder.additional_browser_args(webview_support::WEBVIEW_BROWSER_ARGS);
+ 
+     let window = builder
+         .build()
+         .map_err(|e| format!("创建 WebView 窗口失败: {}", e))?;
+ 
+     let resource_site = ResourceSite {
+@@ -397,22 +406,22 @@ pub fn open_video_finder_webview(
+         &resource_site,
+         &cf_event_name,
+         Some(VIDEO_FINDER_CF_STATE_EVENT),
+         show_on_cf,
+         // CF 通过后移到屏幕外但保持渲染，确保继续抓取高清视频流
+         true,
+     );
+     let cf_probe_js = webview_support::build_cf_probe_script(&cf_event_name);
+ 
+     // CF 探测脚本 + 拦截脚本合并为一次 eval，确保先检测 CF 再决定是否注入拦截器。
+-    // INTERCEPT_JS 会检查 window.__CF_CHALLENGE_ACTIVE__，CF 页面上不会修改浏览器 API。
+-    let combined_js = format!("{}\n{}", cf_probe_js, INTERCEPT_JS);
++    // intercept 已替换 __VIDEO_FINDER_SITE__ 占位符，CF 页面上不会修改浏览器 API。
++    let combined_js = format!("{}\n{}", cf_probe_js, intercept);
+ 
+     // 跟踪 CF 状态，用于调整注入频率
+     let cf_active = Arc::new(AtomicBool::new(false));
+     let saw_cf_challenge = Arc::new(AtomicBool::new(false));
+     let fast_inject_cycles = Arc::new(AtomicU32::new(40));
+     let cf_active_for_listener = cf_active.clone();
+     let saw_cf_for_listener = saw_cf_challenge.clone();
+     let fast_inject_cycles_for_listener = fast_inject_cycles.clone();
+     let window_for_listener = window.clone();
+     let target_url_for_listener = parsed_url.clone();
+@@ -459,21 +468,21 @@ pub fn open_video_finder_webview(
+                 log::warn!(
+                     "[video_finder] event=max_runtime_reached site={} code={} runtime_secs={}",
+                     site_id_owned,
+                     code_for_task,
+                     FINDER_MAX_RUNTIME_SECS
+                 );
+                 break;
+             }
+ 
+             // 检查窗口是否还存在
+-            if app_clone.get_webview_window(VIDEO_FINDER_LABEL).is_none() {
++            if app_clone.get_webview_window(&label).is_none() {
+                 log::info!(
+                     "[video_finder] event=window_closed_stop_inject site={} code={}",
+                     site_id_owned,
+                     code_for_task
+                 );
+                 break;
+             }
+ 
+             if let Err(e) = window_clone.eval(&combined_js) {
+                 if quick_inject_rounds % 20 == 0 {
+@@ -513,20 +522,36 @@ pub fn open_video_finder_webview(
+             VIDEO_FINDER_CF_STATE_EVENT,
+             "idle",
+             Some(site_id_owned),
+             0,
+         );
+     });
+ 
+     Ok(())
+ }
+ 
+-/// 关闭视频查找 WebView 窗口
+-pub fn close_video_finder_webview(app: &AppHandle) -> Result<(), String> {
+-    log::info!("[video_finder] event=close_requested");
+-    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", None, 0);
+-    if let Some(window) = app.get_webview_window(VIDEO_FINDER_LABEL) {
++/// 关闭指定 site 的视频查找 WebView 窗口
++pub fn close_video_finder_webview(app: &AppHandle, site_id: &str) -> Result<(), String> {
++    log::info!("[video_finder] event=close_requested site={}", site_id);
++    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", Some(site_id.to_string()), 0);
++    if let Some(window) = app.get_webview_window(&video_finder_label(site_id)) {
+         window.close().map_err(|e| format!("关闭窗口失败: {}", e))?;
+     }
+     Ok(())
+ }
+ 
++/// 关闭所有视频查找 WebView 窗口
++pub fn close_all_video_finders(app: &AppHandle) {
++    let labels: Vec<String> = app
++        .webview_windows()
++        .keys()
++        .filter(|l| l.starts_with(VIDEO_FINDER_LABEL_PREFIX))
++        .cloned()
++        .collect();
++    for label in labels {
++        if let Some(w) = app.get_webview_window(&label) {
++            let _ = w.close();
++        }
++    }
++    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", None, 0);
++}
++

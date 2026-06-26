@@ -1,0 +1,1433 @@
+diff --git a/src-tauri/src/lib.rs b/src-tauri/src/lib.rs
+index 1b9d632..00f85c3 100644
+--- a/src-tauri/src/lib.rs
++++ b/src-tauri/src/lib.rs
+@@ -418,6 +418,7 @@ pub fn run() {
+             resource_scrape::commands::rs_check_video_completely_scraped,
+             resource_scrape::commands::rs_find_video_links,
+             resource_scrape::commands::rs_close_video_finder,
++            resource_scrape::commands::rs_close_all_video_finders,
+             resource_scrape::commands::rs_get_video_sites,
+             resource_scrape::commands::rs_analyze_hls,
+             resource_scrape::commands::rs_check_video_exists_by_code,
+diff --git a/src-tauri/src/resource_scrape/commands.rs b/src-tauri/src/resource_scrape/commands.rs
+index 9f3b900..0313d85 100644
+--- a/src-tauri/src/resource_scrape/commands.rs
++++ b/src-tauri/src/resource_scrape/commands.rs
+@@ -2053,10 +2053,17 @@ pub async fn rs_find_video_links(
+     super::video_finder::open_video_finder_webview(&app, &code, &site, show_on_cf)
+ }
+ 
+-/// 关闭视频查找 WebView 窗口
++/// 关闭指定 site 的视频查找 WebView 窗口
+ #[tauri::command]
+-pub async fn rs_close_video_finder(app: AppHandle) -> Result<(), String> {
+-    super::video_finder::close_video_finder_webview(&app)
++pub async fn rs_close_video_finder(app: AppHandle, site_id: String) -> Result<(), String> {
++    super::video_finder::close_video_finder_webview(&app, &site_id)
++}
++
++/// 关闭所有视频查找 WebView 窗口
++#[tauri::command]
++pub async fn rs_close_all_video_finders(app: tauri::AppHandle) -> Result<(), String> {
++    super::video_finder::close_all_video_finders(&app);
++    Ok(())
+ }
+ 
+ /// 获取启用的下载源（资源链接站点），按下载成功次数从高到低排序
+diff --git a/src-tauri/src/resource_scrape/link_probe.rs b/src-tauri/src/resource_scrape/link_probe.rs
+index dbb3f34..7e4c209 100644
+--- a/src-tauri/src/resource_scrape/link_probe.rs
++++ b/src-tauri/src/resource_scrape/link_probe.rs
+@@ -22,7 +22,11 @@ use std::time::Duration;
+ use serde::{Deserialize, Serialize};
+ use tauri::{AppHandle, Listener, Manager, WebviewUrl, WebviewWindowBuilder};
+ 
+-use super::video_finder::{INTERCEPT_JS, VIDEO_FINDER_LABEL};
++use super::video_finder::INTERCEPT_JS;
++
++/// link_probe 独占的 WebView 窗口标识（与 video_finder 的 per-site 窗口互不干扰）
++/// 注意：不以 "video_finder_" 开头，避免被 close_all_video_finders 的前缀过滤误关
++const PROBE_LABEL: &str = "link_probe_webview";
+ use super::webview_support;
+ 
+ fn default_code() -> String {
+@@ -182,7 +186,7 @@ async fn probe_one(
+     };
+ 
+     // 关闭可能残留的窗口
+-    if let Some(existing) = app.get_webview_window(VIDEO_FINDER_LABEL) {
++    if let Some(existing) = app.get_webview_window(PROBE_LABEL) {
+         let _ = existing.close();
+         tokio::time::sleep(Duration::from_millis(300)).await;
+     }
+@@ -192,7 +196,7 @@ async fn probe_one(
+         Err(e) => return ProbeResult::fail(&target.name, url, format!("数据目录失败: {e}")),
+     };
+ 
+-    let builder = WebviewWindowBuilder::new(app, VIDEO_FINDER_LABEL, WebviewUrl::External(parsed))
++    let builder = WebviewWindowBuilder::new(app, PROBE_LABEL, WebviewUrl::External(parsed))
+         .title("link probe")
+         .inner_size(1920.0, 1080.0)
+         .visible(false)
+@@ -219,7 +223,8 @@ async fn probe_one(
+         String::new()
+     };
+     for i in 0..cycles {
+-        let _ = window.eval(INTERCEPT_JS);
++        let probe_intercept = INTERCEPT_JS.replace("__VIDEO_FINDER_SITE__", "probe");
++        let _ = window.eval(&probe_intercept);
+         // 触发播放：很多详情页要点击/调用 play() 才会发起 m3u8 请求，主动 kickstart
+         let _ = window.eval(PLAYBACK_KICK_JS);
+         if target.follow && i >= FOLLOW_WARMUP_CYCLES {
+diff --git a/src-tauri/src/resource_scrape/video_finder.rs b/src-tauri/src/resource_scrape/video_finder.rs
+index 067e1e7..91de5f2 100644
+--- a/src-tauri/src/resource_scrape/video_finder.rs
++++ b/src-tauri/src/resource_scrape/video_finder.rs
+@@ -75,8 +75,13 @@ pub fn build_site_url(site_id: &str, code: &str) -> Result<String, String> {
+         .replace("{code}", &code.to_lowercase()))
+ }
+ 
+-/// WebView 窗口标识
+-pub(crate) const VIDEO_FINDER_LABEL: &str = "video_finder_webview";
++/// WebView 窗口标识前缀
++pub(crate) const VIDEO_FINDER_LABEL_PREFIX: &str = "video_finder_";
++
++/// 根据 site_id 生成对应的 WebView 窗口标识
++pub(crate) fn video_finder_label(site_id: &str) -> String {
++    format!("{}{}", VIDEO_FINDER_LABEL_PREFIX, site_id)
++}
+ 
+ /// 视频链接查找最大运行时长（秒）
+ const FINDER_MAX_RUNTIME_SECS: u64 = 20 * 60;
+@@ -88,6 +93,7 @@ const VIDEO_FINDER_CF_STATE_EVENT: &str = "video-finder-cf-state";
+ /// 拦截 XMLHttpRequest、fetch、HLS.js 等，捕获视频链接并通过 Tauri 事件发送
+ pub(crate) const INTERCEPT_JS: &str = r#"
+ (function() {
++    var __SITE__ = '__VIDEO_FINDER_SITE__';
+     if (window.__CF_CHALLENGE_ACTIVE__) return;
+     if (window.__VIDEO_FINDER_INJECTED__) return;
+     window.__VIDEO_FINDER_INJECTED__ = true;
+@@ -113,7 +119,7 @@ pub(crate) const INTERCEPT_JS: &str = r#"
+         window.__VIDEO_FINDER_URLS__.add(url);
+         try {
+             if (window.__TAURI__ && window.__TAURI__.event) {
+-                window.__TAURI__.event.emit('video-finder-link', url);
++                window.__TAURI__.event.emit('video-finder-link', { site: __SITE__, url: url });
+             }
+         } catch(e) {
+             console.log('[VideoFinder] emit 失败:', e);
+@@ -275,7 +281,7 @@ pub(crate) const INTERCEPT_JS: &str = r#"
+             __notFoundReported = true;
+             try {
+                 if (window.__TAURI__ && window.__TAURI__.event) {
+-                    window.__TAURI__.event.emit('video-finder-page-state', 'not-found');
++                    window.__TAURI__.event.emit('video-finder-page-state', { site: __SITE__, state: 'not-found' });
+                 }
+             } catch(e) {}
+         }
+@@ -335,8 +341,11 @@ pub fn open_video_finder_webview(
+         .parse()
+         .map_err(|e: url::ParseError| format!("URL 解析失败: {}", e))?;
+ 
+-    // 如果已有窗口，关闭后重建（确保干净状态）
+-    if let Some(existing) = app.get_webview_window(VIDEO_FINDER_LABEL) {
++    let label = video_finder_label(&site_id_string);
++    let intercept = INTERCEPT_JS.replace("__VIDEO_FINDER_SITE__", &site_id_string);
++
++    // 如果已有同 site 窗口，关闭后重建（确保干净状态）
++    if let Some(existing) = app.get_webview_window(&label) {
+         let _ = existing.close();
+         // 等待窗口关闭
+         std::thread::sleep(std::time::Duration::from_millis(200));
+@@ -349,7 +358,7 @@ pub fn open_video_finder_webview(
+ 
+     let anti_detection_js = webview_support::build_anti_detection_script();
+     let builder =
+-        WebviewWindowBuilder::new(app, VIDEO_FINDER_LABEL, WebviewUrl::External(parsed_url.clone()))
++        WebviewWindowBuilder::new(app, &label, WebviewUrl::External(parsed_url.clone()))
+             .title(format!("查找视频链接 - {}", code.to_uppercase()))
+             .inner_size(
+                 webview_support::SCRAPER_VIEWPORT_WIDTH,
+@@ -363,7 +372,7 @@ pub fn open_video_finder_webview(
+             .user_agent(webview_support::WEBVIEW_USER_AGENT)
+             .initialization_script(&anti_detection_js)
+             // 提前注入拦截脚本，确保在页面 JS 执行前就绪，不漏掉初始网络请求
+-            .initialization_script(INTERCEPT_JS)
++            .initialization_script(&intercept)
+             .data_directory(data_directory);
+ 
+     #[cfg(target_os = "windows")]
+@@ -404,8 +413,8 @@ pub fn open_video_finder_webview(
+     let cf_probe_js = webview_support::build_cf_probe_script(&cf_event_name);
+ 
+     // CF 探测脚本 + 拦截脚本合并为一次 eval，确保先检测 CF 再决定是否注入拦截器。
+-    // INTERCEPT_JS 会检查 window.__CF_CHALLENGE_ACTIVE__，CF 页面上不会修改浏览器 API。
+-    let combined_js = format!("{}\n{}", cf_probe_js, INTERCEPT_JS);
++    // intercept 已替换 __VIDEO_FINDER_SITE__ 占位符，CF 页面上不会修改浏览器 API。
++    let combined_js = format!("{}\n{}", cf_probe_js, intercept);
+ 
+     // 跟踪 CF 状态，用于调整注入频率
+     let cf_active = Arc::new(AtomicBool::new(false));
+@@ -466,7 +475,7 @@ pub fn open_video_finder_webview(
+             }
+ 
+             // 检查窗口是否还存在
+-            if app_clone.get_webview_window(VIDEO_FINDER_LABEL).is_none() {
++            if app_clone.get_webview_window(&label).is_none() {
+                 log::info!(
+                     "[video_finder] event=window_closed_stop_inject site={} code={}",
+                     site_id_owned,
+@@ -520,13 +529,24 @@ pub fn open_video_finder_webview(
+     Ok(())
+ }
+ 
+-/// 关闭视频查找 WebView 窗口
+-pub fn close_video_finder_webview(app: &AppHandle) -> Result<(), String> {
+-    log::info!("[video_finder] event=close_requested");
+-    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", None, 0);
+-    if let Some(window) = app.get_webview_window(VIDEO_FINDER_LABEL) {
++/// 关闭指定 site 的视频查找 WebView 窗口
++pub fn close_video_finder_webview(app: &AppHandle, site_id: &str) -> Result<(), String> {
++    log::info!("[video_finder] event=close_requested site={}", site_id);
++    webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", Some(site_id.to_string()), 0);
++    if let Some(window) = app.get_webview_window(&video_finder_label(site_id)) {
+         window.close().map_err(|e| format!("关闭窗口失败: {}", e))?;
+     }
+     Ok(())
+ }
+ 
++/// 关闭所有视频查找 WebView 窗口，并按 site 逐个发 idle 状态
++pub fn close_all_video_finders(app: &AppHandle) {
++    let windows = app.webview_windows();
++    for (label, w) in &windows {
++        if let Some(site_id) = label.strip_prefix(VIDEO_FINDER_LABEL_PREFIX) {
++            webview_support::emit_cf_state(app, VIDEO_FINDER_CF_STATE_EVENT, "idle", Some(site_id.to_string()), 0);
++            let _ = w.close();
++        }
++    }
++}
++
+diff --git a/src-tauri/src/settings/mod.rs b/src-tauri/src/settings/mod.rs
+index 875e07b..5542dfc 100644
+--- a/src-tauri/src/settings/mod.rs
++++ b/src-tauri/src/settings/mod.rs
+@@ -287,6 +287,10 @@ pub struct ScrapeSettings {
+     pub scraper_priority: Vec<String>,
+     #[serde(rename = "maxWebviewWindows", default = "default_scrape_max_webview_windows")]
+     pub max_webview_windows: u32,
++    #[serde(rename = "linkFinderConcurrency", default = "default_link_finder_concurrency")]
++    pub link_finder_concurrency: u32,
++    #[serde(rename = "linkFinderSourceTimeoutSecs", default = "default_link_finder_source_timeout")]
++    pub link_finder_source_timeout_secs: u32,
+     #[serde(rename = "webviewEnabled", default)]
+     pub webview_enabled: bool,
+     #[serde(rename = "webviewFallbackEnabled", default)]
+@@ -415,6 +419,14 @@ fn default_scrape_max_webview_windows() -> u32 {
+     3
+ }
+ 
++fn default_link_finder_concurrency() -> u32 {
++    3
++}
++
++fn default_link_finder_source_timeout() -> u32 {
++    120
++}
++
+ fn merge_scrape_sites(saved_sites: &[ResourceSite]) -> Vec<ResourceSite> {
+     let mut merged = sources::default_sites();
+     for site in &mut merged {
+@@ -430,6 +442,8 @@ fn merge_scrape_sites(saved_sites: &[ResourceSite]) -> Vec<ResourceSite> {
+ fn normalize_scrape_settings(scrape: &mut ScrapeSettings) {
+     scrape.concurrent = scrape.concurrent.clamp(1, 10);
+     scrape.max_webview_windows = scrape.max_webview_windows.clamp(1, 8);
++    scrape.link_finder_concurrency = scrape.link_finder_concurrency.clamp(1, 3);
++    scrape.link_finder_source_timeout_secs = scrape.link_finder_source_timeout_secs.clamp(30, 600);
+     scrape.sites = merge_scrape_sites(&scrape.sites);
+     normalize_anti_block_settings(&mut scrape.anti_block);
+ 
+@@ -628,6 +642,8 @@ impl Default for ScrapeSettings {
+             concurrent: 5,
+             scraper_priority: vec!["javbus".to_string(), "javmenu".to_string(), "javxx".to_string()],
+             max_webview_windows: default_scrape_max_webview_windows(),
++            link_finder_concurrency: default_link_finder_concurrency(),
++            link_finder_source_timeout_secs: default_link_finder_source_timeout(),
+             webview_enabled: false,
+             webview_fallback_enabled: false,
+             dev_show_webview: false,
+diff --git a/src/components/VideoLinkFinder.vue b/src/components/VideoLinkFinder.vue
+index 0e6718a..d3d761a 100644
+--- a/src/components/VideoLinkFinder.vue
++++ b/src/components/VideoLinkFinder.vue
+@@ -4,14 +4,6 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+ import { Button } from '@/components/ui/button'
+ import { Input } from '@/components/ui/input'
+ import { Badge } from '@/components/ui/badge'
+-import { ScrollArea } from '@/components/ui/scroll-area'
+-import { Checkbox } from '@/components/ui/checkbox'
+-import {
+-  DropdownMenu,
+-  DropdownMenuContent,
+-  DropdownMenuItem,
+-  DropdownMenuTrigger,
+-} from '@/components/ui/dropdown-menu'
+ import {
+   Dialog,
+   DialogContent,
+@@ -20,52 +12,42 @@ import {
+   DialogHeader,
+   DialogTitle,
+ } from '@/components/ui/dialog'
+-import {
+-  ContextMenu,
+-  ContextMenuContent,
+-  ContextMenuItem,
+-  ContextMenuTrigger,
+-} from '@/components/ui/context-menu'
+ import {
+   Loader2,
+   Download,
+   Link as LinkIcon,
+-  CheckCircle2,
+   X,
+-  ChevronDown,
+-  Globe,
+   Search,
+   Play,
+ } from 'lucide-vue-next'
+ import {
+   findVideoLinks,
+   closeVideoFinder,
++  closeAllVideoFinders,
+   getVideoSites,
+   openVideoPlayerWindow,
++  analyzeHls,
+   type VideoLink,
+   type VideoSite,
++  type FinderLinkEvent,
++  type FinderPageStateEvent,
++  type FinderCfStateEvent,
+   checkVideoExists,
+-  type VideoExistCheckResult
++  type VideoExistCheckResult,
+ } from '@/lib/tauri'
+-import { getDefaultDownloadPath, analyzeHls } from '@/lib/tauri'
++import { getDefaultDownloadPath } from '@/lib/tauri'
+ import { useDownloadStore, useSettingsStore } from '@/stores'
++import { createScheduler } from '@/composables/useParallelFinder'
+ import { toast } from 'vue-sonner'
+ 
+ // 状态
+ const downloadStore = useDownloadStore()
+ const settingsStore = useSettingsStore()
+ const code = ref('')
+-const scanning = ref(false)
+-const links = ref<VideoLink[]>([])
+-const selectedUrls = ref<Set<string>>(new Set())
+ const savePath = ref('')
+ const adding = ref(false)
+ const sites = ref<VideoSite[]>([])
+-const selectedSiteId = ref('missav')
+-const cfChallengeActive = ref(false)
+-const notFound = ref(false) // 页面 404 / 找不到：直接结束并提示，不再转圈
+-const showAll = ref(false) // 显示全部（含被屏蔽的广告/片段链接）
+-const seenUrls = new Set<string>()
++
+ let unlisten: UnlistenFn | null = null
+ let unlistenCf: UnlistenFn | null = null
+ let unlistenPageState: UnlistenFn | null = null
+@@ -74,115 +56,32 @@ let unlistenPageState: UnlistenFn | null = null
+ const duplicateCheckOpen = ref(false)
+ const duplicateVideoInfo = ref<VideoExistCheckResult['video']>()
+ // 保存当前等待确认的回调
+-const pendingDownloadContext = ref<{ type: 'single', link: VideoLink } | { type: 'batch' } | null>(null)
++const pendingDownloadContext = ref<{ type: 'single'; link: VideoLink; siteId: string } | { type: 'batch' } | null>(null)
+ 
+ // 开发者模式显示真实站点名，否则一律用代号「资源 N」，不暴露真实网站名
+ const isDeveloperMode = import.meta.env.DEV
+ 
+-// 当前选中网站名称
+-const selectedSiteName = computed(() => {
+-  const index = sites.value.findIndex(s => s.id === selectedSiteId.value)
+-  if (index === -1) return '资源 1'
+-  return isDeveloperMode ? (sites.value[index].name || sites.value[index].id) : `资源 ${index + 1}`
++// 并行调度器
++const scheduler = createScheduler({
++  open: (c, site) => findVideoLinks(c, site),
++  close: (site) => closeVideoFinder(site),
++  closeAll: () => closeAllVideoFinders(),
++  analyze: (url) => analyzeHls(url),
++  concurrency: settingsStore.settings.scrape.linkFinderConcurrency ?? 3,
++  timeoutSecs: settingsStore.settings.scrape.linkFinderSourceTimeoutSecs ?? 120,
+ })
++const sources = scheduler.sources
++const running = scheduler.running
+ 
+-// 可直接预览的 HLS 链接数量
+-const hlsCount = computed(() => links.value.filter(l => l.isHls).length)
++// 进度统计
++const total = computed(() => sources.value.length)
++const searchedCount = computed(() =>
++  sources.value.filter((s) => ['found', 'failed', 'notfound'].includes(s.status)).length,
++)
++const foundCount = computed(() => sources.value.filter((s) => s.status === 'found').length)
+ 
+ // 能否开始查找
+-const canStart = computed(() => code.value.trim().length > 0 && !scanning.value)
+-
+-// 处理捕获到的链接。
+-// 这里只做最小过滤，具体能否下载交给 N_m3u8DL-RE 自己判断。
+-async function handleCapturedUrl(url: string) {
+-  if (seenUrls.has(url)) return
+-  seenUrls.add(url)
+-
+-  const lowerUrlPath = url.split('?')[0].toLowerCase()
+-  const hasPlaylistLikeSuffix = lowerUrlPath.endsWith('.m3u8') || lowerUrlPath.endsWith('.txt')
+-
+-  // 屏蔽 mp4 链接
+-  if (lowerUrlPath.endsWith('.mp4')) return
+-  // 过滤 .ts 片段
+-  if (lowerUrlPath.endsWith('.ts')) return
+-
+-  let resolution: string | null = url.match(/(?:2160p|1080p|720p|480p|360p|4k)/i)?.[0]?.toLowerCase() ?? null
+-  const isHls = hasPlaylistLikeSuffix
+-  const linkType = hasPlaylistLikeSuffix ? 'm3u8' : 'auto'
+-  const link: VideoLink = { url, linkType, isHls, resolution }
+-  links.value = [...links.value, link]
+-
+-  // 获取一个就解析一个：抓取 m3u8 求时长/分辨率，用于识别真实正片
+-  if (isHls) {
+-    void analyzeLink(url)
+-  }
+-}
+-
+-// 以不可变方式更新某条链接（替换数组元素才能可靠触发 Vue 更新）
+-function patchLink(url: string, patch: Partial<VideoLink>) {
+-  links.value = links.value.map(l => (l.url === url ? { ...l, ...patch } : l))
+-}
+-
+-/** 分析单个 HLS 链接，写回时长/分辨率 */
+-async function analyzeLink(url: string) {
+-  patchLink(url, { analyzing: true })
+-  try {
+-    const info = await analyzeHls(url)
+-    patchLink(url, {
+-      durationSecs: info.durationSecs,
+-      width: info.width,
+-      height: info.height,
+-      isMaster: info.isMaster,
+-      isVod: info.isVod,
+-      analyzed: true,
+-      analyzing: false,
+-    })
+-  } catch {
+-    // 分析失败：清除"分析中"，保留链接供手动选择
+-    patchLink(url, { analyzing: false, analyzed: true })
+-  }
+-}
+-
+-// 列表排序：识别出的正片排最前，其余按分辨率高、时长长在前
+-const sortedLinks = computed(() => {
+-  const real = realLink.value
+-  return [...links.value].sort((a, b) => {
+-    if (real) {
+-      if (a.url === real.url) return -1
+-      if (b.url === real.url) return 1
+-    }
+-    const hDiff = (b.height ?? 0) - (a.height ?? 0)
+-    if (hDiff !== 0) return hDiff
+-    return (b.durationSecs ?? 0) - (a.durationSecs ?? 0)
+-  })
+-})
+-
+-// 真实正片：时长最长（≥5 分钟）的那一条；同片多清晰度时优先主列表、再高分辨率
+-const realLink = computed(() => {
+-  const analyzed = links.value.filter(l => (l.durationSecs ?? 0) > 0)
+-  if (!analyzed.length) return null
+-  const maxDur = Math.max(...analyzed.map(l => l.durationSecs ?? 0))
+-  if (maxDur < 300) return null
+-  const candidates = analyzed.filter(l => (l.durationSecs ?? 0) >= maxDur * 0.9)
+-  candidates.sort((a, b) => {
+-    if (!!b.isMaster !== !!a.isMaster) return (b.isMaster ? 1 : 0) - (a.isMaster ? 1 : 0)
+-    const hDiff = (b.height ?? 0) - (a.height ?? 0)
+-    if (hDiff !== 0) return hDiff
+-    return (b.durationSecs ?? 0) - (a.durationSecs ?? 0)
+-  })
+-  return candidates[0] ?? null
+-})
+-
+-// 广告/片段识别：已分析且时长 0~120 秒（正片需 ≥300 秒，不会落入此区间）
+-function isAdOrClip(link: VideoLink): boolean {
+-  return !!(link.analyzed && link.durationSecs && link.durationSecs > 0 && link.durationSecs < 120)
+-}
+-// 被屏蔽（广告/片段）的链接数量
+-const blockedCount = computed(() => links.value.filter(isAdOrClip).length)
+-// 实际展示的链接：默认屏蔽广告/片段，勾选"显示全部"后才展示
+-const visibleLinks = computed(() =>
+-  showAll.value ? sortedLinks.value : sortedLinks.value.filter(l => !isAdOrClip(l))
+-)
++const canStart = computed(() => code.value.trim().length > 0 && !running.value)
+ 
+ function formatDuration(secs?: number): string {
+   if (!secs || secs <= 0) return ''
+@@ -200,138 +99,6 @@ function formatRes(link: VideoLink): string {
+   return link.resolution ?? ''
+ }
+ 
+-// 开始查找
+-async function startFinding() {
+-  const trimmed = code.value.trim().toUpperCase()
+-  if (!trimmed) return
+-
+-  scanning.value = true
+-  notFound.value = false
+-  links.value = []
+-  selectedUrls.value = new Set()
+-  seenUrls.clear()
+-
+-  // 加载网站列表
+-  try { sites.value = await getVideoSites() } catch { /* 忽略 */ }
+-
+-  // 下载路径直接使用下载设置中的默认保存路径
+-  await resolveSavePath()
+-
+-  // 监听事件
+-  try {
+-    unlisten = await listen<string>('video-finder-link', (event) => {
+-      handleCapturedUrl(event.payload)
+-    })
+-
+-    // 页面 404 / 找不到：尚无任何链接时直接结束并提示，不再空转
+-    unlistenPageState = await listen<string>('video-finder-page-state', (event) => {
+-      if (event.payload === 'not-found' && scanning.value && links.value.length === 0) {
+-        notFound.value = true
+-        toast.info('未找到该番号的视频链接')
+-        void stopFinding()
+-      }
+-    })
+-
+-    unlistenCf = await listen<{ status: 'idle' | 'active' | 'passed' | 'timeout' | 'failed'; active: boolean }>('video-finder-cf-state', (event) => {
+-      const payload = event.payload
+-      if (!payload) return
+-
+-      cfChallengeActive.value = Boolean(payload.active)
+-      if (payload.status === 'active') {
+-        if (settingsStore.settings.scrape.webviewFallbackEnabled) {
+-          toast.info('触发 Cloudflare 验证，请在弹出的 WebView 中完成验证')
+-        } else {
+-          toast.warning('该站点触发了 Cloudflare 验证，但"HTTP 失败回退 WebView"已关闭，未弹出验证窗口')
+-        }
+-      } else if (payload.status === 'passed') {
+-        toast.success('Cloudflare 验证已通过，继续监听视频链接')
+-      } else if (payload.status === 'timeout') {
+-        toast.error('Cloudflare 验证超时，已停止监听视频链接')
+-      } else if (payload.status === 'failed') {
+-        toast.error('Cloudflare 验证失败，视频链接监听未完成')
+-      }
+-    })
+-  } catch (e) {
+-    console.error('监听事件失败:', e)
+-  }
+-
+-  // 打开 WebView
+-  try {
+-    await findVideoLinks(trimmed, selectedSiteId.value)
+-  } catch (e: any) {
+-    toast.error(`打开查找窗口失败: ${e}`)
+-    scanning.value = false
+-    cfChallengeActive.value = false
+-  }
+-}
+-
+-// 选择资源站点（统一入口）：持久化选择，并按是否正在扫描决定是否立即切换
+-function pickSite(siteId: string) {
+-  persistSelectedSite(siteId)
+-  if (scanning.value) {
+-    switchSite(siteId)
+-  } else {
+-    selectedSiteId.value = siteId
+-  }
+-}
+-
+-// 持久化资源站点选择，使软件重启后保留上次选择
+-async function persistSelectedSite(siteId: string) {
+-  if (settingsStore.settings.scrape.linkFinderSite === siteId) return
+-  try {
+-    await settingsStore.updateSettings({
+-      scrape: { ...settingsStore.settings.scrape, linkFinderSite: siteId },
+-    })
+-  } catch (e) {
+-    console.error('保存资源站点选择失败:', e)
+-  }
+-}
+-
+-// 切换网站
+-async function switchSite(siteId: string) {
+-  selectedSiteId.value = siteId
+-  try { await closeVideoFinder() } catch { /* 忽略 */ }
+-  links.value = []
+-  selectedUrls.value = new Set()
+-  seenUrls.clear()
+-  cfChallengeActive.value = false
+-  notFound.value = false
+-  scanning.value = true
+-  try {
+-    await findVideoLinks(code.value.trim().toUpperCase(), siteId)
+-  } catch (e: any) {
+-    toast.error(`打开查找窗口失败: ${e}`)
+-    scanning.value = false
+-    cfChallengeActive.value = false
+-  }
+-}
+-
+-// 停止查找
+-async function stopFinding() {
+-  scanning.value = false
+-  if (unlisten) { unlisten(); unlisten = null }
+-  if (unlistenCf) { unlistenCf(); unlistenCf = null }
+-  if (unlistenPageState) { unlistenPageState(); unlistenPageState = null }
+-  cfChallengeActive.value = false
+-  try { await closeVideoFinder() } catch { /* 忽略 */ }
+-}
+-
+-function toggleSelect(url: string) {
+-  const next = new Set(selectedUrls.value)
+-  if (next.has(url)) next.delete(url)
+-  else next.add(url)
+-  selectedUrls.value = next
+-}
+-
+-function selectAll() {
+-  // 仅全选当前可见链接，避免把被屏蔽的广告/片段也选中
+-  selectedUrls.value = new Set(visibleLinks.value.map(l => l.url))
+-}
+-
+-function selectNone() {
+-  selectedUrls.value = new Set()
+-}
+-
+ // 下载路径直接取自下载设置；未配置时回退到系统默认下载目录
+ async function resolveSavePath() {
+   const configured = settingsStore.settings.download.savePath
+@@ -344,40 +111,40 @@ async function resolveSavePath() {
+   } catch { /* 忽略 */ }
+ }
+ 
+-async function handleAddTasks(ignoreDuplicate: boolean = false) {
+-  if (selectedUrls.value.size === 0 || !savePath.value) return
++// 开始查找
++async function startFinding() {
++  const c = code.value.trim().toUpperCase()
++  if (!c) return
+ 
+-  const filename = code.value.trim().toUpperCase()
++  // 先解绑上一轮，避免监听器叠加
++  if (unlisten) { unlisten(); unlisten = null }
++  if (unlistenCf) { unlistenCf(); unlistenCf = null }
++  if (unlistenPageState) { unlistenPageState(); unlistenPageState = null }
+ 
+-  if (!ignoreDuplicate) {
+-    try {
+-      const checkResult = await checkVideoExists(filename)
+-      if (checkResult.exists) {
+-        duplicateVideoInfo.value = checkResult.video
+-        pendingDownloadContext.value = { type: 'batch' }
+-        duplicateCheckOpen.value = true
+-        return
+-      }
+-    } catch (e) {
+-      toast.error(`查重失败: ${e}`)
+-      return
+-    }
+-  }
++  try { sites.value = await getVideoSites() } catch { /* 忽略 */ }
++  await resolveSavePath()
+ 
+-  adding.value = true
+-  let success = 0
+-  let failed = 0
++  const siteIds = sites.value.map((s) => s.id)
+ 
+-  for (const url of selectedUrls.value) {
+-    try {
+-      await downloadStore.addTask(url, savePath.value, filename, selectedSiteId.value)
+-      success++
+-    } catch { failed++ }
++  try {
++    unlisten = await listen<FinderLinkEvent>('video-finder-link', (e) => scheduler.onLink(e.payload))
++    unlistenPageState = await listen<FinderPageStateEvent>('video-finder-page-state', (e) => scheduler.onPageState(e.payload))
++    unlistenCf = await listen<FinderCfStateEvent>('video-finder-cf-state', (e) => scheduler.onCfState(e.payload))
++  } catch (e) {
++    console.error('监听事件失败:', e)
++    toast.error('启动监听失败，无法查找链接')
++    return
+   }
+ 
+-  adding.value = false
+-  if (success > 0) toast.success(`已添加 ${success} 个下载任务`)
+-  if (failed > 0) toast.error(`${failed} 个任务添加失败（已存在）`)
++  scheduler.start(c, siteIds)
++}
++
++// 停止查找
++function stopFinding() {
++  scheduler.stop()
++  if (unlisten) { unlisten(); unlisten = null }
++  if (unlistenCf) { unlistenCf(); unlistenCf = null }
++  if (unlistenPageState) { unlistenPageState(); unlistenPageState = null }
+ }
+ 
+ // 回车键触发查找
+@@ -400,7 +167,7 @@ async function handlePreview(link: VideoLink) {
+ }
+ 
+ // 下载单个视频
+-async function handleDownloadSingle(link: VideoLink, ignoreDuplicate: boolean = false) {
++async function handleDownloadSingle(link: VideoLink, siteId: string, ignoreDuplicate: boolean = false) {
+   if (!savePath.value) {
+     toast.error('未设置默认下载路径，请在系统设置 - 下载设置中配置')
+     return
+@@ -412,7 +179,7 @@ async function handleDownloadSingle(link: VideoLink, ignoreDuplicate: boolean =
+       const checkResult = await checkVideoExists(filename)
+       if (checkResult.exists) {
+         duplicateVideoInfo.value = checkResult.video
+-        pendingDownloadContext.value = { type: 'single', link }
++        pendingDownloadContext.value = { type: 'single', link, siteId }
+         duplicateCheckOpen.value = true
+         return
+       }
+@@ -423,7 +190,7 @@ async function handleDownloadSingle(link: VideoLink, ignoreDuplicate: boolean =
+   }
+ 
+   try {
+-    await downloadStore.addTask(link.url, savePath.value, filename, selectedSiteId.value)
++    await downloadStore.addTask(link.url, savePath.value, filename, siteId)
+     toast.success('已添加下载任务')
+   } catch {
+     toast.error('添加任务失败（已存在）')
+@@ -434,9 +201,9 @@ async function handleDownloadSingle(link: VideoLink, ignoreDuplicate: boolean =
+ function forceDownload() {
+   duplicateCheckOpen.value = false
+   if (pendingDownloadContext.value?.type === 'batch') {
+-    handleAddTasks(true)
++    void handleAddTasks(true)
+   } else if (pendingDownloadContext.value?.type === 'single') {
+-    handleDownloadSingle(pendingDownloadContext.value.link, true)
++    void handleDownloadSingle(pendingDownloadContext.value.link, pendingDownloadContext.value.siteId, true)
+   }
+   pendingDownloadContext.value = null
+ }
+@@ -447,6 +214,45 @@ function cancelDownload() {
+   pendingDownloadContext.value = null
+ }
+ 
++// 批量添加所有正片下载任务
++async function handleAddTasks(ignoreDuplicate: boolean = false) {
++  const foundSources = sources.value.filter((s) => s.status === 'found' && s.realLink)
++  if (foundSources.length === 0 || !savePath.value) return
++
++  const filename = code.value.trim().toUpperCase()
++
++  if (!ignoreDuplicate) {
++    try {
++      const checkResult = await checkVideoExists(filename)
++      if (checkResult.exists) {
++        duplicateVideoInfo.value = checkResult.video
++        pendingDownloadContext.value = { type: 'batch' }
++        duplicateCheckOpen.value = true
++        return
++      }
++    } catch (e) {
++      toast.error(`查重失败: ${e}`)
++      return
++    }
++  }
++
++  adding.value = true
++  let success = 0
++  let failed = 0
++
++  for (const s of foundSources) {
++    if (!s.realLink) continue
++    try {
++      await downloadStore.addTask(s.realLink.url, savePath.value, filename, s.siteId)
++      success++
++    } catch { failed++ }
++  }
++
++  adding.value = false
++  if (success > 0) toast.success(`已添加 ${success} 个下载任务`)
++  if (failed > 0) toast.error(`${failed} 个任务添加失败（已存在）`)
++}
++
+ // 复制下载链接到剪贴板
+ async function copyDownloadLink(url: string) {
+   try {
+@@ -461,7 +267,6 @@ async function copyDownloadLink(url: string) {
+ defineExpose({
+   autoSearch: (newCode: string) => {
+     code.value = newCode
+-    // 使用 setTimeout 确保视图更新后再执行搜索
+     setTimeout(() => {
+       if (canStart.value) startFinding()
+     }, 100)
+@@ -470,19 +275,11 @@ defineExpose({
+ 
+ onMounted(async () => {
+   try { sites.value = await getVideoSites() } catch { /* 忽略 */ }
+-  // 恢复上次选择的资源站点（设置已在应用启动时加载）
+-  const saved = settingsStore.settings.scrape.linkFinderSite
+-  if (saved) selectedSiteId.value = saved
+-  // 预先解析下载路径，直接使用下载设置中的默认保存路径
+   await resolveSavePath()
+ })
+ 
+ onUnmounted(() => {
+-  if (unlisten) { unlisten(); unlisten = null }
+-  if (unlistenCf) { unlistenCf(); unlistenCf = null }
+-  if (unlistenPageState) { unlistenPageState(); unlistenPageState = null }
+-  cfChallengeActive.value = false
+-  closeVideoFinder().catch(() => { /* 忽略 */ })
++  stopFinding()
+ })
+ </script>
+ 
+@@ -490,9 +287,9 @@ onUnmounted(() => {
+   <div class="flex h-full flex-col">
+     <!-- 输入区域 -->
+     <div class="flex items-center gap-2 border-b p-4">
+-      <Input v-model="code" placeholder="输入番号，如 ABC-123（需要科学上网）" class="max-w-xs" :disabled="scanning"
++      <Input v-model="code" placeholder="输入番号，如 ABC-123（需要科学上网）" class="max-w-xs" :disabled="running"
+         @keydown="handleKeydown" />
+-      <Button v-if="!scanning" :disabled="!canStart" size="sm" @click="startFinding">
++      <Button v-if="!running" :disabled="!canStart" size="sm" @click="startFinding">
+         <Search class="mr-2 size-4" />
+         查找链接
+       </Button>
+@@ -501,164 +298,89 @@ onUnmounted(() => {
+         停止
+       </Button>
+ 
+-      <!-- 网站选择 -->
+-      <DropdownMenu>
+-        <DropdownMenuTrigger as-child>
+-          <Button variant="outline" size="sm" class="gap-1.5">
+-            <Globe class="size-3.5" />
+-            {{ selectedSiteName }}
+-            <ChevronDown class="size-3.5 opacity-50" />
+-          </Button>
+-        </DropdownMenuTrigger>
+-        <DropdownMenuContent align="start" class="w-48">
+-          <DropdownMenuItem v-for="(site, index) in sites" :key="site.id"
+-            :class="selectedSiteId === site.id ? 'bg-accent' : ''"
+-            @click="pickSite(site.id)">
+-            {{ isDeveloperMode ? (site.name || site.id) : `资源 ${index + 1}` }}
+-          </DropdownMenuItem>
+-        </DropdownMenuContent>
+-      </DropdownMenu>
++      <!-- 进度摘要 -->
++      <span v-if="total > 0" class="text-xs text-muted-foreground tabular-nums">
++        已搜 {{ searchedCount }}/{{ total }} · 正片 {{ foundCount }}
++      </span>
+     </div>
+ 
+     <!-- 内容区域 -->
+     <div class="flex-1 flex flex-col min-h-0 p-4 gap-3">
+-      <div
+-        v-if="cfChallengeActive"
+-        class="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-900"
+-      >
+-        <Globe class="mt-0.5 size-4 shrink-0" />
+-        <div v-if="settingsStore.settings.scrape.webviewFallbackEnabled">
+-          当前页面触发了 Cloudflare 验证，辅助 WebView 已显示。请先在弹出的窗口中完成验证，链接捕获会自动继续。
+-        </div>
+-        <div v-else>
+-          当前页面触发了 Cloudflare 验证，但"HTTP 失败回退 WebView"开关已关闭，未弹出验证窗口，可能无法获取该站点链接。如需手动验证，请在设置中开启该开关。
+-        </div>
+-      </div>
+-
+-      <!-- 扫描中，无结果 -->
+-      <div v-if="scanning && links.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
+-        <Loader2 class="size-8 animate-spin text-primary" />
+-        <span class="text-sm text-muted-foreground">{{ cfChallengeActive ? '等待 Cloudflare 验证完成...' : 'WebView 已打开，正在监听 HLS 链接...' }}</span>
+-        <span class="text-xs text-muted-foreground">{{ cfChallengeActive ? (settingsStore.settings.scrape.webviewFallbackEnabled ? '请在弹出的窗口中完成验证后返回' : '验证弹窗已关闭，可能无法获取该站点链接') : `正在访问 ${selectedSiteName}，请等待页面加载` }}</span>
+-      </div>
+-
+-      <!-- 未找到：页面 404 / 找不到，已直接结束 -->
+-      <div v-else-if="notFound && links.length === 0"
+-        class="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+-        <X class="size-8 opacity-30" />
+-        <span class="text-sm">未找到该番号的视频链接，可换个资源站再试</span>
+-      </div>
+-
+       <!-- 未开始 -->
+-      <div v-else-if="!scanning && links.length === 0"
++      <div v-if="!running && sources.length === 0"
+         class="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
+         <LinkIcon class="size-8 opacity-30" />
+         <span class="text-sm">输入番号并点击查找，自动捕获候选下载链接，需要科学上网</span>
+       </div>
+ 
+-      <!-- 链接列表 -->
+-      <template v-if="links.length > 0">
+-        <div class="flex items-center justify-between">
++      <!-- 按源列表 -->
++      <div v-if="sources.length > 0" class="flex-1 flex flex-col min-h-0 gap-2 overflow-y-auto">
++        <div
++          v-for="(s, i) in sources"
++          :key="s.siteId"
++          class="rounded-md border p-2.5"
++        >
+           <div class="flex items-center gap-2">
+-            <Badge variant="outline">
+-              已捕获 {{ links.length }} 个链接
+-              <Loader2 v-if="scanning" class="ml-1 size-3 animate-spin" />
+-            </Badge>
+-              <Badge v-if="hlsCount > 0" variant="default">
+-              <CheckCircle2 class="mr-1 size-3" />
+-                {{ hlsCount }} 个可预览 HLS
++            <span class="text-sm font-medium">{{ isDeveloperMode ? s.siteId : `资源 ${i + 1}` }}</span>
++            <Badge v-if="s.status === 'searching'" class="gap-1">
++              <Loader2 class="size-3 animate-spin" />
++              搜索中
+             </Badge>
++            <Badge v-else-if="s.status === 'cf'" variant="secondary">CF 验证中</Badge>
++            <Badge v-else-if="s.status === 'found'" class="bg-green-600 text-white">✓ 正片</Badge>
++            <Badge v-else-if="s.status === 'notfound'" variant="secondary">404</Badge>
++            <Badge v-else-if="s.status === 'failed'" variant="secondary">✗ 失败</Badge>
++            <Badge v-else variant="outline">等待中</Badge>
+           </div>
+-          <div class="flex items-center gap-2">
+-            <label class="mr-1 flex cursor-pointer select-none items-center gap-1.5 text-xs text-muted-foreground">
+-              <Checkbox :model-value="showAll" @update:model-value="(v) => (showAll = !!v)" />
+-              显示全部<span v-if="blockedCount > 0" class="tabular-nums">（已屏蔽 {{ blockedCount }}）</span>
+-            </label>
+-            <Button variant="ghost" size="sm" @click="selectAll">全选</Button>
+-            <Button variant="ghost" size="sm" @click="selectNone">取消</Button>
++          <div v-if="s.realLink" class="mt-1.5 flex items-center gap-2">
++            <Badge v-if="s.realLink.height" variant="outline" class="shrink-0">{{ s.realLink.height }}p</Badge>
++            <Badge v-if="s.realLink.durationSecs" variant="outline" class="shrink-0 tabular-nums">{{ formatDuration(s.realLink.durationSecs) }}</Badge>
++            <Badge v-if="formatRes(s.realLink) && !s.realLink.height" variant="outline" class="shrink-0">{{ formatRes(s.realLink) }}</Badge>
++            <span class="font-mono text-xs text-muted-foreground break-all flex-1">{{ s.realLink.url }}</span>
++            <Button
++              v-if="s.realLink.isHls"
++              size="icon"
++              variant="ghost"
++              class="h-8 w-8 shrink-0"
++              title="预览播放"
++              @click="handlePreview(s.realLink)"
++            >
++              <Play class="size-4" />
++            </Button>
++            <Button
++              size="icon"
++              variant="ghost"
++              class="h-8 w-8 shrink-0"
++              title="下载资源"
++              @click="handleDownloadSingle(s.realLink, s.siteId)"
++            >
++              <Download class="size-4" />
++            </Button>
++            <Button
++              size="icon"
++              variant="ghost"
++              class="h-8 w-8 shrink-0"
++              title="复制下载链接"
++              @click="copyDownloadLink(s.realLink.url)"
++            >
++              <LinkIcon class="size-4" />
++            </Button>
+           </div>
+         </div>
++      </div>
+ 
+-        <ScrollArea class="flex-1 min-h-0 rounded-md border">
+-          <div class="p-2 space-y-1">
+-            <div v-if="visibleLinks.length === 0" class="py-8 text-center text-xs text-muted-foreground">
+-              已屏蔽 {{ blockedCount }} 个广告/片段链接，勾选"显示全部"查看
+-            </div>
+-            <ContextMenu v-for="link in visibleLinks" :key="link.url">
+-              <ContextMenuTrigger as-child>
+-                <div class="flex items-start gap-3 rounded-md p-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
+-                  :class="[
+-                    link.url === realLink?.url ? 'ring-2 ring-green-500/70 bg-green-500/5' : (selectedUrls.has(link.url) ? 'bg-primary/5 ring-1 ring-primary/20' : '')
+-                  ]"
+-                  @click="toggleSelect(link.url)">
+-                  <Checkbox :model-value="selectedUrls.has(link.url)" class="mt-0.5" @click.stop
+-                    @update:model-value="toggleSelect(link.url)" />
+-                  <div class="flex-1 min-w-0">
+-                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+-                      <Badge :variant="link.isHls ? 'default' : 'secondary'" class="text-[10px] uppercase">
+-                        {{ link.linkType }}
+-                      </Badge>
+-                      <Badge v-if="formatRes(link)" variant="outline" class="text-[10px]">
+-                        {{ formatRes(link) }}
+-                      </Badge>
+-                      <Badge v-if="link.analyzing" variant="outline" class="text-[10px]">分析中…</Badge>
+-                      <Badge v-else-if="link.durationSecs" variant="outline" class="text-[10px] tabular-nums">
+-                        {{ formatDuration(link.durationSecs) }}
+-                      </Badge>
+-                      <Badge v-if="link.url === realLink?.url" class="text-[10px] bg-green-600">正片</Badge>
+-                      <Badge v-else-if="isAdOrClip(link)"
+-                        variant="secondary" class="text-[10px]">广告/片段</Badge>
+-                      <Badge v-if="link.isHls && link.url !== realLink?.url" variant="default" class="text-[10px] bg-green-600">
+-                        HLS ✓
+-                      </Badge>
+-                    </div>
+-                    <div class="font-mono text-xs text-muted-foreground break-all leading-relaxed">
+-                      {{ link.url }}
+-                    </div>
+-                  </div>
+-                  <div class="shrink-0 flex items-center gap-1 self-center pr-2">
+-                    <Button v-if="link.isHls" variant="ghost" size="icon" class="h-8 w-8" title="预览播放"
+-                      @click.stop="handlePreview(link)">
+-                      <Play class="size-4" />
+-                    </Button>
+-                    <Button variant="ghost" size="icon" class="h-8 w-8" title="下载资源"
+-                      @click.stop="handleDownloadSingle(link)">
+-                      <Download class="size-4" />
+-                    </Button>
+-                  </div>
+-                </div>
+-              </ContextMenuTrigger>
+-              <ContextMenuContent class="w-40">
+-                <ContextMenuItem :disabled="!link.isHls" @click="handlePreview(link)">
+-                  <Play class="mr-2 size-4" />
+-                  <span>播放</span>
+-                </ContextMenuItem>
+-                <ContextMenuItem @click="handleDownloadSingle(link)">
+-                  <Download class="mr-2 size-4" />
+-                  <span>下载</span>
+-                </ContextMenuItem>
+-                <ContextMenuItem @click="() => copyDownloadLink(link.url)">
+-                  <LinkIcon class="mr-2 size-4" />
+-                  <span>复制下载链接</span>
+-                </ContextMenuItem>
+-              </ContextMenuContent>
+-            </ContextMenu>
+-          </div>
+-        </ScrollArea>
+-
+-        <!-- 保存路径（使用下载设置中的默认路径）和下载 -->
+-        <div class="flex items-center gap-2 mt-auto pt-2 border-t">
+-          <div class="flex-1 min-w-0 truncate text-xs text-muted-foreground">
+-            保存到：{{ savePath || '未设置默认下载路径，请在系统设置 - 下载设置中配置' }}
+-          </div>
+-          <Button :disabled="selectedUrls.size === 0 || !savePath || adding" size="sm" class="h-9"
+-            @click="() => handleAddTasks(false)">
+-            <Loader2 v-if="adding" class="mr-2 size-4 animate-spin" />
+-            <Download v-else class="mr-2 size-4" />
+-            添加 {{ selectedUrls.size }} 个任务
+-          </Button>
++      <!-- 保存路径和批量下载（有正片时显示） -->
++      <div v-if="foundCount > 0" class="flex items-center gap-2 mt-auto pt-2 border-t">
++        <div class="flex-1 min-w-0 truncate text-xs text-muted-foreground">
++          保存到：{{ savePath || '未设置默认下载路径，请在系统设置 - 下载设置中配置' }}
+         </div>
+-      </template>
++        <Button :disabled="!savePath || adding" size="sm" class="h-9 shrink-0"
++          @click="() => handleAddTasks(false)">
++          <Loader2 v-if="adding" class="mr-2 size-4 animate-spin" />
++          <Download v-else class="mr-2 size-4" />
++          下载全部正片（{{ foundCount }}）
++        </Button>
++      </div>
+     </div>
+ 
+     <!-- 重复提醒弹窗 -->
+diff --git a/src/composables/__tests__/useParallelFinder.spec.ts b/src/composables/__tests__/useParallelFinder.spec.ts
+new file mode 100644
+index 0000000..7950453
+--- /dev/null
++++ b/src/composables/__tests__/useParallelFinder.spec.ts
+@@ -0,0 +1,67 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
++import { createScheduler } from '../useParallelFinder'
++
++// 用假定时器：调度器内部 setTimeout(120s) 不真正挂起，避免测试结束后留真实定时器
++beforeEach(() => vi.useFakeTimers())
++afterEach(() => vi.useRealTimers())
++
++function deps(over: Partial<any> = {}) {
++  return {
++    open: vi.fn(async () => {}),
++    close: vi.fn(async () => {}),
++    closeAll: vi.fn(async () => {}),
++    analyze: vi.fn(async () => ({ durationSecs: 3600, height: 1080, isMaster: false, isVod: true, width: 1920 })),
++    concurrency: 3,
++    timeoutSecs: 120,
++    ...over,
++  }
++}
++
++describe('createScheduler', () => {
++  it('start 时只并发开 concurrency 个源', async () => {
++    const d = deps({ concurrency: 2 })
++    const s = createScheduler(d)
++    s.start('ABC-123', ['a', 'b', 'c', 'd'])
++    expect(d.open).toHaveBeenCalledTimes(2)
++    expect(s.sources.value.filter((x) => x.status === 'searching')).toHaveLength(2)
++    expect(s.sources.value.filter((x) => x.status === 'pending')).toHaveLength(2)
++  })
++
++  it('某源出正片 → 该源 found、关窗、补开下一个', async () => {
++    const d = deps({ concurrency: 1 })
++    const s = createScheduler(d)
++    s.start('ABC', ['a', 'b'])
++    await s.onLink({ site: 'a', url: 'http://x/main.m3u8' })
++    const a = s.sources.value.find((x) => x.siteId === 'a')!
++    expect(a.status).toBe('found')
++    expect(a.realLink?.url).toBe('http://x/main.m3u8')
++    expect(d.close).toHaveBeenCalledWith('a')
++    expect(d.open).toHaveBeenCalledWith('ABC', 'b')
++  })
++
++  it('404 且无正片 → notfound、让槽', async () => {
++    const d = deps({ concurrency: 1 })
++    const s = createScheduler(d)
++    s.start('ABC', ['a', 'b'])
++    s.onPageState({ site: 'a', state: 'not-found' })
++    expect(s.sources.value.find((x) => x.siteId === 'a')!.status).toBe('notfound')
++    expect(d.open).toHaveBeenCalledWith('ABC', 'b')
++  })
++
++  it('全部源结算后 running=false', async () => {
++    const d = deps({ concurrency: 3 })
++    const s = createScheduler(d)
++    s.start('ABC', ['a'])
++    s.onPageState({ site: 'a', state: 'not-found' })
++    expect(s.running.value).toBe(false)
++  })
++
++  it('stop 关闭全部并清空', async () => {
++    const d = deps()
++    const s = createScheduler(d)
++    s.start('ABC', ['a', 'b', 'c', 'd'])
++    s.stop()
++    expect(d.closeAll).toHaveBeenCalled()
++    expect(s.running.value).toBe(false)
++  })
++})
+diff --git a/src/composables/useParallelFinder.ts b/src/composables/useParallelFinder.ts
+new file mode 100644
+index 0000000..a5aa383
+--- /dev/null
++++ b/src/composables/useParallelFinder.ts
+@@ -0,0 +1,163 @@
++import { ref, type Ref } from 'vue'
++import type { VideoLink } from '@/lib/tauri'
++import { pickRealLink } from '@/utils/pickRealLink'
++
++export type SourceStatus = 'pending' | 'searching' | 'cf' | 'found' | 'failed' | 'notfound'
++
++export interface SourceState {
++  siteId: string
++  status: SourceStatus
++  links: VideoLink[]
++  realLink: VideoLink | null
++}
++
++export interface AnalyzeResult {
++  durationSecs?: number
++  width?: number
++  height?: number
++  isMaster?: boolean
++  isVod?: boolean
++}
++
++export interface SchedulerDeps {
++  open: (code: string, site: string) => Promise<void>
++  close: (site: string) => Promise<void>
++  closeAll: () => Promise<void>
++  analyze: (url: string) => Promise<AnalyzeResult>
++  concurrency: number
++  timeoutSecs: number
++}
++
++const DONE: SourceStatus[] = ['found', 'failed', 'notfound']
++
++/** 纯调度器（副作用经 deps 注入），便于单测 */
++export function createScheduler(deps: SchedulerDeps) {
++  const sources = ref<SourceState[]>([]) as Ref<SourceState[]>
++  const running = ref(false)
++  let code = ''
++  const queue: string[] = []
++  const seen = new Map<string, Set<string>>()
++  const timers = new Map<string, ReturnType<typeof setTimeout>>()
++
++  function st(site: string) {
++    return sources.value.find((s) => s.siteId === site)
++  }
++
++  function settle(site: string, status: SourceStatus) {
++    const s = st(site)
++    if (!s || DONE.includes(s.status)) return
++    s.status = status
++    const t = timers.get(site)
++    if (t) {
++      clearTimeout(t)
++      timers.delete(site)
++    }
++    void deps.close(site)
++    pump()
++    if (
++      running.value &&
++      !sources.value.some(
++        (x) => x.status === 'searching' || x.status === 'cf' || x.status === 'pending',
++      )
++    ) {
++      running.value = false
++    }
++  }
++
++  function launch(site: string) {
++    const s = st(site)!
++    s.status = 'searching'
++    void deps.open(code, site)
++    const t = setTimeout(() => settle(site, 'failed'), deps.timeoutSecs * 1000)
++    timers.set(site, t)
++  }
++
++  function pump() {
++    while (
++      sources.value.filter((s) => s.status === 'searching' || s.status === 'cf').length <
++        deps.concurrency &&
++      queue.length
++    ) {
++      launch(queue.shift()!)
++    }
++  }
++
++  function start(c: string, siteIds: string[]) {
++    code = c.trim().toUpperCase()
++    running.value = true
++    sources.value = siteIds.map((siteId) => ({
++      siteId,
++      status: 'pending',
++      links: [],
++      realLink: null,
++    }))
++    seen.clear()
++    queue.length = 0
++    queue.push(...siteIds)
++    pump()
++  }
++
++  function stop() {
++    for (const t of timers.values()) clearTimeout(t)
++    timers.clear()
++    void deps.closeAll()
++    for (const s of sources.value) { if (!DONE.includes(s.status)) s.status = 'failed' }
++    running.value = false
++    queue.length = 0
++  }
++
++  async function onLink(e: { site: string; url: string }) {
++    const s = st(e.site)
++    if (!s || DONE.includes(s.status)) return
++    let set = seen.get(e.site)
++    if (!set) {
++      set = new Set()
++      seen.set(e.site, set)
++    }
++    if (set.has(e.url)) return
++    set.add(e.url)
++    const lower = e.url.split('?')[0].toLowerCase()
++    if (lower.endsWith('.mp4') || lower.endsWith('.ts')) return
++    const isHls = lower.endsWith('.m3u8') || lower.endsWith('.txt')
++    const link: VideoLink = {
++      url: e.url,
++      linkType: isHls ? 'm3u8' : 'auto',
++      isHls,
++      resolution: null,
++    }
++    s.links = [...s.links, link]
++    if (isHls) {
++      try {
++        const info = await deps.analyze(e.url)
++        s.links = s.links.map((l) => (l.url === e.url ? { ...l, ...info, analyzed: true } : l))
++      } catch {
++        /* 分析失败：保留链接 */
++      }
++    }
++    const real = pickRealLink(s.links)
++    if (real) {
++      s.realLink = real
++      settle(e.site, 'found')
++    }
++  }
++
++  function onPageState(e: { site: string; state: string }) {
++    const s = st(e.site)
++    if (e.state === 'not-found' && s && !s.realLink) settle(e.site, 'notfound')
++  }
++
++  function onCfState(e: { siteId?: string; status: string; active: boolean }) {
++    const s = e.siteId ? st(e.siteId) : undefined
++    if (!s || DONE.includes(s.status)) return
++    if (e.active) {
++      s.status = 'cf'
++      const t = timers.get(e.siteId!); if (t) { clearTimeout(t); timers.delete(e.siteId!) }
++    } else if (s.status === 'cf') {
++      s.status = 'searching'
++      const t = setTimeout(() => settle(e.siteId!, 'failed'), deps.timeoutSecs * 1000)
++      timers.set(e.siteId!, t)
++    }
++  }
++
++  return { sources, running, start, stop, onLink, onPageState, onCfState }
++}
+diff --git a/src/lib/tauri.ts b/src/lib/tauri.ts
+index 26617b5..dad1ac0 100644
+--- a/src/lib/tauri.ts
++++ b/src/lib/tauri.ts
+@@ -257,6 +257,25 @@ export interface HlsInfo {
+     isVod: boolean
+ }
+ 
++/** 查找事件：新链接发现 */
++export interface FinderLinkEvent {
++    site: string
++    url: string
++}
++
++/** 查找事件：页面状态变化 */
++export interface FinderPageStateEvent {
++    site: string
++    state: string
++}
++
++/** 查找事件：云防护状态变化 */
++export interface FinderCfStateEvent {
++    siteId?: string
++    status: 'idle' | 'active' | 'passed' | 'timeout' | 'failed'
++    active: boolean
++}
++
+ /** 抓取并分析单个 m3u8，返回时长/分辨率等，用于识别真实正片 */
+ export async function analyzeHls(url: string): Promise<HlsInfo> {
+     return tauriInvoke<HlsInfo>('rs_analyze_hls', { url })
+@@ -273,8 +292,13 @@ export async function findVideoLinks(code: string, siteId?: string): Promise<voi
+ }
+ 
+ /** 鍏抽棴瑙嗛鏌ユ壘 WebView */
+-export async function closeVideoFinder(): Promise<void> {
+-    return tauriInvoke('rs_close_video_finder')
++export async function closeVideoFinder(siteId: string): Promise<void> {
++    return tauriInvoke('rs_close_video_finder', { siteId })
++}
++
++/** 关闭全部并行视频查找窗口（停止时调用） */
++export async function closeAllVideoFinders(): Promise<void> {
++    return tauriInvoke('rs_close_all_video_finders')
+ }
+ 
+ /** 妫€鏌ユ寚瀹氱暘鍙疯棰戞槸鍚﹀凡瀛樺湪 */
+diff --git a/src/types/settings.ts b/src/types/settings.ts
+index 117e79b..3338bb1 100644
+--- a/src/types/settings.ts
++++ b/src/types/settings.ts
+@@ -119,6 +119,8 @@ export interface ScrapeSettings {
+     concurrent: number
+     scraperPriority: string[]
+     maxWebviewWindows: number
++    linkFinderConcurrency: number // 并行查找源的最大并发数（1-3）
++    linkFinderSourceTimeoutSecs: number // 单个源最长查找秒数（无正片即放弃）
+     webviewEnabled: boolean    // 是否启用 WebView 增强模式
+     webviewFallbackEnabled: boolean // HTTP 失败后是否回退到 WebView（开发者选项）
+     devShowWebview: boolean    // 开发调试时默认显示隐藏 WebView（开发者选项）
+@@ -235,6 +237,8 @@ export const defaultSettings: AppSettings = {
+         concurrent: 5,
+         scraperPriority: ['javbus', 'javmenu', 'javxx'],
+         maxWebviewWindows: 3,
++        linkFinderConcurrency: 3,
++        linkFinderSourceTimeoutSecs: 120,
+         webviewEnabled: false,
+         webviewFallbackEnabled: false,
+         devShowWebview: false,
+diff --git a/src/utils/__tests__/pickRealLink.spec.ts b/src/utils/__tests__/pickRealLink.spec.ts
+new file mode 100644
+index 0000000..c9428cf
+--- /dev/null
++++ b/src/utils/__tests__/pickRealLink.spec.ts
+@@ -0,0 +1,50 @@
++import { describe, it, expect } from 'vitest'
++import { pickRealLink } from '../pickRealLink'
++import type { VideoLink } from '@/lib/tauri'
++
++const mk = (p: Partial<VideoLink>): VideoLink => ({
++  url: p.url ?? 'u',
++  linkType: p.linkType ?? 'm3u8',
++  isHls: p.isHls ?? true,
++  resolution: p.resolution ?? null,
++  ...p,
++})
++
++describe('pickRealLink', () => {
++  it('无任何带时长链接 → null', () => {
++    expect(pickRealLink([mk({ url: 'a' })])).toBeNull()
++  })
++
++  it('最长时长 < 300 秒（全是广告/片段）→ null', () => {
++    expect(
++      pickRealLink([
++        mk({ url: 'a', durationSecs: 100 }),
++        mk({ url: 'b', durationSecs: 250 }),
++      ]),
++    ).toBeNull()
++  })
++
++  it('时长 ≥ 300 秒 → 选出正片', () => {
++    const r = pickRealLink([
++      mk({ url: 'ad', durationSecs: 60 }),
++      mk({ url: 'main', durationSecs: 3600 }),
++    ])
++    expect(r?.url).toBe('main')
++  })
++
++  it('同片多清晰度（时长接近）→ 优先 master', () => {
++    const r = pickRealLink([
++      mk({ url: 'v1080', durationSecs: 3600, height: 1080, isMaster: false }),
++      mk({ url: 'master', durationSecs: 3600, height: 0, isMaster: true }),
++    ])
++    expect(r?.url).toBe('master')
++  })
++
++  it('都非 master → 选更高分辨率', () => {
++    const r = pickRealLink([
++      mk({ url: 'v720', durationSecs: 3600, height: 720 }),
++      mk({ url: 'v1080', durationSecs: 3600, height: 1080 }),
++    ])
++    expect(r?.url).toBe('v1080')
++  })
++})
+diff --git a/src/utils/pickRealLink.ts b/src/utils/pickRealLink.ts
+new file mode 100644
+index 0000000..0582275
+--- /dev/null
++++ b/src/utils/pickRealLink.ts
+@@ -0,0 +1,23 @@
++import type { VideoLink } from '@/lib/tauri'
++
++/**
++ * 从一个源捕获到的链接里选出「真实正片」：
++ * 时长最长（≥ 300 秒）的那一条；同片多清晰度时优先主列表(master)、再高分辨率、再长时长。
++ * 与原 VideoLinkFinder.vue 的 realLink 逻辑保持一致。
++ */
++export function pickRealLink(links: VideoLink[]): VideoLink | null {
++  const analyzed = links.filter((l) => (l.durationSecs ?? 0) > 0)
++  if (!analyzed.length) return null
++
++  const maxDur = Math.max(...analyzed.map((l) => l.durationSecs ?? 0))
++  if (maxDur < 300) return null
++
++  const candidates = analyzed.filter((l) => (l.durationSecs ?? 0) >= maxDur * 0.9)
++  candidates.sort((a, b) => {
++    if (!!b.isMaster !== !!a.isMaster) return (b.isMaster ? 1 : 0) - (a.isMaster ? 1 : 0)
++    const hDiff = (b.height ?? 0) - (a.height ?? 0)
++    if (hDiff !== 0) return hDiff
++    return (b.durationSecs ?? 0) - (a.durationSecs ?? 0)
++  })
++  return candidates[0] ?? null
++}
