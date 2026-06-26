@@ -108,6 +108,7 @@ export function createScheduler(deps: SchedulerDeps) {
 
   async function onLink(e: { site: string; url: string }) {
     const s = st(e.site)
+    console.info(`[finder-debug] onLink site=${e.site} status=${s?.status ?? 'NO-SOURCE'} url=${e.url}`)
     if (!s || DONE.includes(s.status)) return
     let set = seen.get(e.site)
     if (!set) {
@@ -117,7 +118,10 @@ export function createScheduler(deps: SchedulerDeps) {
     if (set.has(e.url)) return
     set.add(e.url)
     const lower = e.url.split('?')[0].toLowerCase()
-    if (lower.endsWith('.mp4') || lower.endsWith('.ts')) return
+    if (lower.endsWith('.mp4') || lower.endsWith('.ts')) {
+      console.info(`[finder-debug] drop mp4/ts site=${e.site} url=${e.url}`)
+      return
+    }
     const isHls = lower.endsWith('.m3u8') || lower.endsWith('.txt')
     const link: VideoLink = {
       url: e.url,
@@ -129,12 +133,15 @@ export function createScheduler(deps: SchedulerDeps) {
     if (isHls) {
       try {
         const info = await deps.analyze(e.url)
+        console.info(`[finder-debug] analyze OK site=${e.site} dur=${info.durationSecs} master=${info.isMaster} h=${info.height} url=${e.url}`)
         s.links = s.links.map((l) => (l.url === e.url ? { ...l, ...info, analyzed: true } : l))
-      } catch {
+      } catch (err) {
+        console.info(`[finder-debug] analyze FAIL site=${e.site} url=${e.url} err=${String(err)}`)
         /* 分析失败：保留链接 */
       }
     }
     const real = pickRealLink(s.links)
+    console.info(`[finder-debug] pickReal site=${e.site} real=${real?.url ?? 'null'} durs=[${s.links.map((l) => l.durationSecs ?? '?').join(',')}]`)
     if (real) {
       s.realLink = real
       settle(e.site, 'found')
@@ -143,6 +150,7 @@ export function createScheduler(deps: SchedulerDeps) {
 
   function onPageState(e: { site: string; state: string }) {
     const s = st(e.site)
+    console.info(`[finder-debug] pageState site=${e.site} state=${e.state} status=${s?.status ?? 'NO-SOURCE'}`)
     if (e.state === 'not-found' && s && !s.realLink) settle(e.site, 'notfound')
   }
 
