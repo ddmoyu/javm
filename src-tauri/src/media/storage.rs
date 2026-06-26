@@ -199,6 +199,19 @@ fn find_independent_dir(cfg: &MetadataStorageConfig, local_id: &str) -> Option<(
     None
 }
 
+/// 解析视频对应的「现有资产目录」与文件名 stem，供读取预览图、截帧落地等流程共用。
+///
+/// 独立目录模式下优先按番号定位**已存在**的独立子目录（`<root>/<番号 …>/`，以 `<番号>.strm` 确认），
+/// 命中则返回 `(独立子目录, 番号)`；未开启 / 未配置 / 番号为空 / **独立目录里找不到该番号子目录**时，
+/// 一律回退到视频所在目录 `(视频父目录, 视频文件名)` 作为兜底。
+pub fn resolve_existing_asset_dir(
+    video_path: &str,
+    local_id: &str,
+    cfg: &MetadataStorageConfig,
+) -> (PathBuf, String) {
+    find_independent_dir(cfg, local_id).unwrap_or_else(|| follow_video_dir_stem(video_path))
+}
+
 /// 视频移动/重命名后，同步独立目录里对应番号子目录的 `.strm` 内容为新的视频绝对路径。
 /// 非独立模式 / 未找到 `.strm` 时静默跳过（不视为错误）。
 pub fn sync_independent_strm(
@@ -393,6 +406,43 @@ mod tests {
         assert_eq!(fs::read_to_string(&strm).unwrap().trim(), "E:\\new\\ABC-123.mp4");
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_existing_asset_dir_locates_independent_dir() {
+        let root = std::env::temp_dir().join(format!("javm-existdir-test-{}", std::process::id()));
+        let sub = root.join("ABC-123 标题文字");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join("ABC-123.strm"), "D:\\v\\raw_name.mp4").unwrap();
+
+        let cfg = MetadataStorageConfig {
+            independent: true,
+            root_dir: root.to_string_lossy().to_string(),
+        };
+
+        // 命中：独立目录存在 → 返回 (独立子目录, 番号)
+        let (dir, stem) = resolve_existing_asset_dir("D:\\v\\raw_name.mp4", "ABC-123", &cfg);
+        assert_eq!(dir, sub);
+        assert_eq!(stem, "ABC-123");
+
+        // 找不到该番号的独立目录 → 回退视频所在目录(stem=视频文件名)
+        let (dir2, stem2) = resolve_existing_asset_dir("D:\\v\\raw_name.mp4", "ZZZ-999", &cfg);
+        assert_eq!(dir2, Path::new("D:\\v"));
+        assert_eq!(stem2, "raw_name");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_existing_asset_dir_falls_back_when_not_independent() {
+        // 未开启独立模式 → 恒回退视频所在目录
+        let cfg = MetadataStorageConfig {
+            independent: false,
+            root_dir: String::new(),
+        };
+        let (dir, stem) = resolve_existing_asset_dir("/videos/ABC-123.mp4", "ABC-123", &cfg);
+        assert_eq!(dir, Path::new("/videos"));
+        assert_eq!(stem, "ABC-123");
     }
 
     #[test]

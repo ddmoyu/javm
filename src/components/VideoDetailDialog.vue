@@ -335,6 +335,7 @@ async function loadResolvedPreviewSources(videoPath?: string) {
     try {
         resolvedPreviewSources.value = await invoke<VideoPreviewSource[]>('resolve_video_preview_images', {
             videoPath,
+            localId: (formData.value.localId || props.video?.localId || '').trim(),
         })
     } catch (e) {
         console.error('加载预览图失败:', e)

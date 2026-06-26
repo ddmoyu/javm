@@ -466,6 +466,22 @@ async fn capture_cover_as_fallback(app: &tauri::AppHandle, video_path: &str) -> 
     }
 
     let video_id = get_or_create_video_id(&db, video_path)?;
+    // 分离落地配置 + 番号/标题，用于把截帧封面落到与刮削一致的分离目录
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
+    let (local_id, title) = db
+        .get_connection()
+        .ok()
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT local_id, title FROM videos WHERE id = ?",
+                [&video_id],
+                |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)),
+            )
+            .ok()
+        })
+        .map(|(a, b)| (a.unwrap_or_default(), b.unwrap_or_default()))
+        .unwrap_or_default();
     let app_handle = app.clone();
     let video_path = video_path.to_string();
 
@@ -484,9 +500,12 @@ async fn capture_cover_as_fallback(app: &tauri::AppHandle, video_path: &str) -> 
         let output = temp_dir.join("cover.jpg");
         let output_str = output.to_string_lossy().to_string();
 
+        // 独立目录模式：封面落到 <root>/<番号 标题>/，否则视频同级
+        let target = crate::media::storage::resolve_asset_target(&video_path, &local_id, &title, &cfg)?;
+        let _ = crate::media::storage::ensure_asset_dir_and_strm(&target);
         let cover_result = (|| -> Result<crate::media::artwork::ArtworkResult, String> {
             crate::media::ffmpeg::extract_frame(&video_path, timestamp, &output_str)?;
-            crate::media::assets::save_frame_as_cover_assets(&video_path, &output_str)
+            crate::media::assets::save_frame_as_cover_assets(&target.dir, &target.stem, &output_str)
         })();
 
         let _ = std::fs::remove_file(&output);

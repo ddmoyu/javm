@@ -928,17 +928,35 @@ pub async fn find_ad_videos(
 /// 下载远程图片到 extrafanart 目录
 #[tauri::command]
 pub async fn download_remote_image(
-    _app: AppHandle,
-    _video_id: String,
+    app: AppHandle,
+    video_id: String,
     video_path: String,
     url: String,
 ) -> AppResult<String> {
-    let video_path_obj = std::path::Path::new(&video_path);
-    let save_dir = crate::media::assets::extrafanart_dir_for_video(video_path_obj)
-        .map_err(|e| AppError::Business(e))?;
+    // 分离模式：预览图写入 <root>/<番号 标题>/extrafanart/，否则视频同级
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
+    let (local_id, title) = crate::db::Database::new(&app)
+        .ok()
+        .and_then(|db| {
+            db.get_connection().ok().and_then(|conn| {
+                conn.query_row(
+                    "SELECT local_id, title FROM videos WHERE id = ?",
+                    [&video_id],
+                    |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)),
+                )
+                .ok()
+            })
+        })
+        .map(|(a, b)| (a.unwrap_or_default(), b.unwrap_or_default()))
+        .unwrap_or_default();
+    let target = crate::media::storage::resolve_asset_target(&video_path, &local_id, &title, &cfg)
+        .map_err(AppError::Business)?;
+    let _ = crate::media::storage::ensure_asset_dir_and_strm(&target);
+    let save_dir = crate::media::assets::extrafanart_dir_in(&target.dir);
     std::fs::create_dir_all(&save_dir)?;
 
-    let next_index = crate::media::assets::next_extrafanart_index(video_path_obj);
+    let next_index = crate::media::assets::next_extrafanart_index_in(&target.dir);
     let save_path = save_dir.join(format!("fanart{}.jpg", next_index));
     let client = crate::utils::proxy::apply_proxy_auto(
         wreq::Client::builder()

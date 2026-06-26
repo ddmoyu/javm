@@ -863,31 +863,25 @@ pub async fn sync_extrafanart_to_dir(
 // 封面图片
 // ============================================================
 
-/// 将截取的视频帧保存为封面图片
+/// 将截取的视频帧保存为封面图片到指定资产目录（独立目录或视频同级，由调用方解析）。
 ///
 /// # 参数
-/// * `video_path` - 视频文件路径
+/// * `dir` - 封面落地目录
+/// * `stem` - 文件名 stem（产出 `<stem>-poster/fanart/thumb.*`）
 /// * `frame_path` - 截取的帧图片路径
 ///
 /// # 返回
 /// * `Ok(String)` - 保存的封面图片路径
 /// * `Err(String)` - 保存失败的错误信息
 pub fn save_frame_as_cover_assets(
-    video_path: &str,
+    dir: &Path,
+    stem: &str,
     frame_path: &str,
 ) -> Result<crate::media::artwork::ArtworkResult, String> {
-    let video_path_obj = Path::new(video_path);
-    let parent_dir = video_path_obj.parent().ok_or("无效的视频路径")?;
-    let file_stem = video_path_obj
-        .file_stem()
-        .ok_or("无效的文件名")?
-        .to_string_lossy()
-        .to_string();
-
     // 截帧为横版 → fanart + thumb，并右裁出竖版 poster，产出标准图集
     let artwork = crate::media::artwork::produce_artwork_from_local_image(
-        parent_dir,
-        &file_stem,
+        dir,
+        stem,
         Path::new(frame_path),
     );
     if artwork.fanart.is_none() && artwork.poster.is_none() {
@@ -896,24 +890,23 @@ pub fn save_frame_as_cover_assets(
     Ok(artwork)
 }
 
-/// 将截取的多个视频帧保存到 extrafanart 目录
+/// 将截取的多个视频帧保存到指定资产目录的 extrafanart 子目录（独立目录或视频同级，由调用方解析）。
 ///
 /// # 参数
-/// * `video_path` - 视频文件路径
+/// * `asset_dir` - 资产目录（其下 `extrafanart/` 落地预览图）
 /// * `frame_paths` - 截取的帧图片路径列表
 ///
 /// # 返回
 /// * `Ok(Vec<String>)` - 保存的预览图路径列表
 /// * `Err(String)` - 保存失败的错误信息
 pub fn save_frames_to_extrafanart(
-    video_path: &str,
+    asset_dir: &Path,
     frame_paths: &[String],
 ) -> Result<Vec<String>, String> {
-    let video_path_obj = Path::new(video_path);
-    let extrafanart_dir = extrafanart_dir_for_video(video_path_obj)?;
+    let extrafanart_dir = extrafanart_dir_in(asset_dir);
     fs::create_dir_all(&extrafanart_dir).map_err(|e| format!("创建 extrafanart 目录失败: {}", e))?;
 
-    let mut next_index = next_extrafanart_index(video_path_obj);
+    let mut next_index = next_extrafanart_index_in(asset_dir);
     let mut thumb_paths = Vec::new();
 
     for frame_path in frame_paths {

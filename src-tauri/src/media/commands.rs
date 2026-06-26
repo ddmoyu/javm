@@ -92,6 +92,22 @@ pub struct SaveCapturedCoverResult {
     video_path: String,
 }
 
+/// 查询视频的番号与标题（独立目录落地需要），缺失回退空串。
+fn query_local_id_title(db: &Database, video_id: &str) -> (String, String) {
+    db.get_connection()
+        .ok()
+        .and_then(|conn| {
+            conn.query_row(
+                "SELECT local_id, title FROM videos WHERE id = ?",
+                [video_id],
+                |r| Ok((r.get::<_, Option<String>>(0)?, r.get::<_, Option<String>>(1)?)),
+            )
+            .ok()
+        })
+        .map(|(a, b)| (a.unwrap_or_default(), b.unwrap_or_default()))
+        .unwrap_or_default()
+}
+
 #[tauri::command]
 pub async fn save_captured_cover(
     app: AppHandle,
@@ -100,6 +116,9 @@ pub async fn save_captured_cover(
     video_path: String,
     frame_path: String,
 ) -> AppResult<SaveCapturedCoverResult> {
+    // 分离落地配置（独立目录模式：封面落到 <root>/<番号 标题>/，否则视频同级）
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
     let db = db.inner().clone();
     tokio::task::spawn_blocking(move || {
         // 确保视频在独立的同名目录中（避免多个视频共享 extrafanart 等资源目录）
@@ -115,9 +134,20 @@ pub async fn save_captured_cover(
                     video_path.clone()
                 });
 
+        let (local_id, title) = query_local_id_title(&db, &video_id);
+        let target = crate::media::storage::resolve_asset_target(
+            &actual_video_path,
+            &local_id,
+            &title,
+            &cfg,
+        )
+        .map_err(AppError::Business)?;
+        let _ = crate::media::storage::ensure_asset_dir_and_strm(&target);
+        let (asset_dir, stem) = (target.dir, target.stem);
+
         // 截帧产出标准图集（横版 fanart + thumb，并右裁出竖版 poster）
         let artwork =
-            super::assets::save_frame_as_cover_assets(&actual_video_path, &frame_path)
+            super::assets::save_frame_as_cover_assets(&asset_dir, &stem, &frame_path)
                 .map_err(AppError::Business)?;
 
         // 更新数据库
@@ -163,6 +193,9 @@ pub async fn save_captured_thumbs(
     video_path: String,
     frame_paths: Vec<String>,
 ) -> AppResult<SaveCapturedThumbsResult> {
+    // 分离落地配置（独立目录模式：预览图落到 <root>/<番号 标题>/extrafanart/，否则视频同级）
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
     tokio::task::spawn_blocking(move || {
         // 确保视频在独立的同名目录中（避免多个视频共享 extrafanart 目录）
         let actual_video_path =
@@ -177,9 +210,21 @@ pub async fn save_captured_thumbs(
                     video_path.clone()
                 });
 
+        let (local_id, title) = crate::db::Database::new(&app)
+            .map(|db| query_local_id_title(&db, &video_id))
+            .unwrap_or_default();
+        let target = crate::media::storage::resolve_asset_target(
+            &actual_video_path,
+            &local_id,
+            &title,
+            &cfg,
+        )
+        .map_err(AppError::Business)?;
+        let _ = crate::media::storage::ensure_asset_dir_and_strm(&target);
+
         // 保存多个帧作为预览图
         let thumb_paths =
-            super::assets::save_frames_to_extrafanart(&actual_video_path, &frame_paths)
+            super::assets::save_frames_to_extrafanart(&target.dir, &frame_paths)
                 .map_err(AppError::Business)?;
 
         Ok(SaveCapturedThumbsResult {
@@ -201,18 +246,25 @@ pub struct VideoPreviewImageSource {
 
 #[tauri::command]
 pub async fn resolve_video_preview_images(
+    app: AppHandle,
     video_path: String,
+    local_id: Option<String>,
 ) -> AppResult<Vec<VideoPreviewImageSource>> {
     use std::collections::{BTreeMap, HashSet};
-    use std::path::Path;
 
     if video_path.trim().is_empty() {
         return Ok(Vec::new());
     }
 
-    let video_path_obj = Path::new(&video_path);
+    // 分离落地配置：独立目录存在则从独立目录读 NFO / 预览图，否则回退视频同级
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
+    let local_id = local_id.unwrap_or_default();
+    let (asset_dir, stem) =
+        crate::media::storage::resolve_existing_asset_dir(&video_path, &local_id, &cfg);
+
     let mut duration = None;
-    let nfo_path = video_path_obj.with_extension("nfo");
+    let nfo_path = asset_dir.join(format!("{}.nfo", stem));
     let remote_thumb_urls = if nfo_path.exists() {
         crate::nfo::parser::parse_nfo(&nfo_path, &mut duration)
             .map(|data| data.thumb_urls)
@@ -221,7 +273,7 @@ pub async fn resolve_video_preview_images(
         Vec::new()
     };
 
-    let extrafanart_map = crate::media::assets::collect_extrafanart_paths(video_path_obj)
+    let extrafanart_map = crate::media::assets::collect_extrafanart_in(&asset_dir)
         .into_iter()
         .collect::<BTreeMap<usize, String>>();
     let mut items = Vec::new();
@@ -262,10 +314,10 @@ pub async fn resolve_video_preview_images(
     }
 
     if !missing_remote_images.is_empty() {
-        let background_video_path = video_path.clone();
+        let background_dir = asset_dir.clone();
         tauri::async_runtime::spawn(async move {
-            let _ = crate::media::assets::sync_extrafanart_from_urls(
-                &background_video_path,
+            let _ = crate::media::assets::sync_extrafanart_to_dir(
+                &background_dir,
                 missing_remote_images,
             )
             .await;
@@ -293,14 +345,24 @@ pub async fn delete_thumb(db: State<'_, Database>, thumb_path: String) -> AppRes
 }
 
 #[tauri::command]
-pub async fn clear_thumbs(db: State<'_, Database>, video_path: String) -> AppResult<()> {
+pub async fn clear_thumbs(
+    app: AppHandle,
+    db: State<'_, Database>,
+    video_id: String,
+    video_path: String,
+) -> AppResult<()> {
+    // 分离模式：清空独立目录的 extrafanart，否则回退视频同级
+    let settings = crate::settings::get_settings(app.clone()).await.unwrap_or_default();
+    let cfg = crate::media::storage::MetadataStorageConfig::from_settings(&settings);
     let db = db.inner().clone();
     tokio::task::spawn_blocking(move || {
         let conn = db.get_connection()?;
         let video_path_obj = std::path::Path::new(&video_path);
         crate::video::service::validate_path_within_managed_dirs(&conn, video_path_obj)?;
-        let extrafanart_dir = crate::media::assets::extrafanart_dir_for_video(video_path_obj)
+        let (local_id, title) = query_local_id_title(&db, &video_id);
+        let target = crate::media::storage::resolve_asset_target(&video_path, &local_id, &title, &cfg)
             .map_err(AppError::Business)?;
+        let extrafanart_dir = crate::media::assets::extrafanart_dir_in(&target.dir);
 
         if extrafanart_dir.exists() && extrafanart_dir.is_dir() {
             if let Ok(entries) = std::fs::read_dir(&extrafanart_dir) {
