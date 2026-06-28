@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri::Listener;
 
 use super::sources::ResourceSite;
@@ -563,6 +563,13 @@ pub fn open_video_finder_webview(
             quick_inject_rounds += 1;
             tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
         }
+
+        // 注入循环结束（用户手动关闭窗口 / 达到最大运行时长 / 找到后被关闭）通知前端，
+        // 让前端立即结算该源并推进下一个，不必干等前端超时。已 found 的源前端按 DONE 去重忽略。
+        let _ = app_clone.emit(
+            "video-finder-page-state",
+            serde_json::json!({ "site": &site_id_owned, "state": "closed" }),
+        );
 
         app_clone.unlisten(cf_listener_id);
         app_clone.unlisten(cf_state_listener_id);

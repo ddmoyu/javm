@@ -152,6 +152,8 @@ export function createScheduler(deps: SchedulerDeps) {
     const s = st(e.site)
     console.info(`[finder-debug] pageState site=${e.site} state=${e.state} status=${s?.status ?? 'NO-SOURCE'}`)
     if (e.state === 'not-found' && s && !s.realLink) settle(e.site, 'notfound')
+    // 窗口被用户关闭 / Rust 注入循环终止：立即结算该源，推进下一个（已 found 的由 DONE 去重忽略）
+    if (e.state === 'closed' && s && !s.realLink) settle(e.site, 'failed')
   }
 
   function onCfState(e: { siteId?: string; status: string; active: boolean }) {
