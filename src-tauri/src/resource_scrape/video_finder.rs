@@ -58,18 +58,18 @@ pub struct DownloadSiteDef {
 
 pub const DEFAULT_DOWNLOAD_SITES: &[DownloadSiteDef] = &[
     DownloadSiteDef { id: "missav", name: "MissAV", url_template: "https://missav.ws/{code}", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "thisav", name: "ThisAV", url_template: "https://thisav2.com/cn/{code}", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "njav", name: "NJAV", url_template: "https://www.njav.com/zh/xvideos/{code}", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "thisav", name: "ThisAV", url_template: "https://thisav2.com/cn/{code}", fail_selector: "h1", fail_text: "找不到页面" },
+    DownloadSiteDef { id: "njav", name: "NJAV", url_template: "https://www.njav.com/zh/xvideos/{code}", fail_selector: ".message", fail_text: "404 Not Found" },
     DownloadSiteDef { id: "jable", name: "Jable.tv", url_template: "https://jable.tv/videos/{code}/", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "jptt", name: "JPTT.tv", url_template: "https://jptt.tv/video/{code}", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "javsb", name: "Jav.sb", url_template: "https://jav.sb/jav/{code}-1-1.html", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "123av", name: "123AV", url_template: "https://123av.com/zh/v/{code}", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "myjav", name: "MyJav.tv", url_template: "https://cn.myjav.tv/video/{code}", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "javgg", name: "JavGG", url_template: "https://javgg.net/jav/{code}/", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "javct", name: "JavCT", url_template: "https://javct.net/v/{code}", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "javmost", name: "JavMost", url_template: "https://www.javmost.ws/{CODE}/", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "javeng", name: "JavEng", url_template: "https://javeng.tv/jav-eng-sub/{code}/", fail_selector: "", fail_text: "" },
-    DownloadSiteDef { id: "javfull", name: "JavFull", url_template: "https://javfull.net/{code}/", fail_selector: "", fail_text: "" },
+    DownloadSiteDef { id: "jptt", name: "JPTT.tv", url_template: "https://jptt.tv/video/{code}", fail_selector: "h1", fail_text: "404 Not Found" },
+    DownloadSiteDef { id: "javsb", name: "Jav.sb", url_template: "https://jav.sb/jav/{code}-1-1.html", fail_selector: ".badge", fail_text: "404" },
+    DownloadSiteDef { id: "123av", name: "123AV", url_template: "https://123av.com/zh/v/{code}", fail_selector: ".errpage__code", fail_text: "404" },
+    DownloadSiteDef { id: "myjav", name: "MyJav.tv", url_template: "https://cn.myjav.tv/video/{code}", fail_selector: "h1", fail_text: "404" },
+    DownloadSiteDef { id: "javgg", name: "JavGG", url_template: "https://javgg.net/jav/{code}/", fail_selector: ".no-result", fail_text: "404" },
+    DownloadSiteDef { id: "javct", name: "JavCT", url_template: "https://javct.net/v/{code}", fail_selector: ".page-404__title", fail_text: "404" },
+    DownloadSiteDef { id: "javmost", name: "JavMost", url_template: "https://www.javmost.ws/{CODE}/", fail_selector: "h1", fail_text: "404" },
+    DownloadSiteDef { id: "javeng", name: "JavEng", url_template: "https://javeng.tv/jav-eng-sub/{code}/", fail_selector: ".error404", fail_text: "" },
+    DownloadSiteDef { id: "javfull", name: "JavFull", url_template: "https://javfull.net/{code}/", fail_selector: "#notfound", fail_text: "" },
 ];
 
 /// 根据网站 ID 和番号构建访问 URL
@@ -287,7 +287,9 @@ pub(crate) const INTERCEPT_JS: &str = r#"
             });
         });
     });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    // document-start 注入时 documentElement 可能为 null，包 try 并回退到 document，
+    // 避免抛异常中断整个 IIFE（否则 fullScan/reportNotFound 永远建立不起来）
+    try { observer.observe(document.documentElement || document, { childList: true, subtree: true }); } catch (e) {}
 
     // ========== 404 / 未找到检测 ==========
     // 页面明确是"找不到/404"时通知前端尽早结束，避免一直转圈等待。

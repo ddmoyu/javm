@@ -2,8 +2,8 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "video-finder",
   "description": "Capability for the video finder WebView - 用于捕获视频链接",
-  "windows": ["video_finder_webview"],
-  "webviews": ["video_finder_webview"],
+  "windows": ["video_finder_*"],
+  "webviews": ["video_finder_*"],
   "remote": {
     "urls": ["https://*", "http://*"]
   },
