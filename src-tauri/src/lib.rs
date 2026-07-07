@@ -168,6 +168,7 @@ pub fn run() {
             if let Ok(config_dir) = app.path().app_config_dir() {
                 utils::proxy::init(&config_dir);
                 resource_scrape::anti_block::init(&config_dir);
+                scanner::file_scanner::refresh_custom_extensions(&config_dir);
             }
 
             // 视频链接探测模式（仅 dev）：设置 JAVM_LINK_PROBE 时进入无头批量探测，

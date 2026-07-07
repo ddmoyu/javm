@@ -250,6 +250,27 @@ const saveProxySettings = () => {
   settingsStore.updateSettings({ theme: localSettings.value.theme })
 }
 
+// 自定义视频扩展名（逗号分隔的输入框，展示态）
+const videoExtInput = ref((settingsStore.settings.general.videoExtensions || []).join(', '))
+
+// 输入时实时将中文逗号转为英文逗号
+const onVideoExtInput = (v: unknown) => {
+  videoExtInput.value = String(v).replace(/，/g, ',')
+}
+
+// 失焦时规范化（去点、小写、去空、去重）并保存
+const saveVideoExtensions = () => {
+  const list = videoExtInput.value
+    .split(',')
+    .map(s => s.trim().replace(/^\.+/, '').toLowerCase())
+    .filter(Boolean)
+  const unique = [...new Set(list)]
+  videoExtInput.value = unique.join(', ')
+  settingsStore.updateSettings({
+    general: { ...settingsStore.settings.general, videoExtensions: unique },
+  })
+}
+
 // 是否为自定义代理
 const isCustomProxy = computed(() => {
   return localSettings.value.theme?.proxy?.type === 'custom'
@@ -404,6 +425,7 @@ onMounted(async () => {
     },
     ai: { ...settingsStore.settings.ai },
   }
+  videoExtInput.value = (settingsStore.settings.general.videoExtensions || []).join(', ')
 
   // 如果 store 中的保存路径为空，尝试获取系统默认下载路径
   if (!localSettings.value.download.savePath || localSettings.value.download.savePath.trim() === '') {
@@ -627,6 +649,7 @@ watch(() => settingsStore.settings, async (newSettings) => {
     },
     ai: { ...newSettings.ai },
   }
+  videoExtInput.value = (newSettings.general.videoExtensions || []).join(', ')
 
   // 如果 store 中的保存路径为空，尝试获取系统默认下载路径
   if (!localSettings.value.download.savePath || localSettings.value.download.savePath.trim() === '') {
@@ -757,6 +780,18 @@ watch(() => settingsStore.settings, async (newSettings) => {
                   </div>
                   <Switch :model-value="settingsStore.settings.general.coverClickToPlay ?? true"
                     @update:model-value="(v: boolean) => settingsStore.updateSettings({ general: { ...settingsStore.settings.general, coverClickToPlay: v } })" />
+                </div>
+
+                <Separator />
+
+                <!-- 自定义视频扩展名 -->
+                <div class="space-y-2">
+                  <p class="font-medium">自定义视频扩展名</p>
+                  <p class="text-sm text-muted-foreground">
+                    在内置格式外额外识别的扩展名（如 strm），多个用逗号分隔
+                  </p>
+                  <Input :model-value="videoExtInput" placeholder="例如: strm, iso, ts"
+                    @update:model-value="onVideoExtInput" @blur="saveVideoExtensions" />
                 </div>
               </CardContent>
             </Card>

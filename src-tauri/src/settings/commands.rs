@@ -61,6 +61,7 @@ pub async fn save_settings(app: AppHandle, mut settings: AppSettings) -> Result<
     if let Ok(config_dir) = app.path().app_config_dir() {
         crate::utils::proxy::refresh(&config_dir);
         crate::resource_scrape::anti_block::refresh(&config_dir);
+        crate::scanner::file_scanner::refresh_custom_extensions(&config_dir);
     }
 
     if let Some(manager) = app.try_state::<crate::download::manager::DownloadManager>() {

@@ -179,6 +179,9 @@ pub struct GeneralSettings {
     /// 演员面板作品卡片大小（网格 min 列宽 px）
     #[serde(rename = "actorCardSize", default = "default_actor_card_size")]
     pub actor_card_size: u32,
+    /// 用户自定义的额外视频扩展名（不含前导点，小写），扫描时与内置列表合并
+    #[serde(rename = "videoExtensions", default)]
+    pub video_extensions: Vec<String>,
 }
 
 fn default_play_method() -> String {
@@ -694,6 +697,7 @@ impl Default for AppSettings {
                 cover_click_to_play: true,
                 cover_type: "landscape".to_string(),
                 actor_card_size: 160,
+                video_extensions: Vec::new(),
             },
             download: DownloadSettings::default(),
             scrape: ScrapeSettings::default(),

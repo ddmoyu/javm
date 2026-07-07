@@ -1,8 +1,54 @@
 use std::future::Future;
 use std::path::Path;
 use std::pin::Pin;
+use std::sync::RwLock;
 
 use tokio::fs;
+
+/// 用户在设置中自定义的额外视频扩展名（小写、无前导点），可由 refresh 更新。
+/// 与内置的 `VIDEO_EXTENSIONS` 合并后共同决定文件是否视为视频。
+static CUSTOM_VIDEO_EXTENSIONS: RwLock<Vec<String>> = RwLock::new(Vec::new());
+
+/// 从设置文件刷新自定义视频扩展名缓存（应用启动及用户保存设置后调用）
+pub fn refresh_custom_extensions(config_dir: &Path) {
+    let extensions = read_custom_extensions(config_dir);
+    if let Ok(mut guard) = CUSTOM_VIDEO_EXTENSIONS.write() {
+        *guard = extensions;
+    }
+}
+
+/// 从 settings.json 读取 `general.videoExtensions`，规范化为小写、去点、去空、去重。
+fn read_custom_extensions(config_dir: &Path) -> Vec<String> {
+    let settings_path = config_dir.join("settings.json");
+    let Ok(content) = std::fs::read_to_string(&settings_path) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+
+    let Some(array) = value["general"]["videoExtensions"].as_array() else {
+        return Vec::new();
+    };
+
+    let mut result = Vec::new();
+    for item in array {
+        let Some(raw) = item.as_str() else { continue };
+        let ext = raw.trim().trim_start_matches('.').to_lowercase();
+        if !ext.is_empty() && !result.contains(&ext) {
+            result.push(ext);
+        }
+    }
+    result
+}
+
+/// 判断扩展名是否命中用户自定义的视频扩展名
+fn is_custom_video_extension(ext: &str) -> bool {
+    CUSTOM_VIDEO_EXTENSIONS
+        .read()
+        .map(|list| list.iter().any(|e| e == ext))
+        .unwrap_or(false)
+}
 
 const SKIPPED_DIRECTORY_NAMES: &[&str] = &[
     "behind the scenes",
@@ -29,7 +75,10 @@ const CONTENT_PROBED_VIDEO_EXTENSIONS: &[&str] = &["ts"];
 pub fn is_video_file(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| VIDEO_EXTENSIONS.contains(&e.to_lowercase().as_str()))
+        .map(|e| {
+            let ext = e.to_lowercase();
+            VIDEO_EXTENSIONS.contains(&ext.as_str()) || is_custom_video_extension(&ext)
+        })
         .unwrap_or(false)
 }
 

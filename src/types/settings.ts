@@ -66,6 +66,8 @@ export interface GeneralSettings {
     coverType: CoverType
     /** 演员面板作品卡片大小（网格 min 列宽 px） */
     actorCardSize: number
+    /** 用户自定义的额外视频扩展名（不含前导点，小写），扫描时与内置列表合并 */
+    videoExtensions: string[]
 }
 
 /** 下载源（资源链接视频站） */
@@ -211,6 +213,7 @@ export const defaultSettings: AppSettings = {
         coverClickToPlay: true,
         coverType: 'landscape',
         actorCardSize: 160,
+        videoExtensions: [],
     },
     download: {
         savePath: '',
