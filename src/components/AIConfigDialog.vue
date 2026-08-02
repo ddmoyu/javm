@@ -13,7 +13,15 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import type { AIProvider } from '@/types'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import type { AIProvider, AIProviderType } from '@/types'
+import { AI_PROVIDER_OPTIONS } from '@/utils/constants'
 import { invoke } from '@tauri-apps/api/core'
 
 interface Props {
@@ -31,6 +39,7 @@ const emit = defineEmits<Emits>()
 
 // 表单数据
 const formData = ref({
+  providerType: 'custom' as AIProviderType,
   name: '',
   model: '',
   apiUrl: '',
@@ -52,8 +61,56 @@ const testResult = ref<{ success: boolean; message: string } | null>(null)
 // API Key显示/隐藏
 const showApiKey = ref(false)
 
+const MINIMAX_MODEL_IDS = ['MiniMax-M3', 'MiniMax-M2.7']
+
+const PROVIDER_DEFAULTS: Partial<Record<AIProviderType, { name: string; model: string; apiUrl: string }>> = {
+  minimax: {
+    name: 'MiniMax',
+    model: MINIMAX_MODEL_IDS[0],
+    apiUrl: 'https://api.minimax.io/v1',
+  },
+  'minimax-cn': {
+    name: 'MiniMax CN',
+    model: MINIMAX_MODEL_IDS[0],
+    apiUrl: 'https://api.minimaxi.com/v1',
+  },
+  'minimax-anthropic': {
+    name: 'MiniMax Anthropic',
+    model: MINIMAX_MODEL_IDS[0],
+    apiUrl: 'https://api.minimax.io/anthropic',
+  },
+  'minimax-cn-anthropic': {
+    name: 'MiniMax CN Anthropic',
+    model: MINIMAX_MODEL_IDS[0],
+    apiUrl: 'https://api.minimaxi.com/anthropic',
+  },
+}
+
 const toggleApiKeyVisibility = () => {
   showApiKey.value = !showApiKey.value
+}
+
+const resolveProviderType = (provider: AIProvider | null | undefined): AIProviderType => {
+  return provider?.provider ?? formData.value.providerType
+}
+
+const currentProviderType = (): AIProviderType => formData.value.providerType
+
+const applyProviderDefaults = (providerType: AIProviderType) => {
+  const defaults = PROVIDER_DEFAULTS[providerType]
+  if (!defaults) {
+    return
+  }
+
+  if (!formData.value.name.trim()) {
+    formData.value.name = defaults.name
+  }
+  if (!formData.value.model.trim()) {
+    formData.value.model = defaults.model
+  }
+  if (!formData.value.apiUrl.trim()) {
+    formData.value.apiUrl = defaults.apiUrl
+  }
 }
 
 // 监听打开状态，重置或填充表单
@@ -62,6 +119,7 @@ watch(() => props.open, (isOpen) => {
     if (props.provider) {
       // 编辑模式
       formData.value = {
+        providerType: props.provider.provider,
         name: props.provider.name,
         model: props.provider.model,
         apiUrl: props.provider.endpoint || '',
@@ -70,17 +128,24 @@ watch(() => props.open, (isOpen) => {
     } else {
       // 新建模式
       formData.value = {
+        providerType: 'custom',
         name: '',
         model: '',
         apiUrl: '',
         apiKey: '',
       }
     }
+    applyProviderDefaults(resolveProviderType(props.provider))
     // 重置状态
     errors.value = { name: '', model: '', apiUrl: '', apiKey: '' }
     testResult.value = null
   }
 })
+
+const handleProviderTypeChange = (value: string | number | boolean | Record<string, unknown> | null | undefined) => {
+  formData.value.providerType = String(value || 'custom') as AIProviderType
+  applyProviderDefaults(formData.value.providerType)
+}
 
 // 表单验证
 const validateForm = (): boolean => {
@@ -131,7 +196,7 @@ const testApi = async () => {
   try {
     const result = await invoke<{ success: boolean; message: string }>('test_ai_api', {
       request: {
-        provider: 'custom',
+        provider: currentProviderType(),
         model: formData.value.model,
         apiKey: formData.value.apiKey,
         endpoint: formData.value.apiUrl,
@@ -166,7 +231,7 @@ const handleSave = () => {
 
   const provider: AIProvider = {
     id: props.provider?.id || `provider-${Date.now()}`,
-    provider: 'custom',
+    provider: currentProviderType(),
     name: formData.value.name.trim(),
     apiKey: formData.value.apiKey.trim(),
     endpoint: formData.value.apiUrl.trim(),
@@ -199,6 +264,22 @@ const handleClose = () => {
 
       <div class="grid gap-4 py-4">
         <!-- 供应商名称 -->
+        <div class="grid gap-2">
+          <Label for="providerType" class="required">
+            供应商类型
+          </Label>
+          <Select :model-value="formData.providerType" @update:model-value="handleProviderTypeChange">
+            <SelectTrigger id="providerType">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="option in AI_PROVIDER_OPTIONS" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
         <div class="grid gap-2">
           <Label for="name" class="required">
             供应商

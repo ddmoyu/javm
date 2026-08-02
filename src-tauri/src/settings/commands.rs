@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tauri::Manager;
 
+use crate::utils::ai_provider::{resolve_base_url, resolve_provider_defaults, AIProviderProtocol};
+
 use super::encryption::{obfuscate_settings, deobfuscate_settings};
 use super::{AppSettings, get_settings_path, normalize_ad_filter_settings, normalize_download_settings, normalize_scrape_settings};
 
@@ -420,15 +422,10 @@ pub async fn test_ai_api(request: TestApiRequest) -> Result<TestApiResponse, Str
     .build()
     .map_err(|e| e.to_string())?;
 
-    // 构建测试端点URL
-    let base_url = request
-        .endpoint
-        .unwrap_or_else(|| match request.provider.as_str() {
-            "openai" => "https://api.openai.com/v1".to_string(),
-            "deepseek" => "https://api.deepseek.com/v1".to_string(),
-            "claude" => "https://api.anthropic.com/v1".to_string(),
-            _ => String::new(),
-        });
+    let defaults = resolve_provider_defaults(&request.provider);
+    let base_url = defaults
+        .and_then(|defaults| resolve_base_url(request.endpoint.as_deref(), defaults))
+        .unwrap_or("");
 
     if base_url.is_empty() {
         return Ok(TestApiResponse {
@@ -437,9 +434,8 @@ pub async fn test_ai_api(request: TestApiRequest) -> Result<TestApiResponse, Str
         });
     }
 
-    // 根据provider构建不同的测试请求
-    if request.provider == "claude" {
-        // Claude使用messages端点
+    match defaults.map(|defaults| defaults.protocol).unwrap_or(AIProviderProtocol::OpenAICompatible) {
+        AIProviderProtocol::AnthropicCompatible => {
         let endpoint = format!("{}/messages", base_url.trim_end_matches('/'));
 
         let test_payload = serde_json::json!({
@@ -481,8 +477,8 @@ pub async fn test_ai_api(request: TestApiRequest) -> Result<TestApiResponse, Str
                 message: format!("连接失败: {}", e),
             }),
         }
-    } else {
-        // OpenAI兼容API使用chat/completions端点
+        }
+        AIProviderProtocol::OpenAICompatible => {
         let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
         let test_payload = serde_json::json!({
@@ -544,6 +540,7 @@ pub async fn test_ai_api(request: TestApiRequest) -> Result<TestApiResponse, Str
                     message: error_msg,
                 })
             }
+        }
         }
     }
 }

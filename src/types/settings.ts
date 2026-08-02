@@ -17,7 +17,15 @@ export interface ProxySettings {
 }
 
 /** AI 提供商类型 */
-export type AIProviderType = 'openai' | 'deepseek' | 'claude' | 'custom'
+export type AIProviderType =
+    | 'openai'
+    | 'deepseek'
+    | 'claude'
+    | 'minimax'
+    | 'minimax-cn'
+    | 'minimax-anthropic'
+    | 'minimax-cn-anthropic'
+    | 'custom'
 
 /** 下载工具配置 */
 export interface DownloaderTool {

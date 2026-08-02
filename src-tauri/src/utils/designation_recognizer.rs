@@ -1,6 +1,8 @@
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use crate::utils::ai_provider::{resolve_base_url, resolve_provider_defaults, AIProviderProtocol};
+
 /// 识别方法枚举
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -384,20 +386,18 @@ JAV番号的常见格式包括：
             title
         );
 
-        // 根据provider类型发送不同的请求
-        let default_endpoint = match provider.provider.as_str() {
-            "openai" => "https://api.openai.com/v1".to_string(),
-            "deepseek" => "https://api.deepseek.com/v1".to_string(),
-            "claude" => "https://api.anthropic.com/v1".to_string(),
-            _ => return Err("Unsupported AI provider".to_string()),
-        };
+        let defaults = resolve_provider_defaults(&provider.provider)
+            .ok_or_else(|| "Unsupported AI provider".to_string())?;
+        let base_url = resolve_base_url(provider.endpoint.as_deref(), defaults)
+            .ok_or_else(|| "AI provider endpoint is required".to_string())?;
 
-        let base_url = provider.endpoint.as_ref().unwrap_or(&default_endpoint);
-
-        if provider.provider == "claude" {
-            self.call_claude_api(&client, base_url, &provider.api_key, &provider.model, &prompt).await
-        } else {
-            self.call_openai_compatible_api(&client, base_url, &provider.api_key, &provider.model, &prompt).await
+        match defaults.protocol {
+            AIProviderProtocol::AnthropicCompatible => {
+                self.call_claude_api(&client, base_url, &provider.api_key, &provider.model, &prompt).await
+            }
+            AIProviderProtocol::OpenAICompatible => {
+                self.call_openai_compatible_api(&client, base_url, &provider.api_key, &provider.model, &prompt).await
+            }
         }
     }
 
