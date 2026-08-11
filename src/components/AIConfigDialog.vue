@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { Loader2, Eye, EyeOff } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import {
@@ -62,6 +62,7 @@ const testResult = ref<{ success: boolean; message: string } | null>(null)
 const showApiKey = ref(false)
 
 const MINIMAX_MODEL_IDS = ['MiniMax-M3', 'MiniMax-M2.7']
+const isMiniMaxProvider = computed(() => formData.value.providerType.startsWith('minimax'))
 
 const PROVIDER_DEFAULTS: Partial<Record<AIProviderType, { name: string; model: string; apiUrl: string }>> = {
   minimax: {
@@ -96,19 +97,19 @@ const resolveProviderType = (provider: AIProvider | null | undefined): AIProvide
 
 const currentProviderType = (): AIProviderType => formData.value.providerType
 
-const applyProviderDefaults = (providerType: AIProviderType) => {
+const applyProviderDefaults = (providerType: AIProviderType, overwrite = false) => {
   const defaults = PROVIDER_DEFAULTS[providerType]
   if (!defaults) {
     return
   }
 
-  if (!formData.value.name.trim()) {
+  if (overwrite || !formData.value.name.trim()) {
     formData.value.name = defaults.name
   }
-  if (!formData.value.model.trim()) {
+  if (overwrite || !formData.value.model.trim()) {
     formData.value.model = defaults.model
   }
-  if (!formData.value.apiUrl.trim()) {
+  if (overwrite || !formData.value.apiUrl.trim()) {
     formData.value.apiUrl = defaults.apiUrl
   }
 }
@@ -142,9 +143,9 @@ watch(() => props.open, (isOpen) => {
   }
 })
 
-const handleProviderTypeChange = (value: string | number | boolean | Record<string, unknown> | null | undefined) => {
+const handleProviderTypeChange = (value: unknown) => {
   formData.value.providerType = String(value || 'custom') as AIProviderType
-  applyProviderDefaults(formData.value.providerType)
+  applyProviderDefaults(formData.value.providerType, true)
 }
 
 // 表单验证
@@ -303,9 +304,13 @@ const handleClose = () => {
           <Input
             id="model"
             v-model="formData.model"
+            :list="isMiniMaxProvider ? 'minimax-models' : undefined"
             placeholder="例如: gpt-4o-mini, deepseek-chat"
             :class="{ 'border-destructive': errors.model }"
           />
+          <datalist v-if="isMiniMaxProvider" id="minimax-models">
+            <option v-for="modelId in MINIMAX_MODEL_IDS" :key="modelId" :value="modelId" />
+          </datalist>
           <p v-if="errors.model" class="text-sm text-destructive">
             {{ errors.model }}
           </p>
