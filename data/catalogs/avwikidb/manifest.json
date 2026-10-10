@@ -1,0 +1,6526 @@
+{
+  "schema_version": 1,
+  "source": "AVWikiDB",
+  "source_language": "ja",
+  "collected_at": "2026-10-10T11:00:26.924Z",
+  "method": "Anonymous browser navigation through public directory pagination; DOM directory text and portrait URL metadata only.",
+  "encoding": "UTF-8 with BOM",
+  "newline": "CRLF",
+  "columns": [
+    "source",
+    "kind",
+    "source_id",
+    "name_original",
+    "name_zh",
+    "aliases",
+    "translation_status",
+    "source_url"
+  ],
+  "translation": {
+    "status": "pending",
+    "name_zh_fallback": "name_original"
+  },
+  "coverage": "All reachable pages in the five directory indexes during this collection. Not an industry-wide completeness claim.",
+  "catalogs": {
+    "director": {
+      "file": "directors.csv",
+      "dimension": "directors",
+      "source_url": "https://avwikidb.com/director/",
+      "page_count": 60,
+      "observed_rows": 5903,
+      "unique_ids": 5903,
+      "unique_names": 5901,
+      "duplicate_id_rows": 0,
+      "duplicate_page_pairs": [],
+      "changed_names_for_duplicate_ids": 0,
+      "observed_source_totals": [
+        5902,
+        5903
+      ],
+      "unique_count_matches_observed_total": true,
+      "pages_complete": true,
+      "translated_rows": 0,
+      "formula_like_names": 3,
+      "sha256": "edaebf4daebe1d54e213bc19b0a6526e4ad86d5a9e1e1007a4723865129f93d4",
+      "bytes": 619724,
+      "pages": [
+        {
+          "page": 1,
+          "rows": 100,
+          "stated_total": 5902,
+          "captured_at": "2026-10-10T08:36:50.274Z"
+        },
+        {
+          "page": 2,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:20.710Z"
+        },
+        {
+          "page": 3,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:21.910Z"
+        },
+        {
+          "page": 4,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:22.385Z"
+        },
+        {
+          "page": 5,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:22.799Z"
+        },
+        {
+          "page": 6,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:23.240Z"
+        },
+        {
+          "page": 7,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:23.701Z"
+        },
+        {
+          "page": 8,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:24.128Z"
+        },
+        {
+          "page": 9,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:24.580Z"
+        },
+        {
+          "page": 10,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:24.986Z"
+        },
+        {
+          "page": 11,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:25.410Z"
+        },
+        {
+          "page": 12,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:25.951Z"
+        },
+        {
+          "page": 13,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:56.493Z"
+        },
+        {
+          "page": 14,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:57.118Z"
+        },
+        {
+          "page": 15,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:57.669Z"
+        },
+        {
+          "page": 16,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:58.237Z"
+        },
+        {
+          "page": 17,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:58.874Z"
+        },
+        {
+          "page": 18,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:37:59.610Z"
+        },
+        {
+          "page": 19,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:00.264Z"
+        },
+        {
+          "page": 20,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:01.049Z"
+        },
+        {
+          "page": 21,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:01.563Z"
+        },
+        {
+          "page": 22,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:02.258Z"
+        },
+        {
+          "page": 23,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:02.934Z"
+        },
+        {
+          "page": 24,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:03.561Z"
+        },
+        {
+          "page": 25,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:04.633Z"
+        },
+        {
+          "page": 26,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:05.225Z"
+        },
+        {
+          "page": 27,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:08.525Z"
+        },
+        {
+          "page": 28,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:09.290Z"
+        },
+        {
+          "page": 29,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:09.850Z"
+        },
+        {
+          "page": 30,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:10.462Z"
+        },
+        {
+          "page": 31,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:13.694Z"
+        },
+        {
+          "page": 32,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:14.241Z"
+        },
+        {
+          "page": 33,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:14.876Z"
+        },
+        {
+          "page": 34,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:15.627Z"
+        },
+        {
+          "page": 35,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:16.244Z"
+        },
+        {
+          "page": 36,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:16.851Z"
+        },
+        {
+          "page": 37,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:17.456Z"
+        },
+        {
+          "page": 38,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:18.152Z"
+        },
+        {
+          "page": 39,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:18.771Z"
+        },
+        {
+          "page": 40,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:19.329Z"
+        },
+        {
+          "page": 41,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:22.437Z"
+        },
+        {
+          "page": 42,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:23.107Z"
+        },
+        {
+          "page": 43,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:44.905Z"
+        },
+        {
+          "page": 44,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:45.599Z"
+        },
+        {
+          "page": 45,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:46.224Z"
+        },
+        {
+          "page": 46,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:46.987Z"
+        },
+        {
+          "page": 47,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:47.714Z"
+        },
+        {
+          "page": 48,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:48.438Z"
+        },
+        {
+          "page": 49,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:49.197Z"
+        },
+        {
+          "page": 50,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:49.934Z"
+        },
+        {
+          "page": 51,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:38:50.653Z"
+        },
+        {
+          "page": 52,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:06.702Z"
+        },
+        {
+          "page": 53,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:07.374Z"
+        },
+        {
+          "page": 54,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:08.134Z"
+        },
+        {
+          "page": 55,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:08.886Z"
+        },
+        {
+          "page": 56,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:09.567Z"
+        },
+        {
+          "page": 57,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:10.374Z"
+        },
+        {
+          "page": 58,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:11.230Z"
+        },
+        {
+          "page": 59,
+          "rows": 100,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:11.891Z"
+        },
+        {
+          "page": 60,
+          "rows": 3,
+          "stated_total": 5903,
+          "captured_at": "2026-10-10T08:39:12.380Z"
+        }
+      ]
+    },
+    "maker": {
+      "file": "makers.csv",
+      "dimension": "studios",
+      "source_url": "https://avwikidb.com/maker/",
+      "page_count": 55,
+      "observed_rows": 5450,
+      "unique_ids": 5450,
+      "unique_names": 5428,
+      "duplicate_id_rows": 0,
+      "duplicate_page_pairs": [],
+      "changed_names_for_duplicate_ids": 0,
+      "observed_source_totals": [
+        5450
+      ],
+      "unique_count_matches_observed_total": true,
+      "pages_complete": true,
+      "translated_rows": 0,
+      "formula_like_names": 0,
+      "sha256": "fbec59a119ada42f9edae671640a6214ecaa4f3ef0b04550bbfb9d17d101c859",
+      "bytes": 535716,
+      "pages": [
+        {
+          "page": 1,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:42.576Z"
+        },
+        {
+          "page": 2,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:43.255Z"
+        },
+        {
+          "page": 3,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:43.876Z"
+        },
+        {
+          "page": 4,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:44.594Z"
+        },
+        {
+          "page": 5,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:45.368Z"
+        },
+        {
+          "page": 6,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:46.200Z"
+        },
+        {
+          "page": 7,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:48.022Z"
+        },
+        {
+          "page": 8,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:48.765Z"
+        },
+        {
+          "page": 9,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:49.522Z"
+        },
+        {
+          "page": 10,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:50.541Z"
+        },
+        {
+          "page": 11,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:53.441Z"
+        },
+        {
+          "page": 12,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:54.124Z"
+        },
+        {
+          "page": 13,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:54.772Z"
+        },
+        {
+          "page": 14,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:55.525Z"
+        },
+        {
+          "page": 15,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:56.240Z"
+        },
+        {
+          "page": 16,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:56.941Z"
+        },
+        {
+          "page": 17,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:57.645Z"
+        },
+        {
+          "page": 18,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:58.266Z"
+        },
+        {
+          "page": 19,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:58.917Z"
+        },
+        {
+          "page": 20,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:39:59.692Z"
+        },
+        {
+          "page": 21,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:03.038Z"
+        },
+        {
+          "page": 22,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:03.686Z"
+        },
+        {
+          "page": 23,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:04.339Z"
+        },
+        {
+          "page": 24,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:05.724Z"
+        },
+        {
+          "page": 25,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:06.466Z"
+        },
+        {
+          "page": 26,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:29.372Z"
+        },
+        {
+          "page": 27,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:30.423Z"
+        },
+        {
+          "page": 28,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:31.120Z"
+        },
+        {
+          "page": 29,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:31.788Z"
+        },
+        {
+          "page": 30,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:32.658Z"
+        },
+        {
+          "page": 31,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:33.382Z"
+        },
+        {
+          "page": 32,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:34.019Z"
+        },
+        {
+          "page": 33,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:34.879Z"
+        },
+        {
+          "page": 34,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:35.639Z"
+        },
+        {
+          "page": 35,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:36.396Z"
+        },
+        {
+          "page": 36,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:37.051Z"
+        },
+        {
+          "page": 37,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:37.782Z"
+        },
+        {
+          "page": 38,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:40.567Z"
+        },
+        {
+          "page": 39,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:41.221Z"
+        },
+        {
+          "page": 40,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:42.036Z"
+        },
+        {
+          "page": 41,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:42.686Z"
+        },
+        {
+          "page": 42,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:43.358Z"
+        },
+        {
+          "page": 43,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:44.283Z"
+        },
+        {
+          "page": 44,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:44.968Z"
+        },
+        {
+          "page": 45,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:45.623Z"
+        },
+        {
+          "page": 46,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:46.414Z"
+        },
+        {
+          "page": 47,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:47.126Z"
+        },
+        {
+          "page": 48,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:47.896Z"
+        },
+        {
+          "page": 49,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:50.668Z"
+        },
+        {
+          "page": 50,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:51.455Z"
+        },
+        {
+          "page": 51,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:52.356Z"
+        },
+        {
+          "page": 52,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:53.059Z"
+        },
+        {
+          "page": 53,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:53.753Z"
+        },
+        {
+          "page": 54,
+          "rows": 100,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:54.544Z"
+        },
+        {
+          "page": 55,
+          "rows": 50,
+          "stated_total": 5450,
+          "captured_at": "2026-10-10T08:40:55.230Z"
+        }
+      ]
+    },
+    "series": {
+      "file": "series.csv",
+      "dimension": "series",
+      "source_url": "https://avwikidb.com/series/",
+      "page_count": 494,
+      "observed_rows": 49389,
+      "unique_ids": 49388,
+      "unique_names": 49251,
+      "duplicate_id_rows": 1,
+      "duplicate_page_pairs": [
+        [
+          1,
+          2
+        ]
+      ],
+      "changed_names_for_duplicate_ids": 0,
+      "observed_source_totals": [
+        49378,
+        49389
+      ],
+      "unique_count_matches_observed_total": false,
+      "pages_complete": true,
+      "translated_rows": 0,
+      "formula_like_names": 3,
+      "sha256": "eb32dfae824d11f27f7a707a999aae96979169d80344d941145586f684954d7f",
+      "bytes": 6208873,
+      "pages": [
+        {
+          "page": 1,
+          "rows": 100,
+          "stated_total": 49378,
+          "captured_at": "2026-10-10T08:41:03.766Z"
+        },
+        {
+          "page": 2,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:04.496Z"
+        },
+        {
+          "page": 3,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:05.301Z"
+        },
+        {
+          "page": 4,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:07.264Z"
+        },
+        {
+          "page": 5,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:07.973Z"
+        },
+        {
+          "page": 6,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:08.689Z"
+        },
+        {
+          "page": 7,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:09.346Z"
+        },
+        {
+          "page": 8,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:10.102Z"
+        },
+        {
+          "page": 9,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:10.920Z"
+        },
+        {
+          "page": 10,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:11.619Z"
+        },
+        {
+          "page": 11,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:12.356Z"
+        },
+        {
+          "page": 12,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:13.164Z"
+        },
+        {
+          "page": 13,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:16.665Z"
+        },
+        {
+          "page": 14,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:17.394Z"
+        },
+        {
+          "page": 15,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:18.243Z"
+        },
+        {
+          "page": 16,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:18.972Z"
+        },
+        {
+          "page": 17,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:19.607Z"
+        },
+        {
+          "page": 18,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:20.392Z"
+        },
+        {
+          "page": 19,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:21.183Z"
+        },
+        {
+          "page": 20,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:21.862Z"
+        },
+        {
+          "page": 21,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:22.592Z"
+        },
+        {
+          "page": 22,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:23.349Z"
+        },
+        {
+          "page": 23,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:24.245Z"
+        },
+        {
+          "page": 24,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:25.088Z"
+        },
+        {
+          "page": 25,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:25.718Z"
+        },
+        {
+          "page": 26,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:28.835Z"
+        },
+        {
+          "page": 27,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:29.622Z"
+        },
+        {
+          "page": 28,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:30.413Z"
+        },
+        {
+          "page": 29,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:31.295Z"
+        },
+        {
+          "page": 30,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:41:32.046Z"
+        },
+        {
+          "page": 31,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:42:57.493Z"
+        },
+        {
+          "page": 32,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:42:58.304Z"
+        },
+        {
+          "page": 33,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:42:59.068Z"
+        },
+        {
+          "page": 34,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:42:59.766Z"
+        },
+        {
+          "page": 35,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:00.443Z"
+        },
+        {
+          "page": 36,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:01.110Z"
+        },
+        {
+          "page": 37,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:01.840Z"
+        },
+        {
+          "page": 38,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:02.471Z"
+        },
+        {
+          "page": 39,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:03.235Z"
+        },
+        {
+          "page": 40,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:03.986Z"
+        },
+        {
+          "page": 41,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:04.630Z"
+        },
+        {
+          "page": 42,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:05.442Z"
+        },
+        {
+          "page": 43,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:06.212Z"
+        },
+        {
+          "page": 44,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:21.930Z"
+        },
+        {
+          "page": 45,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:22.616Z"
+        },
+        {
+          "page": 46,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:23.403Z"
+        },
+        {
+          "page": 47,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:24.202Z"
+        },
+        {
+          "page": 48,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:24.897Z"
+        },
+        {
+          "page": 49,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:25.610Z"
+        },
+        {
+          "page": 50,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:26.274Z"
+        },
+        {
+          "page": 51,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:27.029Z"
+        },
+        {
+          "page": 52,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:27.740Z"
+        },
+        {
+          "page": 53,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:28.442Z"
+        },
+        {
+          "page": 54,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:29.000Z"
+        },
+        {
+          "page": 55,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:32.090Z"
+        },
+        {
+          "page": 56,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:32.941Z"
+        },
+        {
+          "page": 57,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:33.702Z"
+        },
+        {
+          "page": 58,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:34.320Z"
+        },
+        {
+          "page": 59,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:34.950Z"
+        },
+        {
+          "page": 60,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:35.562Z"
+        },
+        {
+          "page": 61,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:36.379Z"
+        },
+        {
+          "page": 62,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:43:37.232Z"
+        },
+        {
+          "page": 63,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:09.536Z"
+        },
+        {
+          "page": 64,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:10.181Z"
+        },
+        {
+          "page": 65,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:10.791Z"
+        },
+        {
+          "page": 66,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:11.349Z"
+        },
+        {
+          "page": 67,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:12.090Z"
+        },
+        {
+          "page": 68,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:12.772Z"
+        },
+        {
+          "page": 69,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:13.434Z"
+        },
+        {
+          "page": 70,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:13.957Z"
+        },
+        {
+          "page": 71,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:14.577Z"
+        },
+        {
+          "page": 72,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:15.218Z"
+        },
+        {
+          "page": 73,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:15.844Z"
+        },
+        {
+          "page": 74,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:16.463Z"
+        },
+        {
+          "page": 75,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:19.813Z"
+        },
+        {
+          "page": 76,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:20.569Z"
+        },
+        {
+          "page": 77,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:21.333Z"
+        },
+        {
+          "page": 78,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:22.045Z"
+        },
+        {
+          "page": 79,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:22.694Z"
+        },
+        {
+          "page": 80,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:23.229Z"
+        },
+        {
+          "page": 81,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:23.951Z"
+        },
+        {
+          "page": 82,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:44:24.627Z"
+        },
+        {
+          "page": 83,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:07.826Z"
+        },
+        {
+          "page": 84,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:08.417Z"
+        },
+        {
+          "page": 85,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:09.206Z"
+        },
+        {
+          "page": 86,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:10.023Z"
+        },
+        {
+          "page": 87,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:10.696Z"
+        },
+        {
+          "page": 88,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:26.439Z"
+        },
+        {
+          "page": 89,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:27.091Z"
+        },
+        {
+          "page": 90,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:27.744Z"
+        },
+        {
+          "page": 91,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:28.455Z"
+        },
+        {
+          "page": 92,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:29.066Z"
+        },
+        {
+          "page": 93,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:29.811Z"
+        },
+        {
+          "page": 94,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:30.472Z"
+        },
+        {
+          "page": 95,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:32.399Z"
+        },
+        {
+          "page": 96,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:33.076Z"
+        },
+        {
+          "page": 97,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:33.657Z"
+        },
+        {
+          "page": 98,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:34.250Z"
+        },
+        {
+          "page": 99,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:34.926Z"
+        },
+        {
+          "page": 100,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:35.550Z"
+        },
+        {
+          "page": 101,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:36.225Z"
+        },
+        {
+          "page": 102,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:39.129Z"
+        },
+        {
+          "page": 103,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:40.053Z"
+        },
+        {
+          "page": 104,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:40.696Z"
+        },
+        {
+          "page": 105,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:41.627Z"
+        },
+        {
+          "page": 106,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:42.228Z"
+        },
+        {
+          "page": 107,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:42.871Z"
+        },
+        {
+          "page": 108,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:43.563Z"
+        },
+        {
+          "page": 109,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:44.297Z"
+        },
+        {
+          "page": 110,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:44.908Z"
+        },
+        {
+          "page": 111,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:45.528Z"
+        },
+        {
+          "page": 112,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:46.260Z"
+        },
+        {
+          "page": 113,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:45:46.847Z"
+        },
+        {
+          "page": 114,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:04.515Z"
+        },
+        {
+          "page": 115,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:05.324Z"
+        },
+        {
+          "page": 116,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:05.954Z"
+        },
+        {
+          "page": 117,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:06.552Z"
+        },
+        {
+          "page": 118,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:07.138Z"
+        },
+        {
+          "page": 119,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:07.870Z"
+        },
+        {
+          "page": 120,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:08.539Z"
+        },
+        {
+          "page": 121,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:09.308Z"
+        },
+        {
+          "page": 122,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:09.972Z"
+        },
+        {
+          "page": 123,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:10.597Z"
+        },
+        {
+          "page": 124,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:13.554Z"
+        },
+        {
+          "page": 125,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:14.232Z"
+        },
+        {
+          "page": 126,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:19.347Z"
+        },
+        {
+          "page": 127,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:20.000Z"
+        },
+        {
+          "page": 128,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:20.616Z"
+        },
+        {
+          "page": 129,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:21.511Z"
+        },
+        {
+          "page": 130,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:22.283Z"
+        },
+        {
+          "page": 131,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:22.857Z"
+        },
+        {
+          "page": 132,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:23.516Z"
+        },
+        {
+          "page": 133,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:24.224Z"
+        },
+        {
+          "page": 134,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:25.004Z"
+        },
+        {
+          "page": 135,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:25.676Z"
+        },
+        {
+          "page": 136,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:26.275Z"
+        },
+        {
+          "page": 137,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:59.053Z"
+        },
+        {
+          "page": 138,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:46:59.630Z"
+        },
+        {
+          "page": 139,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:00.203Z"
+        },
+        {
+          "page": 140,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:00.835Z"
+        },
+        {
+          "page": 141,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:01.394Z"
+        },
+        {
+          "page": 142,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:01.937Z"
+        },
+        {
+          "page": 143,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:02.534Z"
+        },
+        {
+          "page": 144,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:03.170Z"
+        },
+        {
+          "page": 145,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:03.812Z"
+        },
+        {
+          "page": 146,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:04.309Z"
+        },
+        {
+          "page": 147,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:04.907Z"
+        },
+        {
+          "page": 148,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:05.513Z"
+        },
+        {
+          "page": 149,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:06.181Z"
+        },
+        {
+          "page": 150,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:29.498Z"
+        },
+        {
+          "page": 151,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:30.135Z"
+        },
+        {
+          "page": 152,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:30.715Z"
+        },
+        {
+          "page": 153,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:31.222Z"
+        },
+        {
+          "page": 154,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:31.864Z"
+        },
+        {
+          "page": 155,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:32.517Z"
+        },
+        {
+          "page": 156,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:33.119Z"
+        },
+        {
+          "page": 157,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:33.773Z"
+        },
+        {
+          "page": 158,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:34.383Z"
+        },
+        {
+          "page": 159,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:34.918Z"
+        },
+        {
+          "page": 160,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:35.531Z"
+        },
+        {
+          "page": 161,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:47:36.201Z"
+        },
+        {
+          "page": 162,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:14.092Z"
+        },
+        {
+          "page": 163,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:15.020Z"
+        },
+        {
+          "page": 164,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:15.791Z"
+        },
+        {
+          "page": 165,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:16.691Z"
+        },
+        {
+          "page": 166,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:17.501Z"
+        },
+        {
+          "page": 167,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:18.404Z"
+        },
+        {
+          "page": 168,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:19.167Z"
+        },
+        {
+          "page": 169,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:20.015Z"
+        },
+        {
+          "page": 170,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:20.748Z"
+        },
+        {
+          "page": 171,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:21.458Z"
+        },
+        {
+          "page": 172,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:22.271Z"
+        },
+        {
+          "page": 173,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:23.088Z"
+        },
+        {
+          "page": 174,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:23.813Z"
+        },
+        {
+          "page": 175,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:24.510Z"
+        },
+        {
+          "page": 176,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:48:25.304Z"
+        },
+        {
+          "page": 177,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:31.036Z"
+        },
+        {
+          "page": 178,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:31.698Z"
+        },
+        {
+          "page": 179,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:32.250Z"
+        },
+        {
+          "page": 180,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:32.802Z"
+        },
+        {
+          "page": 181,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:33.364Z"
+        },
+        {
+          "page": 182,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:33.998Z"
+        },
+        {
+          "page": 183,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:34.750Z"
+        },
+        {
+          "page": 184,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:35.669Z"
+        },
+        {
+          "page": 185,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:36.347Z"
+        },
+        {
+          "page": 186,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:37.076Z"
+        },
+        {
+          "page": 187,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:49:37.901Z"
+        },
+        {
+          "page": 188,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:04.845Z"
+        },
+        {
+          "page": 189,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:05.470Z"
+        },
+        {
+          "page": 190,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:06.153Z"
+        },
+        {
+          "page": 191,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:07.611Z"
+        },
+        {
+          "page": 192,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:08.178Z"
+        },
+        {
+          "page": 193,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:08.753Z"
+        },
+        {
+          "page": 194,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:09.395Z"
+        },
+        {
+          "page": 195,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:09.979Z"
+        },
+        {
+          "page": 196,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:10.646Z"
+        },
+        {
+          "page": 197,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:11.261Z"
+        },
+        {
+          "page": 198,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:11.845Z"
+        },
+        {
+          "page": 199,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:12.555Z"
+        },
+        {
+          "page": 200,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:13.314Z"
+        },
+        {
+          "page": 201,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:13.893Z"
+        },
+        {
+          "page": 202,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:17.590Z"
+        },
+        {
+          "page": 203,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:18.231Z"
+        },
+        {
+          "page": 204,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:18.967Z"
+        },
+        {
+          "page": 205,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:20.130Z"
+        },
+        {
+          "page": 206,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:50:42.140Z"
+        },
+        {
+          "page": 207,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:52:41.418Z"
+        },
+        {
+          "page": 208,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:53:58.234Z"
+        },
+        {
+          "page": 209,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:16.848Z"
+        },
+        {
+          "page": 210,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:17.967Z"
+        },
+        {
+          "page": 211,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:18.808Z"
+        },
+        {
+          "page": 212,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:19.537Z"
+        },
+        {
+          "page": 213,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:20.194Z"
+        },
+        {
+          "page": 214,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:20.875Z"
+        },
+        {
+          "page": 215,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:21.582Z"
+        },
+        {
+          "page": 216,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:22.244Z"
+        },
+        {
+          "page": 217,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:22.927Z"
+        },
+        {
+          "page": 218,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:23.587Z"
+        },
+        {
+          "page": 219,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:24.192Z"
+        },
+        {
+          "page": 220,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:24.831Z"
+        },
+        {
+          "page": 221,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:25.448Z"
+        },
+        {
+          "page": 222,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:26.106Z"
+        },
+        {
+          "page": 223,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:58.280Z"
+        },
+        {
+          "page": 224,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:58:59.364Z"
+        },
+        {
+          "page": 225,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:00.658Z"
+        },
+        {
+          "page": 226,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:02.450Z"
+        },
+        {
+          "page": 227,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:04.152Z"
+        },
+        {
+          "page": 228,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:05.601Z"
+        },
+        {
+          "page": 229,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:06.781Z"
+        },
+        {
+          "page": 230,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:07.720Z"
+        },
+        {
+          "page": 231,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:08.578Z"
+        },
+        {
+          "page": 232,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:09.651Z"
+        },
+        {
+          "page": 233,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:11.766Z"
+        },
+        {
+          "page": 234,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:12.848Z"
+        },
+        {
+          "page": 235,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:13.804Z"
+        },
+        {
+          "page": 236,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:14.809Z"
+        },
+        {
+          "page": 237,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:15.913Z"
+        },
+        {
+          "page": 238,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:55.816Z"
+        },
+        {
+          "page": 239,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:57.005Z"
+        },
+        {
+          "page": 240,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:58.257Z"
+        },
+        {
+          "page": 241,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T08:59:59.316Z"
+        },
+        {
+          "page": 242,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:00.202Z"
+        },
+        {
+          "page": 243,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:01.589Z"
+        },
+        {
+          "page": 244,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:02.915Z"
+        },
+        {
+          "page": 245,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:04.107Z"
+        },
+        {
+          "page": 246,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:05.293Z"
+        },
+        {
+          "page": 247,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:06.621Z"
+        },
+        {
+          "page": 248,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:07.592Z"
+        },
+        {
+          "page": 249,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:08.530Z"
+        },
+        {
+          "page": 250,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:09.674Z"
+        },
+        {
+          "page": 251,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:10.762Z"
+        },
+        {
+          "page": 252,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:11.941Z"
+        },
+        {
+          "page": 253,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:13.280Z"
+        },
+        {
+          "page": 254,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:18.090Z"
+        },
+        {
+          "page": 255,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:19.381Z"
+        },
+        {
+          "page": 256,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:00:21.049Z"
+        },
+        {
+          "page": 257,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:14.629Z"
+        },
+        {
+          "page": 258,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:15.343Z"
+        },
+        {
+          "page": 259,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:16.059Z"
+        },
+        {
+          "page": 260,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:16.770Z"
+        },
+        {
+          "page": 261,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:17.506Z"
+        },
+        {
+          "page": 262,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:18.244Z"
+        },
+        {
+          "page": 263,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:19.126Z"
+        },
+        {
+          "page": 264,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:19.967Z"
+        },
+        {
+          "page": 265,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:20.689Z"
+        },
+        {
+          "page": 266,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:21.404Z"
+        },
+        {
+          "page": 267,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:23.495Z"
+        },
+        {
+          "page": 268,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:25.701Z"
+        },
+        {
+          "page": 269,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:27.597Z"
+        },
+        {
+          "page": 270,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:29.722Z"
+        },
+        {
+          "page": 271,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:30.579Z"
+        },
+        {
+          "page": 272,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:31.454Z"
+        },
+        {
+          "page": 273,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:32.952Z"
+        },
+        {
+          "page": 274,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:40.296Z"
+        },
+        {
+          "page": 275,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:41.647Z"
+        },
+        {
+          "page": 276,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:43.697Z"
+        },
+        {
+          "page": 277,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:44.536Z"
+        },
+        {
+          "page": 278,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:45.170Z"
+        },
+        {
+          "page": 279,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:45.820Z"
+        },
+        {
+          "page": 280,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:47.832Z"
+        },
+        {
+          "page": 281,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:50.015Z"
+        },
+        {
+          "page": 282,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:02:57.599Z"
+        },
+        {
+          "page": 283,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:07.444Z"
+        },
+        {
+          "page": 284,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:08.558Z"
+        },
+        {
+          "page": 285,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:09.920Z"
+        },
+        {
+          "page": 286,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:11.570Z"
+        },
+        {
+          "page": 287,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:13.762Z"
+        },
+        {
+          "page": 288,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:19.183Z"
+        },
+        {
+          "page": 289,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:20.943Z"
+        },
+        {
+          "page": 290,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:22.488Z"
+        },
+        {
+          "page": 291,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:54.014Z"
+        },
+        {
+          "page": 292,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:56.638Z"
+        },
+        {
+          "page": 293,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:03:57.716Z"
+        },
+        {
+          "page": 294,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:04:00.459Z"
+        },
+        {
+          "page": 295,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:04:02.337Z"
+        },
+        {
+          "page": 296,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:04:04.877Z"
+        },
+        {
+          "page": 297,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:04:07.246Z"
+        },
+        {
+          "page": 298,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:04:09.462Z"
+        },
+        {
+          "page": 299,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:06:57.416Z"
+        },
+        {
+          "page": 300,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:06:59.809Z"
+        },
+        {
+          "page": 301,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:03.477Z"
+        },
+        {
+          "page": 302,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:06.685Z"
+        },
+        {
+          "page": 303,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:08.577Z"
+        },
+        {
+          "page": 304,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:10.437Z"
+        },
+        {
+          "page": 305,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:12.638Z"
+        },
+        {
+          "page": 306,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:30.683Z"
+        },
+        {
+          "page": 307,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:31.900Z"
+        },
+        {
+          "page": 308,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:07:33.005Z"
+        },
+        {
+          "page": 309,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:08:33.493Z"
+        },
+        {
+          "page": 310,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:20.089Z"
+        },
+        {
+          "page": 311,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:20.919Z"
+        },
+        {
+          "page": 312,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:21.580Z"
+        },
+        {
+          "page": 313,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:22.367Z"
+        },
+        {
+          "page": 314,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:23.025Z"
+        },
+        {
+          "page": 315,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:23.684Z"
+        },
+        {
+          "page": 316,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:24.296Z"
+        },
+        {
+          "page": 317,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:24.971Z"
+        },
+        {
+          "page": 318,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:25.622Z"
+        },
+        {
+          "page": 319,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:26.270Z"
+        },
+        {
+          "page": 320,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:26.947Z"
+        },
+        {
+          "page": 321,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:27.584Z"
+        },
+        {
+          "page": 322,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:33.082Z"
+        },
+        {
+          "page": 323,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:33.794Z"
+        },
+        {
+          "page": 324,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:34.486Z"
+        },
+        {
+          "page": 325,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:35.247Z"
+        },
+        {
+          "page": 326,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:36.197Z"
+        },
+        {
+          "page": 327,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:36.926Z"
+        },
+        {
+          "page": 328,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:37.679Z"
+        },
+        {
+          "page": 329,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:38.559Z"
+        },
+        {
+          "page": 330,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:39.284Z"
+        },
+        {
+          "page": 331,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:39.931Z"
+        },
+        {
+          "page": 332,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:09:40.657Z"
+        },
+        {
+          "page": 333,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:30.390Z"
+        },
+        {
+          "page": 334,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:31.093Z"
+        },
+        {
+          "page": 335,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:31.739Z"
+        },
+        {
+          "page": 336,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:32.499Z"
+        },
+        {
+          "page": 337,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:33.272Z"
+        },
+        {
+          "page": 338,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:33.970Z"
+        },
+        {
+          "page": 339,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:34.627Z"
+        },
+        {
+          "page": 340,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:35.257Z"
+        },
+        {
+          "page": 341,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:35.910Z"
+        },
+        {
+          "page": 342,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:36.526Z"
+        },
+        {
+          "page": 343,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:37.451Z"
+        },
+        {
+          "page": 344,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:41.600Z"
+        },
+        {
+          "page": 345,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:42.156Z"
+        },
+        {
+          "page": 346,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:42.836Z"
+        },
+        {
+          "page": 347,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:11:43.558Z"
+        },
+        {
+          "page": 348,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:12:16.250Z"
+        },
+        {
+          "page": 349,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:04.907Z"
+        },
+        {
+          "page": 350,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:05.544Z"
+        },
+        {
+          "page": 351,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:06.164Z"
+        },
+        {
+          "page": 352,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:06.825Z"
+        },
+        {
+          "page": 353,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:07.507Z"
+        },
+        {
+          "page": 354,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:08.309Z"
+        },
+        {
+          "page": 355,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:08.955Z"
+        },
+        {
+          "page": 356,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:09.670Z"
+        },
+        {
+          "page": 357,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:10.327Z"
+        },
+        {
+          "page": 358,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:10.901Z"
+        },
+        {
+          "page": 359,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:11.473Z"
+        },
+        {
+          "page": 360,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:12.176Z"
+        },
+        {
+          "page": 361,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:15.374Z"
+        },
+        {
+          "page": 362,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:16.084Z"
+        },
+        {
+          "page": 363,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:16.868Z"
+        },
+        {
+          "page": 364,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:42.145Z"
+        },
+        {
+          "page": 365,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:42.822Z"
+        },
+        {
+          "page": 366,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:43.600Z"
+        },
+        {
+          "page": 367,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:44.293Z"
+        },
+        {
+          "page": 368,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:45.047Z"
+        },
+        {
+          "page": 369,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:45.917Z"
+        },
+        {
+          "page": 370,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:13:46.737Z"
+        },
+        {
+          "page": 371,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:13.173Z"
+        },
+        {
+          "page": 372,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:13.813Z"
+        },
+        {
+          "page": 373,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:14.507Z"
+        },
+        {
+          "page": 374,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:15.142Z"
+        },
+        {
+          "page": 375,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:15.729Z"
+        },
+        {
+          "page": 376,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:16.361Z"
+        },
+        {
+          "page": 377,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:17.020Z"
+        },
+        {
+          "page": 378,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:18.048Z"
+        },
+        {
+          "page": 379,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:14:25.759Z"
+        },
+        {
+          "page": 380,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:39.545Z"
+        },
+        {
+          "page": 381,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:40.781Z"
+        },
+        {
+          "page": 382,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:41.973Z"
+        },
+        {
+          "page": 383,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:42.923Z"
+        },
+        {
+          "page": 384,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:43.955Z"
+        },
+        {
+          "page": 385,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:44.980Z"
+        },
+        {
+          "page": 386,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:46.080Z"
+        },
+        {
+          "page": 387,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:47.051Z"
+        },
+        {
+          "page": 388,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:48.134Z"
+        },
+        {
+          "page": 389,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:49.076Z"
+        },
+        {
+          "page": 390,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:50.081Z"
+        },
+        {
+          "page": 391,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:52.118Z"
+        },
+        {
+          "page": 392,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:53.210Z"
+        },
+        {
+          "page": 393,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:54.142Z"
+        },
+        {
+          "page": 394,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:55.272Z"
+        },
+        {
+          "page": 395,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:22:56.955Z"
+        },
+        {
+          "page": 396,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:02.889Z"
+        },
+        {
+          "page": 397,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:03.804Z"
+        },
+        {
+          "page": 398,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:04.864Z"
+        },
+        {
+          "page": 399,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:05.866Z"
+        },
+        {
+          "page": 400,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:07.116Z"
+        },
+        {
+          "page": 401,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:08.040Z"
+        },
+        {
+          "page": 402,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:09.023Z"
+        },
+        {
+          "page": 403,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:10.226Z"
+        },
+        {
+          "page": 404,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:11.294Z"
+        },
+        {
+          "page": 405,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:12.576Z"
+        },
+        {
+          "page": 406,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:14.340Z"
+        },
+        {
+          "page": 407,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:15.381Z"
+        },
+        {
+          "page": 408,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:16.342Z"
+        },
+        {
+          "page": 409,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:17.334Z"
+        },
+        {
+          "page": 410,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:18.407Z"
+        },
+        {
+          "page": 411,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:19.576Z"
+        },
+        {
+          "page": 412,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:20.556Z"
+        },
+        {
+          "page": 413,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:27.621Z"
+        },
+        {
+          "page": 414,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:28.746Z"
+        },
+        {
+          "page": 415,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:29.745Z"
+        },
+        {
+          "page": 416,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:31.337Z"
+        },
+        {
+          "page": 417,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:32.337Z"
+        },
+        {
+          "page": 418,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:34.388Z"
+        },
+        {
+          "page": 419,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:35.511Z"
+        },
+        {
+          "page": 420,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:36.720Z"
+        },
+        {
+          "page": 421,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:37.915Z"
+        },
+        {
+          "page": 422,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:40.164Z"
+        },
+        {
+          "page": 423,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:41.123Z"
+        },
+        {
+          "page": 424,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:42.341Z"
+        },
+        {
+          "page": 425,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:48.065Z"
+        },
+        {
+          "page": 426,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:49.264Z"
+        },
+        {
+          "page": 427,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:51.012Z"
+        },
+        {
+          "page": 428,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:52.120Z"
+        },
+        {
+          "page": 429,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:53.424Z"
+        },
+        {
+          "page": 430,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:54.534Z"
+        },
+        {
+          "page": 431,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:55.732Z"
+        },
+        {
+          "page": 432,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:56.933Z"
+        },
+        {
+          "page": 433,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:58.071Z"
+        },
+        {
+          "page": 434,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:23:59.172Z"
+        },
+        {
+          "page": 435,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:00.293Z"
+        },
+        {
+          "page": 436,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:01.637Z"
+        },
+        {
+          "page": 437,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:02.641Z"
+        },
+        {
+          "page": 438,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:03.593Z"
+        },
+        {
+          "page": 439,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:04.616Z"
+        },
+        {
+          "page": 440,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:05.886Z"
+        },
+        {
+          "page": 441,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:13.707Z"
+        },
+        {
+          "page": 442,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:14.925Z"
+        },
+        {
+          "page": 443,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:16.066Z"
+        },
+        {
+          "page": 444,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:17.099Z"
+        },
+        {
+          "page": 445,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:18.204Z"
+        },
+        {
+          "page": 446,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:19.232Z"
+        },
+        {
+          "page": 447,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:20.772Z"
+        },
+        {
+          "page": 448,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:21.749Z"
+        },
+        {
+          "page": 449,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:23.195Z"
+        },
+        {
+          "page": 450,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:24.276Z"
+        },
+        {
+          "page": 451,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:25.355Z"
+        },
+        {
+          "page": 452,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:26.429Z"
+        },
+        {
+          "page": 453,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:27.519Z"
+        },
+        {
+          "page": 454,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:28.813Z"
+        },
+        {
+          "page": 455,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:29.859Z"
+        },
+        {
+          "page": 456,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:30.918Z"
+        },
+        {
+          "page": 457,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:38.600Z"
+        },
+        {
+          "page": 458,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:39.628Z"
+        },
+        {
+          "page": 459,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:40.796Z"
+        },
+        {
+          "page": 460,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:42.749Z"
+        },
+        {
+          "page": 461,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:43.876Z"
+        },
+        {
+          "page": 462,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:44.922Z"
+        },
+        {
+          "page": 463,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:45.846Z"
+        },
+        {
+          "page": 464,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:47.086Z"
+        },
+        {
+          "page": 465,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:48.091Z"
+        },
+        {
+          "page": 466,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:49.032Z"
+        },
+        {
+          "page": 467,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:50.077Z"
+        },
+        {
+          "page": 468,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:54.635Z"
+        },
+        {
+          "page": 469,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:55.698Z"
+        },
+        {
+          "page": 470,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:56.725Z"
+        },
+        {
+          "page": 471,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:57.694Z"
+        },
+        {
+          "page": 472,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:58.598Z"
+        },
+        {
+          "page": 473,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:24:59.650Z"
+        },
+        {
+          "page": 474,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:00.684Z"
+        },
+        {
+          "page": 475,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:01.849Z"
+        },
+        {
+          "page": 476,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:03.085Z"
+        },
+        {
+          "page": 477,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:04.207Z"
+        },
+        {
+          "page": 478,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:08.554Z"
+        },
+        {
+          "page": 479,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:09.557Z"
+        },
+        {
+          "page": 480,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:10.479Z"
+        },
+        {
+          "page": 481,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:11.540Z"
+        },
+        {
+          "page": 482,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:12.489Z"
+        },
+        {
+          "page": 483,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:13.423Z"
+        },
+        {
+          "page": 484,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:14.567Z"
+        },
+        {
+          "page": 485,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:15.558Z"
+        },
+        {
+          "page": 486,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:16.594Z"
+        },
+        {
+          "page": 487,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:17.870Z"
+        },
+        {
+          "page": 488,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:19.022Z"
+        },
+        {
+          "page": 489,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:20.014Z"
+        },
+        {
+          "page": 490,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:21.062Z"
+        },
+        {
+          "page": 491,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:25.120Z"
+        },
+        {
+          "page": 492,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:26.356Z"
+        },
+        {
+          "page": 493,
+          "rows": 100,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:27.590Z"
+        },
+        {
+          "page": 494,
+          "rows": 89,
+          "stated_total": 49389,
+          "captured_at": "2026-10-10T09:25:28.639Z"
+        }
+      ]
+    },
+    "actor": {
+      "file": "actresses.csv",
+      "dimension": "actresses",
+      "source_url": "https://avwikidb.com/actor/",
+      "page_count": 448,
+      "observed_rows": 44731,
+      "excluded_invalid_source_ids": 0,
+      "unique_ids": 44731,
+      "unique_names": 44489,
+      "duplicate_id_rows": 0,
+      "duplicate_page_pairs": [],
+      "changed_names_for_duplicate_ids": 0,
+      "observed_source_totals": [
+        44731
+      ],
+      "unique_count_matches_observed_total": true,
+      "pages_complete": true,
+      "translated_rows": 0,
+      "formula_like_names": 2,
+      "sha256": "1e4502322f02ed3b798815c8be837eaf97154aa8f62f3e32c0b093d926f02859",
+      "bytes": 4411330,
+      "pages": [
+        {
+          "page": 1,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:19.894Z"
+        },
+        {
+          "page": 2,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:20.161Z"
+        },
+        {
+          "page": 3,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:20.453Z"
+        },
+        {
+          "page": 4,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:20.714Z"
+        },
+        {
+          "page": 5,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:21.042Z"
+        },
+        {
+          "page": 6,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:21.324Z"
+        },
+        {
+          "page": 7,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:21.614Z"
+        },
+        {
+          "page": 8,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:21.925Z"
+        },
+        {
+          "page": 9,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:22.239Z"
+        },
+        {
+          "page": 10,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:10:22.541Z"
+        },
+        {
+          "page": 11,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:32.083Z"
+        },
+        {
+          "page": 12,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:32.380Z"
+        },
+        {
+          "page": 13,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:32.691Z"
+        },
+        {
+          "page": 14,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:33.031Z"
+        },
+        {
+          "page": 15,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:33.352Z"
+        },
+        {
+          "page": 16,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:33.626Z"
+        },
+        {
+          "page": 17,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:34.011Z"
+        },
+        {
+          "page": 18,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:34.661Z"
+        },
+        {
+          "page": 19,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:34.976Z"
+        },
+        {
+          "page": 20,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:35.378Z"
+        },
+        {
+          "page": 21,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:11:35.751Z"
+        },
+        {
+          "page": 22,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:53.011Z"
+        },
+        {
+          "page": 23,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:54.228Z"
+        },
+        {
+          "page": 24,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:55.852Z"
+        },
+        {
+          "page": 25,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:56.930Z"
+        },
+        {
+          "page": 26,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:57.914Z"
+        },
+        {
+          "page": 27,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:58.554Z"
+        },
+        {
+          "page": 28,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:12:59.289Z"
+        },
+        {
+          "page": 29,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:00.236Z"
+        },
+        {
+          "page": 30,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:01.571Z"
+        },
+        {
+          "page": 31,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:02.281Z"
+        },
+        {
+          "page": 32,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:03.110Z"
+        },
+        {
+          "page": 33,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:03.886Z"
+        },
+        {
+          "page": 34,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:05.826Z"
+        },
+        {
+          "page": 35,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:06.856Z"
+        },
+        {
+          "page": 36,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:08.886Z"
+        },
+        {
+          "page": 37,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:09.806Z"
+        },
+        {
+          "page": 38,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:10.685Z"
+        },
+        {
+          "page": 39,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:13:11.428Z"
+        },
+        {
+          "page": 40,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:30.610Z"
+        },
+        {
+          "page": 41,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:31.582Z"
+        },
+        {
+          "page": 42,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:32.446Z"
+        },
+        {
+          "page": 43,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:34.024Z"
+        },
+        {
+          "page": 44,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:35.607Z"
+        },
+        {
+          "page": 45,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:37.063Z"
+        },
+        {
+          "page": 46,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:38.455Z"
+        },
+        {
+          "page": 47,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:39.703Z"
+        },
+        {
+          "page": 48,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:42.062Z"
+        },
+        {
+          "page": 49,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:43.061Z"
+        },
+        {
+          "page": 50,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:44.512Z"
+        },
+        {
+          "page": 51,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:45.547Z"
+        },
+        {
+          "page": 52,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:46.489Z"
+        },
+        {
+          "page": 53,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:47.277Z"
+        },
+        {
+          "page": 54,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:14:48.115Z"
+        },
+        {
+          "page": 55,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:21.733Z"
+        },
+        {
+          "page": 56,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:23.610Z"
+        },
+        {
+          "page": 57,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:25.534Z"
+        },
+        {
+          "page": 58,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:26.742Z"
+        },
+        {
+          "page": 59,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:27.833Z"
+        },
+        {
+          "page": 60,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:28.916Z"
+        },
+        {
+          "page": 61,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:30.461Z"
+        },
+        {
+          "page": 62,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:32.039Z"
+        },
+        {
+          "page": 63,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:33.204Z"
+        },
+        {
+          "page": 64,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:34.264Z"
+        },
+        {
+          "page": 65,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:35.362Z"
+        },
+        {
+          "page": 66,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:36.726Z"
+        },
+        {
+          "page": 67,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:37.826Z"
+        },
+        {
+          "page": 68,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:38.962Z"
+        },
+        {
+          "page": 69,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:40.590Z"
+        },
+        {
+          "page": 70,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:42.009Z"
+        },
+        {
+          "page": 71,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:43.723Z"
+        },
+        {
+          "page": 72,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:44.739Z"
+        },
+        {
+          "page": 73,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:45.914Z"
+        },
+        {
+          "page": 74,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:47.551Z"
+        },
+        {
+          "page": 75,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:49.535Z"
+        },
+        {
+          "page": 76,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:50.674Z"
+        },
+        {
+          "page": 77,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:52.037Z"
+        },
+        {
+          "page": 78,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:53.140Z"
+        },
+        {
+          "page": 79,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:54.163Z"
+        },
+        {
+          "page": 80,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:55.149Z"
+        },
+        {
+          "page": 81,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:56.432Z"
+        },
+        {
+          "page": 82,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:16:57.433Z"
+        },
+        {
+          "page": 83,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:17:54.596Z"
+        },
+        {
+          "page": 84,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:17:55.550Z"
+        },
+        {
+          "page": 85,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:17:57.218Z"
+        },
+        {
+          "page": 86,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:17:59.422Z"
+        },
+        {
+          "page": 87,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:01.328Z"
+        },
+        {
+          "page": 88,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:03.561Z"
+        },
+        {
+          "page": 89,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:04.742Z"
+        },
+        {
+          "page": 90,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:05.692Z"
+        },
+        {
+          "page": 91,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:06.687Z"
+        },
+        {
+          "page": 92,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:07.592Z"
+        },
+        {
+          "page": 93,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:08.608Z"
+        },
+        {
+          "page": 94,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:09.825Z"
+        },
+        {
+          "page": 95,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:11.167Z"
+        },
+        {
+          "page": 96,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:12.747Z"
+        },
+        {
+          "page": 97,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:14.030Z"
+        },
+        {
+          "page": 98,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:14.887Z"
+        },
+        {
+          "page": 99,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:15.749Z"
+        },
+        {
+          "page": 100,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:16.869Z"
+        },
+        {
+          "page": 101,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:19.258Z"
+        },
+        {
+          "page": 102,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:20.156Z"
+        },
+        {
+          "page": 103,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:21.302Z"
+        },
+        {
+          "page": 104,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:22.229Z"
+        },
+        {
+          "page": 105,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:23.084Z"
+        },
+        {
+          "page": 106,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:24.219Z"
+        },
+        {
+          "page": 107,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:25.628Z"
+        },
+        {
+          "page": 108,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:27.065Z"
+        },
+        {
+          "page": 109,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:28.597Z"
+        },
+        {
+          "page": 110,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:18:29.961Z"
+        },
+        {
+          "page": 111,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:51.562Z"
+        },
+        {
+          "page": 112,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:52.292Z"
+        },
+        {
+          "page": 113,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:52.975Z"
+        },
+        {
+          "page": 114,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:53.636Z"
+        },
+        {
+          "page": 115,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:54.384Z"
+        },
+        {
+          "page": 116,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:55.893Z"
+        },
+        {
+          "page": 117,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:56.578Z"
+        },
+        {
+          "page": 118,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:57.168Z"
+        },
+        {
+          "page": 119,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:57.805Z"
+        },
+        {
+          "page": 120,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:58.382Z"
+        },
+        {
+          "page": 121,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:19:59.096Z"
+        },
+        {
+          "page": 122,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:17.458Z"
+        },
+        {
+          "page": 123,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:18.010Z"
+        },
+        {
+          "page": 124,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:18.600Z"
+        },
+        {
+          "page": 125,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:19.201Z"
+        },
+        {
+          "page": 126,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:20.595Z"
+        },
+        {
+          "page": 127,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:21.203Z"
+        },
+        {
+          "page": 128,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:21.749Z"
+        },
+        {
+          "page": 129,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:22.379Z"
+        },
+        {
+          "page": 130,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:22.964Z"
+        },
+        {
+          "page": 131,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:23.642Z"
+        },
+        {
+          "page": 132,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:24.184Z"
+        },
+        {
+          "page": 133,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:24.739Z"
+        },
+        {
+          "page": 134,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:20:46.362Z"
+        },
+        {
+          "page": 135,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:21:09.060Z"
+        },
+        {
+          "page": 136,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:02.719Z"
+        },
+        {
+          "page": 137,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:49.134Z"
+        },
+        {
+          "page": 138,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:49.695Z"
+        },
+        {
+          "page": 139,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:50.330Z"
+        },
+        {
+          "page": 140,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:50.951Z"
+        },
+        {
+          "page": 141,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:51.539Z"
+        },
+        {
+          "page": 142,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:52.083Z"
+        },
+        {
+          "page": 143,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:52.773Z"
+        },
+        {
+          "page": 144,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:53.379Z"
+        },
+        {
+          "page": 145,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:53.947Z"
+        },
+        {
+          "page": 146,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:54.629Z"
+        },
+        {
+          "page": 147,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:55.393Z"
+        },
+        {
+          "page": 148,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:24:56.121Z"
+        },
+        {
+          "page": 149,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:50.500Z"
+        },
+        {
+          "page": 150,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:51.295Z"
+        },
+        {
+          "page": 151,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:51.954Z"
+        },
+        {
+          "page": 152,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:54.182Z"
+        },
+        {
+          "page": 153,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:54.970Z"
+        },
+        {
+          "page": 154,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:55.568Z"
+        },
+        {
+          "page": 155,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:56.152Z"
+        },
+        {
+          "page": 156,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:56.728Z"
+        },
+        {
+          "page": 157,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:57.270Z"
+        },
+        {
+          "page": 158,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:57.818Z"
+        },
+        {
+          "page": 159,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:26:58.600Z"
+        },
+        {
+          "page": 160,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:48.879Z"
+        },
+        {
+          "page": 161,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:50.333Z"
+        },
+        {
+          "page": 162,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:51.925Z"
+        },
+        {
+          "page": 163,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:53.312Z"
+        },
+        {
+          "page": 164,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:54.734Z"
+        },
+        {
+          "page": 165,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:56.182Z"
+        },
+        {
+          "page": 166,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:57.673Z"
+        },
+        {
+          "page": 167,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:27:59.164Z"
+        },
+        {
+          "page": 168,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:00.537Z"
+        },
+        {
+          "page": 169,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:01.914Z"
+        },
+        {
+          "page": 170,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:03.288Z"
+        },
+        {
+          "page": 171,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:05.458Z"
+        },
+        {
+          "page": 172,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:06.913Z"
+        },
+        {
+          "page": 173,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:08.339Z"
+        },
+        {
+          "page": 174,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:09.852Z"
+        },
+        {
+          "page": 175,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:11.280Z"
+        },
+        {
+          "page": 176,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:12.775Z"
+        },
+        {
+          "page": 177,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:14.211Z"
+        },
+        {
+          "page": 178,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:15.736Z"
+        },
+        {
+          "page": 179,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:17.134Z"
+        },
+        {
+          "page": 180,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:18.595Z"
+        },
+        {
+          "page": 181,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:20.029Z"
+        },
+        {
+          "page": 182,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:22.124Z"
+        },
+        {
+          "page": 183,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:23.600Z"
+        },
+        {
+          "page": 184,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:28:25.064Z"
+        },
+        {
+          "page": 185,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:30:19.510Z"
+        },
+        {
+          "page": 186,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:30:21.756Z"
+        },
+        {
+          "page": 187,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:30:23.387Z"
+        },
+        {
+          "page": 188,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:30:24.879Z"
+        },
+        {
+          "page": 189,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:30:47.407Z"
+        },
+        {
+          "page": 190,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:31:09.879Z"
+        },
+        {
+          "page": 191,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:16.631Z"
+        },
+        {
+          "page": 192,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:18.727Z"
+        },
+        {
+          "page": 193,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:20.224Z"
+        },
+        {
+          "page": 194,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:21.662Z"
+        },
+        {
+          "page": 195,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:23.102Z"
+        },
+        {
+          "page": 196,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:25.232Z"
+        },
+        {
+          "page": 197,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:26.782Z"
+        },
+        {
+          "page": 198,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:28.232Z"
+        },
+        {
+          "page": 199,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:29.560Z"
+        },
+        {
+          "page": 200,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:30.959Z"
+        },
+        {
+          "page": 201,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:32.407Z"
+        },
+        {
+          "page": 202,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:33.844Z"
+        },
+        {
+          "page": 203,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:42.657Z"
+        },
+        {
+          "page": 204,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:44.148Z"
+        },
+        {
+          "page": 205,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:45.579Z"
+        },
+        {
+          "page": 206,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:46.923Z"
+        },
+        {
+          "page": 207,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:48.255Z"
+        },
+        {
+          "page": 208,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:49.639Z"
+        },
+        {
+          "page": 209,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:51.187Z"
+        },
+        {
+          "page": 210,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:52.707Z"
+        },
+        {
+          "page": 211,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:54.047Z"
+        },
+        {
+          "page": 212,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:55.378Z"
+        },
+        {
+          "page": 213,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:57.526Z"
+        },
+        {
+          "page": 214,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:41:59.255Z"
+        },
+        {
+          "page": 215,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:18.170Z"
+        },
+        {
+          "page": 216,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:19.668Z"
+        },
+        {
+          "page": 217,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:21.144Z"
+        },
+        {
+          "page": 218,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:22.571Z"
+        },
+        {
+          "page": 219,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:24.080Z"
+        },
+        {
+          "page": 220,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:25.478Z"
+        },
+        {
+          "page": 221,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:26.905Z"
+        },
+        {
+          "page": 222,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:28.306Z"
+        },
+        {
+          "page": 223,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:29.665Z"
+        },
+        {
+          "page": 224,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:31.086Z"
+        },
+        {
+          "page": 225,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:32.517Z"
+        },
+        {
+          "page": 226,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:33.973Z"
+        },
+        {
+          "page": 227,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:35.446Z"
+        },
+        {
+          "page": 228,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:45.309Z"
+        },
+        {
+          "page": 229,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:46.675Z"
+        },
+        {
+          "page": 230,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:48.030Z"
+        },
+        {
+          "page": 231,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:49.471Z"
+        },
+        {
+          "page": 232,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:50.890Z"
+        },
+        {
+          "page": 233,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:52.361Z"
+        },
+        {
+          "page": 234,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:53.707Z"
+        },
+        {
+          "page": 235,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:55.202Z"
+        },
+        {
+          "page": 236,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:56.638Z"
+        },
+        {
+          "page": 237,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:42:58.762Z"
+        },
+        {
+          "page": 238,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:00.303Z"
+        },
+        {
+          "page": 239,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:01.807Z"
+        },
+        {
+          "page": 240,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:03.197Z"
+        },
+        {
+          "page": 241,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:04.630Z"
+        },
+        {
+          "page": 242,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:06.142Z"
+        },
+        {
+          "page": 243,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:07.683Z"
+        },
+        {
+          "page": 244,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:09.069Z"
+        },
+        {
+          "page": 245,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:10.449Z"
+        },
+        {
+          "page": 246,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:11.973Z"
+        },
+        {
+          "page": 247,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:13.467Z"
+        },
+        {
+          "page": 248,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:14.992Z"
+        },
+        {
+          "page": 249,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:16.436Z"
+        },
+        {
+          "page": 250,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:17.894Z"
+        },
+        {
+          "page": 251,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:19.330Z"
+        },
+        {
+          "page": 252,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:20.703Z"
+        },
+        {
+          "page": 253,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:22.198Z"
+        },
+        {
+          "page": 254,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:52.317Z"
+        },
+        {
+          "page": 255,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:53.732Z"
+        },
+        {
+          "page": 256,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:55.166Z"
+        },
+        {
+          "page": 257,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:56.665Z"
+        },
+        {
+          "page": 258,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:58.186Z"
+        },
+        {
+          "page": 259,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:43:59.738Z"
+        },
+        {
+          "page": 260,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:01.219Z"
+        },
+        {
+          "page": 261,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:02.697Z"
+        },
+        {
+          "page": 262,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:04.248Z"
+        },
+        {
+          "page": 263,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:05.813Z"
+        },
+        {
+          "page": 264,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:07.304Z"
+        },
+        {
+          "page": 265,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:08.815Z"
+        },
+        {
+          "page": 266,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:10.371Z"
+        },
+        {
+          "page": 267,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:11.850Z"
+        },
+        {
+          "page": 268,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:13.317Z"
+        },
+        {
+          "page": 269,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:14.912Z"
+        },
+        {
+          "page": 270,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:16.327Z"
+        },
+        {
+          "page": 271,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:17.844Z"
+        },
+        {
+          "page": 272,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:19.359Z"
+        },
+        {
+          "page": 273,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:20.773Z"
+        },
+        {
+          "page": 274,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:22.230Z"
+        },
+        {
+          "page": 275,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:23.684Z"
+        },
+        {
+          "page": 276,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:25.824Z"
+        },
+        {
+          "page": 277,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:27.232Z"
+        },
+        {
+          "page": 278,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:28.691Z"
+        },
+        {
+          "page": 279,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:50.031Z"
+        },
+        {
+          "page": 280,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:51.535Z"
+        },
+        {
+          "page": 281,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:53.021Z"
+        },
+        {
+          "page": 282,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:56.318Z"
+        },
+        {
+          "page": 283,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:57.753Z"
+        },
+        {
+          "page": 284,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:44:59.206Z"
+        },
+        {
+          "page": 285,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:00.647Z"
+        },
+        {
+          "page": 286,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:02.134Z"
+        },
+        {
+          "page": 287,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:03.666Z"
+        },
+        {
+          "page": 288,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:05.141Z"
+        },
+        {
+          "page": 289,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:06.576Z"
+        },
+        {
+          "page": 290,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:08.008Z"
+        },
+        {
+          "page": 291,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:09.516Z"
+        },
+        {
+          "page": 292,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:10.998Z"
+        },
+        {
+          "page": 293,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:12.420Z"
+        },
+        {
+          "page": 294,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:13.984Z"
+        },
+        {
+          "page": 295,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:15.519Z"
+        },
+        {
+          "page": 296,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:17.069Z"
+        },
+        {
+          "page": 297,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:18.546Z"
+        },
+        {
+          "page": 298,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:21.028Z"
+        },
+        {
+          "page": 299,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:22.527Z"
+        },
+        {
+          "page": 300,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:24.203Z"
+        },
+        {
+          "page": 301,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:25.758Z"
+        },
+        {
+          "page": 302,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:53.675Z"
+        },
+        {
+          "page": 303,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:55.072Z"
+        },
+        {
+          "page": 304,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:56.483Z"
+        },
+        {
+          "page": 305,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:57.952Z"
+        },
+        {
+          "page": 306,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:45:59.437Z"
+        },
+        {
+          "page": 307,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:00.854Z"
+        },
+        {
+          "page": 308,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:02.385Z"
+        },
+        {
+          "page": 309,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:03.867Z"
+        },
+        {
+          "page": 310,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:06.002Z"
+        },
+        {
+          "page": 311,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:07.409Z"
+        },
+        {
+          "page": 312,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:08.954Z"
+        },
+        {
+          "page": 313,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:10.444Z"
+        },
+        {
+          "page": 314,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:11.920Z"
+        },
+        {
+          "page": 315,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:13.469Z"
+        },
+        {
+          "page": 316,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:14.931Z"
+        },
+        {
+          "page": 317,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:16.362Z"
+        },
+        {
+          "page": 318,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:17.801Z"
+        },
+        {
+          "page": 319,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:19.309Z"
+        },
+        {
+          "page": 320,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:20.794Z"
+        },
+        {
+          "page": 321,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:22.237Z"
+        },
+        {
+          "page": 322,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:23.710Z"
+        },
+        {
+          "page": 323,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:25.216Z"
+        },
+        {
+          "page": 324,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:26.672Z"
+        },
+        {
+          "page": 325,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:28.114Z"
+        },
+        {
+          "page": 326,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:29.614Z"
+        },
+        {
+          "page": 327,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:50.969Z"
+        },
+        {
+          "page": 328,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:52.397Z"
+        },
+        {
+          "page": 329,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:53.898Z"
+        },
+        {
+          "page": 330,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:55.336Z"
+        },
+        {
+          "page": 331,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:56.787Z"
+        },
+        {
+          "page": 332,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:58.394Z"
+        },
+        {
+          "page": 333,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:46:59.893Z"
+        },
+        {
+          "page": 334,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:01.424Z"
+        },
+        {
+          "page": 335,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:03.578Z"
+        },
+        {
+          "page": 336,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:05.035Z"
+        },
+        {
+          "page": 337,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:06.540Z"
+        },
+        {
+          "page": 338,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:08.065Z"
+        },
+        {
+          "page": 339,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:09.503Z"
+        },
+        {
+          "page": 340,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:11.006Z"
+        },
+        {
+          "page": 341,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:12.595Z"
+        },
+        {
+          "page": 342,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:14.092Z"
+        },
+        {
+          "page": 343,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:15.531Z"
+        },
+        {
+          "page": 344,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:16.969Z"
+        },
+        {
+          "page": 345,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:18.440Z"
+        },
+        {
+          "page": 346,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:19.880Z"
+        },
+        {
+          "page": 347,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:21.371Z"
+        },
+        {
+          "page": 348,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:22.798Z"
+        },
+        {
+          "page": 349,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:24.223Z"
+        },
+        {
+          "page": 350,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:25.690Z"
+        },
+        {
+          "page": 351,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:47:27.234Z"
+        },
+        {
+          "page": 352,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:03.330Z"
+        },
+        {
+          "page": 353,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:04.786Z"
+        },
+        {
+          "page": 354,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:06.236Z"
+        },
+        {
+          "page": 355,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:07.692Z"
+        },
+        {
+          "page": 356,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:09.173Z"
+        },
+        {
+          "page": 357,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:10.677Z"
+        },
+        {
+          "page": 358,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:12.160Z"
+        },
+        {
+          "page": 359,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:13.885Z"
+        },
+        {
+          "page": 360,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:15.393Z"
+        },
+        {
+          "page": 361,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:16.840Z"
+        },
+        {
+          "page": 362,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:18.484Z"
+        },
+        {
+          "page": 363,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:19.971Z"
+        },
+        {
+          "page": 364,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:21.468Z"
+        },
+        {
+          "page": 365,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:22.957Z"
+        },
+        {
+          "page": 366,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:24.373Z"
+        },
+        {
+          "page": 367,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:26.170Z"
+        },
+        {
+          "page": 368,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:27.734Z"
+        },
+        {
+          "page": 369,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:29.175Z"
+        },
+        {
+          "page": 370,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:30.662Z"
+        },
+        {
+          "page": 371,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:32.211Z"
+        },
+        {
+          "page": 372,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:33.673Z"
+        },
+        {
+          "page": 373,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:35.152Z"
+        },
+        {
+          "page": 374,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:36.678Z"
+        },
+        {
+          "page": 375,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:48:38.190Z"
+        },
+        {
+          "page": 376,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:13.792Z"
+        },
+        {
+          "page": 377,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:15.318Z"
+        },
+        {
+          "page": 378,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:16.959Z"
+        },
+        {
+          "page": 379,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:18.514Z"
+        },
+        {
+          "page": 380,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:20.024Z"
+        },
+        {
+          "page": 381,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:21.633Z"
+        },
+        {
+          "page": 382,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:23.100Z"
+        },
+        {
+          "page": 383,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:24.665Z"
+        },
+        {
+          "page": 384,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:27.188Z"
+        },
+        {
+          "page": 385,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:28.647Z"
+        },
+        {
+          "page": 386,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:30.151Z"
+        },
+        {
+          "page": 387,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:31.685Z"
+        },
+        {
+          "page": 388,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:33.118Z"
+        },
+        {
+          "page": 389,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:34.676Z"
+        },
+        {
+          "page": 390,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:36.131Z"
+        },
+        {
+          "page": 391,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:37.680Z"
+        },
+        {
+          "page": 392,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:39.229Z"
+        },
+        {
+          "page": 393,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:40.945Z"
+        },
+        {
+          "page": 394,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:42.391Z"
+        },
+        {
+          "page": 395,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:43.875Z"
+        },
+        {
+          "page": 396,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:46.185Z"
+        },
+        {
+          "page": 397,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:47.706Z"
+        },
+        {
+          "page": 398,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:49:49.192Z"
+        },
+        {
+          "page": 399,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:50:23.490Z"
+        },
+        {
+          "page": 400,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:50:45.919Z"
+        },
+        {
+          "page": 401,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:51:08.484Z"
+        },
+        {
+          "page": 402,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:52:57.605Z"
+        },
+        {
+          "page": 403,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:05.763Z"
+        },
+        {
+          "page": 404,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:07.287Z"
+        },
+        {
+          "page": 405,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:08.829Z"
+        },
+        {
+          "page": 406,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:10.289Z"
+        },
+        {
+          "page": 407,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:12.081Z"
+        },
+        {
+          "page": 408,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:14.195Z"
+        },
+        {
+          "page": 409,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:15.757Z"
+        },
+        {
+          "page": 410,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:17.233Z"
+        },
+        {
+          "page": 411,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:18.785Z"
+        },
+        {
+          "page": 412,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:20.334Z"
+        },
+        {
+          "page": 413,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:21.965Z"
+        },
+        {
+          "page": 414,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:23.438Z"
+        },
+        {
+          "page": 415,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:41.703Z"
+        },
+        {
+          "page": 416,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:43.299Z"
+        },
+        {
+          "page": 417,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:44.870Z"
+        },
+        {
+          "page": 418,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:46.393Z"
+        },
+        {
+          "page": 419,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:47.933Z"
+        },
+        {
+          "page": 420,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:49.604Z"
+        },
+        {
+          "page": 421,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:51.132Z"
+        },
+        {
+          "page": 422,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:52.743Z"
+        },
+        {
+          "page": 423,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:54.277Z"
+        },
+        {
+          "page": 424,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:55.791Z"
+        },
+        {
+          "page": 425,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:57.263Z"
+        },
+        {
+          "page": 426,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:54:58.881Z"
+        },
+        {
+          "page": 427,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:00.465Z"
+        },
+        {
+          "page": 428,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:01.992Z"
+        },
+        {
+          "page": 429,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:03.701Z"
+        },
+        {
+          "page": 430,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:05.224Z"
+        },
+        {
+          "page": 431,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:06.719Z"
+        },
+        {
+          "page": 432,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:08.265Z"
+        },
+        {
+          "page": 433,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:09.950Z"
+        },
+        {
+          "page": 434,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:11.451Z"
+        },
+        {
+          "page": 435,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:13.056Z"
+        },
+        {
+          "page": 436,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:14.674Z"
+        },
+        {
+          "page": 437,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:16.168Z"
+        },
+        {
+          "page": 438,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:17.631Z"
+        },
+        {
+          "page": 439,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:21.869Z"
+        },
+        {
+          "page": 440,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:23.368Z"
+        },
+        {
+          "page": 441,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:24.887Z"
+        },
+        {
+          "page": 442,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:55:47.465Z"
+        },
+        {
+          "page": 443,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:58:11.414Z"
+        },
+        {
+          "page": 444,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:58:37.800Z"
+        },
+        {
+          "page": 445,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:58:59.694Z"
+        },
+        {
+          "page": 446,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:59:21.601Z"
+        },
+        {
+          "page": 447,
+          "rows": 100,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T10:59:43.475Z"
+        },
+        {
+          "page": 448,
+          "rows": 31,
+          "stated_total": 44731,
+          "captured_at": "2026-10-10T11:00:06.015Z"
+        }
+      ]
+    },
+    "histrion": {
+      "file": "male-actors.csv",
+      "dimension": "maleActors",
+      "source_url": "https://avwikidb.com/histrion/",
+      "page_count": 4,
+      "observed_rows": 379,
+      "excluded_invalid_source_ids": 7,
+      "unique_ids": 379,
+      "unique_names": 379,
+      "duplicate_id_rows": 0,
+      "duplicate_page_pairs": [],
+      "changed_names_for_duplicate_ids": 0,
+      "observed_source_totals": [
+        386
+      ],
+      "unique_count_matches_observed_total": false,
+      "pages_complete": true,
+      "translated_rows": 0,
+      "formula_like_names": 0,
+      "sha256": "e56022961c4bc5cb337aa2f28ee423051c678f4ca868d47dbccab06a5cc7848c",
+      "bytes": 38433,
+      "pages": [
+        {
+          "page": 1,
+          "rows": 100,
+          "stated_total": 386,
+          "captured_at": "2026-10-10T10:32:01.483Z"
+        },
+        {
+          "page": 2,
+          "rows": 99,
+          "stated_total": 386,
+          "captured_at": "2026-10-10T10:41:08.309Z"
+        },
+        {
+          "page": 3,
+          "rows": 98,
+          "stated_total": 386,
+          "captured_at": "2026-10-10T10:41:10.556Z"
+        },
+        {
+          "page": 4,
+          "rows": 82,
+          "stated_total": 386,
+          "captured_at": "2026-10-10T10:41:11.821Z"
+        }
+      ]
+    }
+  },
+  "portraits": {
+    "file": "portraits.json",
+    "bytes": 882399,
+    "sha256": "9f7e39a1bf32222105aa1081e018b479a0463dea662c4531ca280d03686eecaa",
+    "links": {
+      "actresses": 13807,
+      "maleActors": 0
+    },
+    "images_bundled": false
+  }
+}

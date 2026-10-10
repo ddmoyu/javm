@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh-CN" data-mantine-color-scheme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="icon" type="image/x-icon" href="/icon.ico" />
+    <title>JAVM</title>
+    <style>
+      /* 首屏不依赖 React 或外部样式，颜色与 theme.ts 的默认主题保持一致。 */
+      html {
+        background: #110813;
+        color-scheme: dark;
+      }
+      html[data-mantine-color-scheme="light"] {
+        background: #fbf3f6;
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+      }
+      #startup {
+        position: fixed;
+        inset: 0;
+        z-index: 100001;
+        display: grid;
+        place-content: center;
+        padding: 32px;
+        background: #110813;
+        color: #f3e8ef;
+        font:
+          14px/1.6 "Segoe UI Variable",
+          "Segoe UI",
+          "Microsoft YaHei UI",
+          sans-serif;
+        text-align: center;
+      }
+      #startup[hidden] {
+        display: none;
+      }
+      #startup strong {
+        color: #ff2672;
+        font-size: 24px;
+        letter-spacing: 0.08em;
+      }
+      #startup button {
+        margin: 12px auto 0;
+        padding: 8px 24px;
+        border: 1px solid currentColor;
+        border-radius: 24px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        cursor: pointer;
+      }
+      html[data-mantine-color-scheme="light"] #startup {
+        background: #fbf3f6;
+        color: #2b1a2c;
+      }
+      html[data-mantine-color-scheme="light"] #startup strong {
+        color: #d90b5b;
+      }
+    </style>
+  </head>
+  <body>
+    <section id="startup" aria-label="应用启动">
+      <strong>JAVM</strong>
+      <p id="startup-status" role="status" aria-live="polite">正在启动…</p>
+      <button id="startup-retry" type="button" hidden>重新加载</button>
+      <noscript>无法运行界面脚本，请重新打开应用。</noscript>
+    </section>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "native",
+      "displayName": "Native development",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows x64 / MSVC",
+      "inherits": "native",
+      "environment": { "VSLANG": "1033" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 / Release portable",
+      "inherits": "windows-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "native", "configurePreset": "native" },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc" },
+    { "name": "windows-release", "configurePreset": "windows-release" }
+  ]
+}

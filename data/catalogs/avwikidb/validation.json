@@ -1,0 +1,69 @@
+{
+  "director": {
+    "rows": 5903,
+    "pages": 60,
+    "encoding": "UTF-8 BOM",
+    "unique_ids": true,
+    "source_text_roundtrip": true,
+    "hash_matches": true,
+    "translated_rows": 0,
+    "source_totals": [
+      5902,
+      5903
+    ],
+    "count_matches_observed_total": true
+  },
+  "maker": {
+    "rows": 5450,
+    "pages": 55,
+    "encoding": "UTF-8 BOM",
+    "unique_ids": true,
+    "source_text_roundtrip": true,
+    "hash_matches": true,
+    "translated_rows": 0,
+    "source_totals": [
+      5450
+    ],
+    "count_matches_observed_total": true
+  },
+  "series": {
+    "rows": 49388,
+    "pages": 494,
+    "encoding": "UTF-8 BOM",
+    "unique_ids": true,
+    "source_text_roundtrip": true,
+    "hash_matches": true,
+    "translated_rows": 0,
+    "source_totals": [
+      49378,
+      49389
+    ],
+    "count_matches_observed_total": false
+  },
+  "actor": {
+    "rows": 44731,
+    "pages": 448,
+    "encoding": "UTF-8 BOM",
+    "unique_ids": true,
+    "source_text_roundtrip": true,
+    "hash_matches": true,
+    "translated_rows": 0,
+    "source_totals": [
+      44731
+    ],
+    "count_matches_observed_total": true
+  },
+  "histrion": {
+    "rows": 379,
+    "pages": 4,
+    "encoding": "UTF-8 BOM",
+    "unique_ids": true,
+    "source_text_roundtrip": true,
+    "hash_matches": true,
+    "translated_rows": 0,
+    "source_totals": [
+      386
+    ],
+    "count_matches_observed_total": false
+  }
+}

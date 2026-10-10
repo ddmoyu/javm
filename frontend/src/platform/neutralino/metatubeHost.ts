@@ -1,0 +1,90 @@
+import { filesystem } from "@neutralinojs/lib";
+import { record, text } from "../../services/metadata/shared";
+import type { MetaTubeHost } from "../../services/metadata/MetaTubeService";
+import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
+import { runNativeProcess } from "./process";
+import { runPowerShell } from "./metadataHttp";
+
+export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHost {
+  const root = () => `${window.NL_DATAPATH}/metatube`;
+  const directory = async () => {
+    try {
+      await filesystem.getStats(root());
+    } catch {
+      await filesystem.createDirectory(root());
+    }
+    return root();
+  };
+  return {
+    async bundled() {
+      // The executable belongs to the application package; user data holds only its database.
+      const base = `${(window as unknown as { NL_PATH: string }).NL_PATH}/bin/tools/metatube`;
+      const path = `${base}/metatube-server.exe`;
+      try {
+        const stats = await filesystem.getStats(path);
+        if (!stats.isFile) throw new Error("内置 MetaTube 程序无效，请重新获取 JAVM 运行包。");
+        const manifest = await filesystem.getStats(`${base}/installed.json`);
+        if (!manifest.isFile || manifest.size > 4096)
+          throw new Error("内置 MetaTube 版本记录无效，请重新获取 JAVM 运行包。");
+        const entry = record(
+          JSON.parse(await filesystem.readFile(`${base}/installed.json`)) as unknown,
+        );
+        const version = text(entry.version, 80);
+        if (!/^v\d+\.\d+\.\d+$/.test(version))
+          throw new Error("内置 MetaTube 版本记录无效，请重新获取 JAVM 运行包。");
+        return { path, version };
+      } catch (error) {
+        if ((error as { code?: string }).code === "NE_FS_NOPATHE") return;
+        throw error;
+      }
+    },
+    async start(path, signal) {
+      if (!(await filesystem.getStats(path)).isFile)
+        throw new Error("内置 MetaTube 组件缺失，请完整解压或重新获取 JAVM 运行包。");
+      const base = await directory();
+      const port = Number(
+        await runPowerShell(
+          "$l=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); try { $l.Start(); [Console]::Write($l.LocalEndpoint.Port) } finally { $l.Stop() }",
+          signal,
+        ),
+      );
+      if (!Number.isInteger(port) || port < 1024 || port > 65535)
+        throw new Error("无法分配 MetaTube 本地端口。");
+      const token = crypto.randomUUID() + crypto.randomUUID(),
+        abort = new AbortController();
+      const proxy = await network.getProxy();
+      signal.throwIfAborted();
+      const exited = runNativeProcess(
+        path,
+        [
+          "-bind",
+          "127.0.0.1",
+          "-port",
+          String(port),
+          "-token",
+          token,
+          "-dsn",
+          `${base}/metatube.db`,
+          "-request-timeout",
+          "20s",
+        ],
+        abort.signal,
+        undefined,
+        true,
+        { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, ALL_PROXY: "", NO_PROXY: "127.0.0.1,localhost" },
+      ).then(() => {});
+      // 进程 Promise 覆盖全部运行期，外部取消只停止本次创建的进程树。
+      void exited.catch(() => {});
+      return {
+        endpoint: `http://127.0.0.1:${port}`,
+        token,
+        exited,
+        isNetworkCurrent: async () => proxy === (await network.getProxy()),
+        async stop() {
+          abort.abort();
+          await exited;
+        },
+      };
+    },
+  };
+}

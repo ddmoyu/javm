@@ -1,0 +1,60 @@
+{
+  "mediainfo": {
+    "version": "26.10",
+    "profile": "javm-lite-1",
+    "file": "libmediainfo_26.10_AllInclusive.7z",
+    "url": "https://mediaarea.net/download/source/libmediainfo/26.10/libmediainfo_26.10_AllInclusive.7z",
+    "sha256": "4af638ec0da9a81736a0ff02294f55edd91acf385cb4e3f8a0dd0b2f2d88fbed",
+    "zenlibVersion": "0.4.41",
+    "zlibVersion": "1.3.2",
+    "disabledFeatures": ["LIBCURL", "LIBMMS", "EXPORT", "GRAPHVIZ", "TRACE"]
+  },
+  "ffmpeg": {
+    "version": "8.0.1-javm-lite-2",
+    "profile": "javm-lite-2",
+    "file": "ffmpeg-8.0.1.tar.xz",
+    "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
+    "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
+    "directory": "ffmpeg-8.0.1"
+  },
+  "ffmpegReference": {
+    "version": "javm-ffmpeg-n8.0.1-20260315-153157",
+    "buildOnly": true,
+    "file": "javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+    "url": "https://github.com/ddmoyu/ffmepg/releases/download/javm-ffmpeg-n8.0.1-20260315-153157/javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+    "sha256": "da3fc84e6e5a6fd8447658c8fd6f96807932d67e7d76a52d3698c7cbf171e2ff",
+    "directory": "javm-ffmpeg-windows-x64"
+  },
+  "msysMake": {
+    "version": "4.4.1-3",
+    "buildOnly": true,
+    "file": "make-4.4.1-3-x86_64.pkg.tar.zst",
+    "url": "https://repo.msys2.org/msys/x86_64/make-4.4.1-3-x86_64.pkg.tar.zst",
+    "mirrors": [
+      "https://mirrors.tuna.tsinghua.edu.cn/msys2/msys/x86_64/make-4.4.1-3-x86_64.pkg.tar.zst"
+    ],
+    "sha256": "af0bdba17f06fe037f0194069adaa31a8fe45f1a11381501896aea1fae37bd5d",
+    "directory": "usr/bin"
+  },
+  "curl": {
+    "version": "8.22.0-msvc-unicode-schannel",
+    "file": "curl-8.22.0.tar.xz",
+    "url": "https://curl.se/download/curl-8.22.0.tar.xz",
+    "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7",
+    "directory": "curl-8.22.0"
+  },
+  "metatube": {
+    "version": "v1.4.0",
+    "file": "metatube-server-v1.4.0-windows-amd64.zip",
+    "url": "https://github.com/metatube-community/metatube-server-releases/releases/download/v1.4.0/metatube-server-windows-amd64.zip",
+    "sha256": "2c08b0cec781030504c4cd70ececd3618dbf18847ed488ab5e12783dd1d267e6",
+    "directory": "."
+  },
+  "downloader": {
+    "version": "0.6.0-beta",
+    "file": "N_m3u8DL-RE_v0.6.0-beta_win-x64_20260629.zip",
+    "url": "https://github.com/nilaoda/N_m3u8DL-RE/releases/download/v0.6.0-beta/N_m3u8DL-RE_v0.6.0-beta_win-x64_20260629.zip",
+    "sha256": "3825fd42ee502f98a9378f6fdddb2f7822709f521806214f466db6935c950f1a",
+    "directory": "."
+  }
+}

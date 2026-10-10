@@ -1,0 +1,37 @@
+JAVM 1.0.0 · Windows x64 离线运行包
+
+1. 将整个压缩包解压到本机可写目录，双击 JAVM.exe。
+   请保留 bin 和 resources 目录，不要在压缩软件内部直接运行。
+2. 无需安装 Node.js、pnpm、Python、.NET SDK 或 Visual Studio。
+   运行环境基于 Windows 10/11 x64，使用系统自带 Windows PowerShell 5.1。
+   界面由 Neutralino 调用系统已安装的 WebView2 Runtime，本包不携带运行时。
+   Windows 11 预装；大多数 Windows 10 已安装。缺少时需要先安装微软的
+   Evergreen WebView2 Runtime；无网设备请提前准备其离线安装程序。
+   内含数据库扩展、精简 MediaInfo、N_m3u8DL-RE、
+   精简 FFmpeg、curl 和 MetaTube，程序会自动查找包内工具。
+3. 本地片库、扫描和本地视频播放可离线使用。
+   下载网络视频、MetaTube 在线查询、AI 接口调用仍需要对应网络服务。
+   AI 默认关闭，需要在“设置 → AI 辅助”配置地址、模型和自己的密钥。
+   MetaTube 已内置，在“设置 → 刮削与资料”点击启动即可，
+   无需单独下载安装或选择程序路径；组件版本随 JAVM 运行包更新。
+4. 关闭主窗口默认进入托盘；彻底退出请用托盘菜单“退出 JAVM”。
+5. 个人资料保存在当前 Windows 用户的数据目录，与程序目录分开。
+   本包不含个人数据库、下载记录或 API 密钥。更换包不会清空已有资料。
+6. 内置播放器依赖 WebView2 支持的编码；不支持的编码可在播放设置中
+   指定已安装的外部播放器。FFmpeg 使用参考老版配置的精简构建，
+   保留 MP4 无损合并、媒体探测和 JPEG 抽帧，不带通用视频转码功能。
+7. package-manifest.json 记录组件版本、来源及每个文件的 SHA-256。
+   可在此目录运行以下命令检查解压完整性：
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Verify-Package.ps1
+
+第三方许可证在 bin/licenses；WebView2 由系统安装及更新。
+MediaInfo 保留原有格式解析器，关闭网络读取、报告导出、图形输出、
+详细跟踪；来源和构建配置见 bin/mediainfo-lite.json。
+WebView2 官方下载及分发说明：
+https://developer.microsoft.com/microsoft-edge/webview2/
+https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
+FFmpeg 构建及源代码说明：
+bin/licenses/ffmpeg-lite（许可证、构建脚本、配置和参考解码器列表）
+bin/tools/ffmpeg-lite.json（来源、裁剪配置标识和二进制校验值）
+https://github.com/ddmoyu/ffmepg/releases/tag/javm-ffmpeg-n8.0.1-20260315-153157
+https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz

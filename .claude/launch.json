@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "prototype-v1",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["prototype"],
+      "port": 5174
+    },
+    {
+      "name": "prototype-velvet",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["prototype:velvet"],
+      "port": 5175
+    }
+  ]
+}

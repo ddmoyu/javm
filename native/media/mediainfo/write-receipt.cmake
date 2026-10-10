@@ -1,0 +1,5 @@
+file(READ "${DEPENDENCIES}" dependencies)
+string(JSON source GET "${dependencies}" mediainfo)
+file(SIZE "${BINARY}" bytes)
+file(SHA256 "${BINARY}" sha256)
+file(WRITE "${OUTPUT}" "{\n  \"source\": ${source},\n  \"buildType\": \"${BUILD_TYPE}\",\n  \"compiler\": \"${COMPILER}\",\n  \"binary\": {\"name\": \"MediaInfo.dll\", \"bytes\": ${bytes}, \"sha256\": \"${sha256}\"}\n}\n")
