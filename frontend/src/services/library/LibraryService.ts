@@ -17,6 +17,8 @@ import type { DiscoveryCatalogService } from "../catalog/DiscoveryCatalogService
 import { isCatalogDimension } from "../catalog/discoveryData";
 import type { CatalogDimension } from "../catalog/discoveryData";
 
+import type { ResourceRecord, SavedResource } from "../streamResolution/archive";
+
 export interface LibraryPort {
   request<T>(method: string, params?: unknown): Promise<T>;
   mount(
@@ -385,6 +387,17 @@ export class LibraryService {
     } finally {
       this.favoritePending.delete(id);
     }
+  }
+  async readResources(code: string, workId?: string) {
+    await this.initialize();
+    return this.requirePort().request<SavedResource[]>("library.resources.read", { code, workId });
+  }
+  async saveResource(record: ResourceRecord) {
+    await this.initialize();
+    await this.requirePort().request("library.resources.save", record);
+  }
+  async removeResource(id: string) {
+    await this.requirePort().request("library.resources.remove", { id });
   }
   async updateMetadata(
     id: Film["id"],

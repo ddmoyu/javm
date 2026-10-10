@@ -30,6 +30,7 @@ import { FilmArtworkEditor } from "./FilmArtworkEditor";
 import type { ArtworkMode } from "./FilmArtworkEditor";
 import { FilmEditor } from "./FilmEditor";
 import { FilmResources } from "./FilmResources";
+import { ResourceLookupButton } from "../resources/ResourceSearch";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
 import { os } from "@neutralinojs/lib";
 import { libraryError } from "../../services/library/LibraryService";
@@ -62,6 +63,7 @@ function FilmDetailContent({
     toggleFavorite,
     library,
     add,
+    resourceSearch,
   } = useWorkspace();
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -316,6 +318,16 @@ function FilmDetailContent({
                 收藏并保存资料
               </Button>
             )}
+            {tab !== "links" && resourceSearch && (
+              <Group>
+                <ResourceLookupButton
+                  service={resourceSearch}
+                  code={film.code}
+                  workId={preview ? undefined : String(film.id)}
+                  onStart={() => setTab("links")}
+                />
+              </Group>
+            )}
             {!preview && (
               <Group gap="sm">
                 <Button
@@ -380,7 +392,7 @@ function FilmDetailContent({
         <Tabs value={tab} onChange={setTab} mt="xl">
           <Tabs.List mb="lg">
             <Tabs.Tab value="info">资料与截图</Tabs.Tab>
-            {!preview && <Tabs.Tab value="links">资源链接</Tabs.Tab>}
+            <Tabs.Tab value="links">资源链接</Tabs.Tab>
             {!preview && <Tabs.Tab value="files">本地文件</Tabs.Tab>}
           </Tabs.List>
           <Tabs.Panel value="info">
@@ -410,17 +422,9 @@ function FilmDetailContent({
               </Stack>
             )}
           </Tabs.Panel>
-          {!preview && (
-            <Tabs.Panel value="links">
-              <FilmResources
-                film={film}
-                onSearch={() => {
-                  onClose();
-                  scrape(film, "links");
-                }}
-              />
-            </Tabs.Panel>
-          )}
+          <Tabs.Panel value="links">
+            <FilmResources film={film} preview={preview} />
+          </Tabs.Panel>
           {!preview && (
             <Tabs.Panel value="files">
               {film.files?.length ? (

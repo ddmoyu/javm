@@ -111,18 +111,28 @@ Store::~Store() { if(db_) sqlite3_close(db_); }
 void Store::migrate() {
     const auto version=rows(db_,"PRAGMA user_version")[0]["user_version"];
     const auto application=rows(db_,"PRAGMA application_id")[0]["application_id"];
-    if(version==1 && application==1245793585) return;
+    if(version==1 && application==1245793585) {
+        // Additive tables preserve the existing work model and user data.
+        exec(db_,
+#include "library_features_schema.inc"
+        );
+        return;
+    }
     if(version!=0 || application!=0 || !rows(db_,"SELECT name FROM sqlite_master WHERE type='table'").empty())
         throw std::runtime_error("这不是 JAVM 1.0 片库。原文件已保留；0.5.3 数据请使用旧版迁移入口导入。");
     Transaction transaction(db_);
     exec(db_,
 #include "library_schema.inc"
     );
+    exec(db_,
+#include "library_features_schema.inc"
+    );
     transaction.commit();
 }
 #include "store_library.inc"
 #include "store_scrape.inc"
 #include "store_import.inc"
+#include "store_resources.inc"
 Json Store::playbackPosition(const Json& params) {
     const auto key = params.at("key").get<std::string>();
     if (key.size() != 64 || key.find_first_not_of("0123456789abcdef") != std::string::npos)

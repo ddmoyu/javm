@@ -43,6 +43,7 @@ public:
     Json video(const std::string& id);
     bool duplicateCode(const std::string& code, const std::string& except);
     void favorite(const std::string& id, bool value);
+    Json resources(const std::string& method, const Json& params);
     void updateMetadata(const Json& params);
     Json applyScrape(const Json& params, const std::atomic_bool& cancelled);
     Json playbackPosition(const Json& params);

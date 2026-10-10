@@ -422,6 +422,8 @@ TS 使用 `extensions.dispatch` 发送数据库业务事件。扩展通过官方
 
 2026-10-10 取流按用户授权完成“番号＋来源 → 对应资源页 → 隐藏 Neutralino 捕获 → 退出 → HLS 检查 → 结果显示 → 下载交接”，不继续扩展 HTTP 网页解析，磁力暂不开发。窗口不显示是硬条件，短暂焦点事件作为已接受限制；采用 Win32 显式隐藏启动、Job Object 进程树回收和 WebView2 本机 CDP 网络监听，不增加 WebView 库。成功、失败、超时、取消及应用退出都回收本任务实例。已完成安全 mock 桌面闭环与 7 项新增测试，真实内容站点和发布包未验证。架构见 [ADR 0010](decisions/0010-resource-lookup.md)，当前范围见 [m3u8 获取方案](plans/2026-10-10-m3u8-resolution.md) 与 [闭环验证](verification/2026-10-10-resource-lookup.md)；历史证据见 [隐藏宿主选型](verification/2026-10-10-hidden-webview-selection.md) 和 [HTTP 阶段记录](verification/2026-10-10-stream-resolution-http.md)。
 
+同日按用户纠正，搜索入口统一为“番号／片名 → 合并相同影片 → 详情 → 获取资源链接”，移除“视频资源／影片资料”二级切换及手选来源。后台按持久化成功率与成功次数自动排序来源，找到即显示并继续追加不同链接；链接平铺展示分辨率、像素尺寸及可用时长，可复制或加入既有下载模块。仅片名不能确定番号时不猜测。具体规则与本次新增 8 项安全 mock、定向检查的验证边界见 [ADR 0010](decisions/0010-resource-lookup.md)。
+
 ## 十一 文件、外部工具与媒体播放
 
 ### 文件操作

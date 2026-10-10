@@ -1,26 +1,26 @@
 import { useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { Ref } from "react";
-import { Button, Group, SegmentedControl, Tabs, Text } from "@mantine/core";
+import { Button, Group, Tabs, Text } from "@mantine/core";
 import type { Film } from "../../contracts/media";
 import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
 import { BatchScraper } from "./BatchScraper";
 import { MetaTubeSearch } from "./MetaTubeSearch";
-import { ResourceSearch } from "./ResourceSearch";
 import { FilmDetail } from "../films/FilmDetail";
 import { movieDetailsToFilm } from "./movieDetailsFilm";
 import type { ScrapeTask } from "../../contracts/scraping";
 import type { MovieCandidate } from "../../services/metadata/MetaTubeService";
 
 export interface ScraperHandle {
+  showSearch: (query?: string) => void;
   showQueue: () => void;
   select: (film: Film, view: "match" | "links") => void;
 }
 export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
-  const { openFilm, scraping, notice, resourceSearch } = useWorkspace();
-  const [searchMode, setSearchMode] = useState("video");
+  const { openFilm, scraping, notice } = useWorkspace();
   const [matching, setMatching] = useState<ScrapeTask | null>(null);
   const [selected, setSelected] = useState<Film | null>(null);
+  const [searchRequest, setSearchRequest] = useState({ query: "", revision: 0 });
   const [preview, setPreview] = useState<Film | null>(null);
   const [previewCandidate, setPreviewCandidate] = useState<MovieCandidate | null>(null);
   const collect = async (candidate: MovieCandidate) => {
@@ -37,18 +37,27 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
     previewOrigin.current = null;
   }, [preview]);
   useImperativeHandle(ref, () => ({
+    showSearch: (query) => {
+      setMatching(null);
+      setSelected(null);
+      if (query !== undefined)
+        setSearchRequest((value) => ({ query, revision: value.revision + 1 }));
+      setTab("search");
+    },
     showQueue: () => {
       setMatching(null);
       setSelected(null);
       setTab("batch");
     },
     select: (film, view) => {
-      setSelected(film);
       setMatching(null);
-      setTab(view === "match" && scraping ? "batch" : "search");
       if (view === "links") {
-        setSearchMode("video");
-        resourceSearch?.search(film.code, String(film.id));
+        setSelected(null);
+        setTab("search");
+        openFilm(film, "links");
+      } else {
+        setSelected(film);
+        setTab(scraping ? "batch" : "search");
       }
     },
   }));
@@ -63,56 +72,45 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
         </Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="search" className="fill-column">
-        <SegmentedControl
-          mb="md"
-          aria-label="搜索内容"
-          value={searchMode}
-          onChange={setSearchMode}
-          data={[
-            { value: "video", label: "视频资源" },
-            { value: "metadata", label: "影片资料" },
-          ]}
-        />
-        {searchMode === "video" ? (
-          <ResourceSearch />
-        ) : (
-          <>
-            {matching && (
-              <Text size="sm" mb="sm">
-                正在匹配：{matching.name}。选择正确资料后点击“采用并刮削”。
-              </Text>
-            )}
-            {selected && (
-              <Group mb="md" justify="space-between">
-                <Text size="sm">当前影片：{selected.title}</Text>
-                <Button variant="default" size="xs" onClick={() => openFilm(selected, "edit")}>
-                  编辑并补全资料
-                </Button>
-              </Group>
-            )}
-            <MetaTubeSearch
-              onCollect={collect}
-              key={matching?.id ?? selected?.id ?? "search"}
-              initialQuery={
-                matching?.query || matching?.name || selected?.code || selected?.title || ""
-              }
-              onApply={
-                matching && scraping
-                  ? async (candidate) => {
-                      await scraping.retry(matching.id, undefined, candidate);
-                      setMatching(null);
-                      setTab("batch");
-                    }
-                  : undefined
-              }
-              onSelect={(details, candidate, trigger) => {
-                previewOrigin.current = trigger;
-                setPreview(movieDetailsToFilm(details, candidate));
-                setPreviewCandidate(candidate);
-              }}
-            />
-          </>
+        {matching && (
+          <Text size="sm" mb="sm">
+            正在匹配：{matching.name}。选择正确资料后点击“采用并刮削”。
+          </Text>
         )}
+        {selected && (
+          <Group mb="md" justify="space-between">
+            <Text size="sm">当前影片：{selected.title}</Text>
+            <Button variant="default" size="xs" onClick={() => openFilm(selected, "edit")}>
+              编辑并补全资料
+            </Button>
+          </Group>
+        )}
+        <MetaTubeSearch
+          allowResourceLookup={!matching}
+          onCollect={collect}
+          key={matching?.id ?? selected?.id ?? searchRequest.revision}
+          initialQuery={
+            matching?.query ||
+            matching?.name ||
+            selected?.code ||
+            selected?.title ||
+            searchRequest.query
+          }
+          onApply={
+            matching && scraping
+              ? async (candidate) => {
+                  await scraping.retry(matching.id, undefined, candidate);
+                  setMatching(null);
+                  setTab("batch");
+                }
+              : undefined
+          }
+          onSelect={(details, candidate, trigger) => {
+            previewOrigin.current = trigger;
+            setPreview(movieDetailsToFilm(details, candidate));
+            setPreviewCandidate(candidate.provider ? candidate : null);
+          }}
+        />
       </Tabs.Panel>
       <Tabs.Panel value="batch" className="fill-column">
         <BatchScraper
@@ -120,7 +118,6 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
             setMatching(task);
             setSelected(null);
             setTab("search");
-            setSearchMode("metadata");
           }}
         />
       </Tabs.Panel>

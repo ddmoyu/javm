@@ -14,7 +14,7 @@
 | 下载 | 视频直链、VOD HLS、独立音视频轨合并、暂停续传、失败重试、任务持久化、下载后入库与刮削交接 | [DownloadService](../frontend/src/services/downloads/DownloadService.ts)、[刮削 ADR](decisions/0020-metatube-scraping.md) |
 | 播放 | 本地及网络视频、HLS、独立播放窗口、窗口复用或多开、外部播放器偏好、自动保存与恢复播放进度 | [播放 ADR](decisions/0009-video-playback.md)、[进度 ADR](decisions/0015-automatic-playback-progress.md) |
 | 资料刮削与 AI | 内置 MetaTube 按需启动、搜索与详情、单片及批量任务、封面落盘、规范 NFO 写回；单个 OpenAI 兼容接口的识别、翻译与连接测试 | [刮削 ADR](decisions/0020-metatube-scraping.md)、[AiService](../frontend/src/services/metadata/AiService.ts) |
-| 视频资源查找 | 番号与来源模板定位、隐藏 Neutralino 取流、HLS 校验、来源独立失败及重试、复制链接、下载前复检及作品关联 | [取流 ADR](decisions/0010-resource-lookup.md)、[验证范围](verification/2026-10-10-resource-lookup.md) |
+| 视频资源查找 | 统一按番号／片名搜索并合并影片；详情内隐藏取流，即时追加去重链接及分辨率／时长；来源统计持久化并调整优先级；复制与下载前复检。本次仅定向检查和新增 mock 验证，未做桌面回归 | [取流 ADR](decisions/0010-resource-lookup.md)、[资源服务](../frontend/src/services/streamResolution/ResourceSearchService.ts) |
 | 发现页 | 五类离线名单、分页与本地作品关联、目录增量更新、头像来源兜底与持久缓存；开发模式使用安全虚构数据 | [发现页 ADR](decisions/0022-avwikidb-discovery-navigation.md) |
 | 设置与运行 | 主题、网络代理、下载及播放偏好、可选关闭到托盘、任务退出清理、统一日志与日志导出；Windows 离线包构建脚本 | [主服务装配](../frontend/src/app/mainView.tsx)、[Settings](../frontend/src/features/settings/Settings.tsx)、[打包脚本](../scripts/package-offline.mjs) |
 

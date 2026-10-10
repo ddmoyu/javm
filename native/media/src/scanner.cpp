@@ -189,6 +189,7 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
     if (method == "library.videos") return store_.videos(std::max(0,params.value("offset",0)),std::clamp(params.value("limit",250),1,500));
     if (method == "library.query") return store_.query(params);
     if (method == "library.facets") return store_.facets(params);
+    if (method.starts_with("library.resources.")) return store_.resources(method,params);
     if (method == "library.catalogAppend") return store_.catalogAppend(params);
     if (method == "library.summary") return store_.summary();
     if (method == "library.video") return store_.video(params.at("id"));

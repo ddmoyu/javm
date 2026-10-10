@@ -98,7 +98,12 @@ class HlsValidator {
     throw last;
   }
   private quality(variant: Variant) {
-    return { bandwidth: variant.bandwidth, width: variant.width, height: variant.height };
+    // 嵌套主清单可能只在内层提供分辨率，外层缺失时保留已读取的尺寸。
+    return {
+      bandwidth: variant.bandwidth,
+      ...(variant.width ? { width: variant.width } : {}),
+      ...(variant.height ? { height: variant.height } : {}),
+    };
   }
 }
 

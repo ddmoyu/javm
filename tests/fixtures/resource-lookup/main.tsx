@@ -45,7 +45,7 @@ const search = new ResourceSearchService(
 );
 createRoot(document.getElementById("root")!).render(
   <MantineProvider>
-    <ResourceSearchPanel service={search} />
+    <ResourceSearchPanel service={search} code="DEMO-001" />
   </MantineProvider>,
 );
 const expect = (value: unknown, label: string) => {
@@ -60,13 +60,7 @@ const wait = async (ready: () => boolean, timeout = 60000) => {
 };
 try {
   search.setSources(["safe", "missing"]);
-  search.setQuery("DEMO-001");
-  await wait(
-    () =>
-      document.querySelector<HTMLInputElement>('input[placeholder="输入完整番号"]')?.value ===
-      "DEMO-001",
-  );
-  document.querySelector("form")!.requestSubmit();
+  search.search("DEMO-001");
   await wait(() => !search.getSnapshot().busy);
   const successful = search.getSnapshot().rows.find((row) => row.sourceId === "safe");
   reports.push({

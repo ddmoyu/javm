@@ -17,6 +17,8 @@ import { createDiscoveryCatalogService } from "../platform/neutralino/discoveryC
 import { createScrapeService } from "../platform/neutralino/scraping";
 import { createResolutionService } from "../platform/neutralino/streamResolution";
 import { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
+import { nativeSettingsStorage } from "../platform/neutralino/settingsStorage";
+import type { ResourcePreferences } from "../services/streamResolution/archive";
 
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
@@ -24,12 +26,26 @@ export function createMainView(runtime: Runtime) {
   const backgroundSettings = createBackgroundSettings(runtime);
   const downloads = createDownloadService(runtime, network);
   const resolution = createResolutionService(runtime, network, () => downloads.initialize());
-  const resourceSearch = new ResourceSearchService(resolution, {
-    add: (input) => downloads.add(input),
-    directory: () => downloads.getSnapshot().settings.directory,
-  });
   const catalog = createDiscoveryCatalogService(runtime, network, () => downloads.initialize());
   const library = createLibraryService(runtime, catalog);
+  const resourcePreferences = nativeSettingsStorage<ResourcePreferences>("resource-search-v1");
+  const resourceSearch = new ResourceSearchService(
+    resolution,
+    {
+      add: (input) => downloads.add(input),
+      directory: () => downloads.getSnapshot().settings.directory,
+    },
+    undefined,
+    runtime === "desktop"
+      ? {
+          read: (code, workId) => library.readResources(code, workId),
+          save: (record) => library.saveResource(record),
+          remove: (id) => library.removeResource(id),
+          readPreferences: () => resourcePreferences.read(),
+          writePreferences: (value) => resourcePreferences.write(value),
+        }
+      : undefined,
+  );
   const legacyImport = new LegacyImportService(
     runtime === "desktop" ? new NativeLibraryPort() : undefined,
     () => library.refreshAfterImport(),
