@@ -99,6 +99,9 @@ await copy(path.join(root, "scripts/build-curl.ps1"), "bin/licenses/curl-build.p
 await copy(path.join(root, "LICENSE"), "LICENSE");
 await copy(path.join(root, "resources/offline/使用说明.txt"), "使用说明.txt");
 await copy(path.join(root, "resources/offline/Verify-Package.ps1"), "Verify-Package.ps1");
+for (const file of ["Install-JAVM.ps1", "Uninstall-JAVM.ps1"])
+  await copy(path.join(root, "resources/offline", file), file);
+await copy(path.join(root, "resources/offline/Package-Tools.ps1"), "installer/Package-Tools.ps1");
 // Preserve the original license text for production frontend dependencies.
 const licenses = JSON.parse(
   execFileSync(process.env.ComSpec, ["/d", "/s", "/c", "pnpm licenses list --prod --json"], {
@@ -145,6 +148,20 @@ async function inventory(relative = "") {
     } else throw new Error(`Unexpected package entry: ${item}`);
   }
 }
+if (process.env.JAVM_SIGN_CERT_THUMBPRINT)
+  execFileSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      path.join(root, "scripts/sign-package.ps1"),
+      "-PackageDirectory",
+      output,
+    ],
+    { stdio: "inherit", windowsHide: true },
+  );
 await inventory();
 const manifest = {
   app: "JAVM",
