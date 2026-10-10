@@ -23,6 +23,7 @@ import { Icon } from "../../components/icons";
 import { CountTabs, Empty, Pill } from "../../components/ui";
 import { activeScrape, scrapeLabels, scrapePhaseLabels } from "../../contracts/scraping";
 import type { ScrapeTask } from "../../contracts/scraping";
+import { EditDownloadModal } from "./EditDownloadModal";
 
 const ignoreDownloadUpdates = () => () => {};
 const pageSize = 50;
@@ -51,6 +52,7 @@ export function Downloads() {
   const [resultPage, setResultPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [editId, setEditId] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
   const active = (task: DownloadTask) => isRunning(task.status) || task.status === "queued";
   const shown = tasks.filter(
@@ -118,6 +120,13 @@ export function Downloads() {
   };
   return (
     <div className="fill-column">
+      {editId && tasks.find((task) => task.id === editId) && (
+        <EditDownloadModal
+          task={tasks.find((task) => task.id === editId)!}
+          service={downloads}
+          onClose={() => setEditId(null)}
+        />
+      )}
       <div className="page-toolbar">
         <Group justify="space-between" wrap="wrap" align="flex-end">
           <CountTabs
@@ -300,6 +309,13 @@ export function Downloads() {
                         </ActionIcon>
                       </Menu.Target>
                       <Menu.Dropdown>
+                        <Menu.Item
+                          disabled={active(task) || busy.has(task.id)}
+                          leftSection={<Icon name="edit" />}
+                          onClick={() => setEditId(task.id)}
+                        >
+                          修改名称／轨道
+                        </Menu.Item>
                         <Menu.Item
                           leftSection={<Icon name="info" />}
                           onClick={() => setDetailId(task.id)}

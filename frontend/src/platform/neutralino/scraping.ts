@@ -5,11 +5,13 @@ import { findOnPath, runNativeProcess } from "./process";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import type { LibraryService } from "../../services/library/LibraryService";
 import type { MetaTubeService } from "../../services/metadata/MetaTubeService";
+import type { AiService } from "../../services/metadata/AiService";
 import { ScrapeService } from "../../services/scraping/ScrapeService";
 import type { ScrapePort, ScrapeTarget } from "../../services/scraping/ScrapeService";
 import type { ScrapeTask } from "../../contracts/scraping";
 import type { NativeVideo } from "../../contracts/library";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
+import { createMetadataPipeline } from "./metadataPipeline";
 
 // 应用级共享端口，批量添加不会重复注册 Extension 事件监听器。
 const port = new NativeLibraryPort();
@@ -20,6 +22,7 @@ export function createScrapeService(
   network: NetworkSettingsService,
   library: LibraryService,
   prepare: () => Promise<void>,
+  ai?: AiService,
 ) {
   const available =
     runtime === "desktop" && (window as unknown as { NL_OS: string }).NL_OS === "Windows";
@@ -147,7 +150,9 @@ export function createScrapeService(
     },
     refresh: () => library.refreshAfterImport(),
   };
-  const service = new ScrapeService(adapter, metatube, available);
+  const pipeline = createMetadataPipeline(metatube, available);
+  const service = new ScrapeService(adapter, pipeline, available, ai?.recognizeForScrape);
+  service.pipeline = pipeline;
   void service.initialize();
   return service;
 }

@@ -47,7 +47,7 @@ describe.runIf(process.platform === "win32" && process.env.JAVM_MEDIA_INTEGRATIO
       const female = await host.request<QueryPage<FacetValue>>("library.facets", {
         dimension: "actresses",
         includeCatalog: true,
-        sort: "count",
+        sort: "source",
       });
       expect(female.items).toEqual([
         { name: "合成女演员", count: 1 },

@@ -156,6 +156,8 @@ export function queryCatalog(
     (name) =>
       (!search || name.toLocaleLowerCase().includes(search)) && (!selected || selected.has(name)),
   );
+  if (query.sort === "name")
+    matches.sort(new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" }).compare);
   return {
     items: matches.slice(page.offset, page.offset + page.limit).map((name) => ({ name, count: 0 })),
     offset: page.offset,

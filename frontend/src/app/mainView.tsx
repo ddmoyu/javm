@@ -18,11 +18,16 @@ import { createScrapeService } from "../platform/neutralino/scraping";
 import { createResolutionService } from "../platform/neutralino/streamResolution";
 import { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
 import { nativeSettingsStorage } from "../platform/neutralino/settingsStorage";
+import { createArtworkService } from "../platform/neutralino/artwork";
 import type { ResourcePreferences } from "../services/streamResolution/archive";
+import { createApplicationUpdater } from "../platform/neutralino/applicationUpdates";
+import { initializeMainWindowSize } from "../platform/neutralino/mainWindowSize";
 
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
+  if (runtime === "desktop") initializeMainWindowSize();
   const network = createNetworkSettings(runtime);
+  const updater = createApplicationUpdater(runtime, network);
   const backgroundSettings = createBackgroundSettings(runtime);
   const downloads = createDownloadService(runtime, network);
   const resolution = createResolutionService(runtime, network, () => downloads.initialize());
@@ -58,10 +63,28 @@ export function createMainView(runtime: Runtime) {
   const playback = createPlaybackService(runtime);
   // 首次资料请求启动 MetaTube 前，先等待旧进程回收完成。
   const metadata = createMetadataServices(runtime, network, () => downloads.initialize());
-  const scraping = createScrapeService(runtime, metadata.metatube, network, library, () =>
-    downloads.initialize(),
+  library.artwork = createArtworkService(
+    runtime,
+    library,
+    metadata.metatube,
+    network,
+    () => downloads.getSnapshot().settings.ffmpegPath,
+  );
+  const scraping = createScrapeService(
+    runtime,
+    metadata.metatube,
+    network,
+    library,
+    () => downloads.initialize(),
+    metadata.ai,
   );
   downloads.connectScraping(scraping.enqueueDownload);
+  downloads.connectFileRename((task, pending) =>
+    scraping.relocateDownload(task.id, task.output, pending.output, async () => {
+      if (!library.organization) throw new Error("文件整理服务不可用。");
+      await library.organization.renameDownloaded(task.output, pending.output, pending.operationId);
+    }),
+  );
   observeLogState("library", library, (value) => ({
     state: value.scan ? `扫描 ${value.scan.state}` : value.ready ? "媒体库就绪" : "正在读取媒体库",
     error:
@@ -96,9 +119,11 @@ export function createMainView(runtime: Runtime) {
   }));
   if (runtime === "desktop")
     initializeLifecycle(downloads, backgroundSettings, async () => {
+      await updater.shutdown();
       await resourceSearch.shutdown();
       await resolution.shutdown();
       await scraping.shutdown();
+      await library.artwork?.shutdown();
       await legacyImport.shutdown();
       await catalog.shutdown();
       await network.shutdown();

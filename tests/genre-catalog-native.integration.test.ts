@@ -43,12 +43,12 @@ describe.runIf(enabled)("分类目录与原生片库合并分页", () => {
       ...params,
     });
   it("保留本地独有项，去重不放大影片数量，零影片分类可翻页", async () => {
-    const result = await query({ sort: "count", limit: 1 });
+    const result = await query({ sort: "name", limit: 1 });
     expect(result.total).toBe(3);
     expect(result.available).toBe(3);
-    expect(result.items[0]?.count).toBe(1);
-    const tail = await query({ sort: "count", offset: 2, limit: 1, includeTotal: false });
-    expect(tail.items).toEqual([{ name: "内置分类", count: 0 }]);
+    expect(result.items).toEqual([{ name: "内置分类", count: 0 }]);
+    const tail = await query({ sort: "name", offset: 2, limit: 1, includeTotal: false });
+    expect(tail.items).toEqual([{ name: "自定义分类", count: 1 }]);
     const local = await host.request<QueryPage<FacetValue>>("library.facets", {
       dimension: "genres",
     });

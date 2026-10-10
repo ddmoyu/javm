@@ -128,6 +128,7 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
     }
     if (method == "library.legacy.start") {
         std::lock_guard lock(startMutex_);
+        if(store_.pendingFileOperations()) throw std::runtime_error("请先恢复或取消文件整理任务再导入旧数据");
         if (!removal_.is_null()) throw std::runtime_error("正在清理影片，请稍候");
         if (busy_) throw std::runtime_error("请等待当前扫描或导入任务结束后重试");
         if (worker_.joinable()) worker_.join();
@@ -162,7 +163,24 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
     }
     if (method == "library.cancel") { cancelled_ = true; return Json::object(); }
     if (method == "library.shutdown") { shutdown(); return Json::object(); }
+    if(method.starts_with("library.instance.")) return store_.applicationInstance(method,params);
     if (importing_) throw std::runtime_error("正在导入旧数据，请等待导入完成后再操作媒体库");
+    if(method.starts_with("library.files.")) {
+        std::lock_guard lock(startMutex_);
+        if(busy_ || !removal_.is_null()) throw std::runtime_error("请等待扫描或清理结束后整理文件");
+        auto result=store_.fileOperations(method,params);
+        if(method=="library.files.commit" || method=="library.files.relink") { refreshDirectories();std::lock_guard progressLock(progressMutex_);++revision_; }
+        return result;
+    }
+    if(method.starts_with("library.related.")) {
+        std::lock_guard lock(startMutex_);
+        if(busy_ || !removal_.is_null() || store_.pendingFileOperations()) throw std::runtime_error("请等待片库操作和文件整理完成");
+        auto result=store_.relatedMedia(method,params);
+        if(method=="library.related.save") {std::lock_guard progressLock(progressMutex_);++revision_;}
+        return result;
+    }
+    if((method=="library.scan" || method=="library.add" || method=="library.work.remove" || method=="library.removeDirectory" || method.starts_with("library.maintenance.") || method.starts_with("library.scrape.") || method=="library.documents.importStream") && store_.pendingFileOperations())
+        throw std::runtime_error("请先恢复或取消未完成的文件整理任务");
     if (method.starts_with("library.maintenance.")) return maintenance(method,params);
     if (method == "library.scrape.prepare" || method == "library.scrape.commit") {
         std::lock_guard lock(startMutex_);
@@ -189,7 +207,28 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
     if (method == "library.videos") return store_.videos(std::max(0,params.value("offset",0)),std::clamp(params.value("limit",250),1,500));
     if (method == "library.query") return store_.query(params);
     if (method == "library.facets") return store_.facets(params);
+    if(method.starts_with("library.aliases.")) {
+        std::lock_guard lock(startMutex_);
+        if(busy_) throw std::runtime_error("请等待扫描或导入完成后管理名称");
+        cancelled_=false;auto result=store_.aliases(method,params,cancelled_);
+        if(method!="library.aliases.list") {std::lock_guard progressLock(progressMutex_);++revision_;} return result;
+    }
+    if (method == "library.facetFavorite") { store_.facetFavorite(params); return Json::object(); }
     if (method.starts_with("library.resources.")) return store_.resources(method,params);
+    if(method.starts_with("library.documents.")) {
+        std::lock_guard lock(startMutex_);
+        if(method=="library.documents.importStream" && (busy_ || !removal_.is_null())) throw std::runtime_error("请等待当前片库操作完成");
+        auto result=store_.documents(method,params);
+        if(method=="library.documents.importStream") { refreshDirectories(); std::lock_guard progressLock(progressMutex_); ++revision_; }
+        return result;
+    }
+    if(method.starts_with("library.artwork.")) {
+        std::lock_guard lock(startMutex_);
+        if(busy_ || !removal_.is_null()) throw std::runtime_error("请等待当前片库操作完成后处理图片");
+        auto result=store_.artwork(method,params);
+        if(method!="library.artwork.prepare") { std::lock_guard progressLock(progressMutex_); ++revision_; }
+        return result;
+    }
     if (method == "library.catalogAppend") return store_.catalogAppend(params);
     if (method == "library.summary") return store_.summary();
     if (method == "library.video") return store_.video(params.at("id"));

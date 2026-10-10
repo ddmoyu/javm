@@ -8,6 +8,10 @@ import { logEvent } from "../../services/logging/events";
 import { LibraryMaintenanceService } from "../../services/library/LibraryMaintenanceService";
 import { nativeSettingsStorage } from "./settingsStorage";
 import type { AdRules } from "../../contracts/maintenance";
+import { DirectoryWatchService } from "../../services/library/DirectoryWatchService";
+import type { WatchEvent, WatchSettings } from "../../services/library/DirectoryWatchService";
+import { LibraryDocumentsService } from "../../services/library/LibraryDocumentsService";
+import { FileOrganizationService } from "../../services/library/FileOrganizationService";
 
 export class NativeLibraryPort implements LibraryPort {
   private listening?: Promise<unknown>;
@@ -46,7 +50,9 @@ export class NativeLibraryPort implements LibraryPort {
           logEvent("error", "database", "request_timeout", "媒体库请求超时", { method, requestId });
           reject(new Error("媒体库未响应，请先刷新查看状态；若仍无法连接，请重启桌面应用。"));
         },
-        method.startsWith("library.scrape.") || method.startsWith("library.maintenance.")
+        method.startsWith("library.scrape.") ||
+          method.startsWith("library.maintenance.") ||
+          method.startsWith("library.files.")
           ? 90000
           : 20000,
       );
@@ -120,6 +126,65 @@ export function createLibraryService(runtime: Runtime, catalog?: DiscoveryCatalo
           }),
         () => library.refreshAfterImport(),
       );
+    if (port) {
+      library.organization = new FileOrganizationService(
+        port,
+        {
+          read: (path, offset, size) => filesystem.readBinaryFile(path, { pos: offset, size }),
+          append: (path, bytes) => filesystem.appendBinaryFile(path, bytes),
+        },
+        () => library.refreshAfterImport(),
+      );
+      void library.organization.initialize();
+      library.documents = new LibraryDocumentsService(
+        port,
+        {
+          createDirectory: (path) => filesystem.createDirectory(path),
+          async writeNew(path, content) {
+            const temporary = `${path}.${crypto.randomUUID()}.tmp`;
+            try {
+              await filesystem.writeFile(temporary, content);
+              await filesystem.copy(temporary, path, {
+                overwrite: false,
+                recursive: false,
+                skip: false,
+              });
+            } finally {
+              await filesystem.remove(temporary).catch(() => {});
+            }
+          },
+          async readStream(path) {
+            const stat = await filesystem.getStats(path);
+            if (!stat.isFile || stat.size > 8192) throw new Error("STRM 不存在或超过 8 KiB。");
+            return filesystem.readFile(path, { pos: 0, size: 8193 });
+          },
+        },
+        () => library.refreshAfterImport(),
+      );
+      library.watcher = new DirectoryWatchService(
+        library,
+        {
+          create: (path) => filesystem.createWatcher(path),
+          remove: (id) => filesystem.removeWatcher(id),
+          listen: async (listener) => {
+            const handler = (event: CustomEvent<WatchEvent>) => listener(event.detail);
+            await events.on("watchFile", handler);
+            return () => events.off("watchFile", handler);
+          },
+        },
+        nativeSettingsStorage<WatchSettings>("library-watch-v1"),
+        () => {
+          const phase = library.maintenance?.getSnapshot().phase;
+          return (
+            phase === "reading" ||
+            phase === "cleaning" ||
+            !!library.organization?.getSnapshot().pending.length ||
+            !!library.organization?.getSnapshot().busy
+          );
+        },
+      );
+      void library.watcher.initialize();
+    }
     void service.initialize();
   }
   return service;

@@ -22,6 +22,9 @@ import { libraryError } from "../../services/library/LibraryService";
 import { openMediaDirectory } from "../../platform/neutralino/directoryPicker";
 import { LibraryMaintenanceModal } from "./LibraryMaintenanceModal";
 import type { MaintenanceMode } from "../../contracts/maintenance";
+import { DirectoryWatchControl } from "./DirectoryWatchControl";
+import { LibraryDocumentsPanel } from "./LibraryDocumentsPanel";
+import { FileOrganizationPanel } from "./FileOrganizationPanel";
 
 const labels: Record<ScanState, string> = {
   idle: "待扫描",
@@ -119,11 +122,30 @@ export function Directories() {
           >
             广告视频
           </Button>
+          <Button
+            variant="default"
+            size="xs"
+            disabled={disabled || !library.maintenance}
+            onClick={() => openMaintenance("health")}
+          >
+            健康检查
+          </Button>
+          <Button
+            variant="default"
+            size="xs"
+            disabled={disabled || !library.maintenance}
+            onClick={() => openMaintenance("all")}
+          >
+            清理资源
+          </Button>
         </Group>
         <Text size="sm" c="dimmed">
           {state.directories.length} 个目录 · {state.total} 部影片
         </Text>
       </Group>
+      {library.watcher && <DirectoryWatchControl service={library.watcher} />}
+      {library.documents && <LibraryDocumentsPanel service={library.documents} />}
+      {library.organization && <FileOrganizationPanel service={library.organization} />}
       {state.error && (
         <Alert color="red" title="媒体库连接失败" role="alert">
           {state.error}

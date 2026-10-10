@@ -7,7 +7,10 @@ export function normalizeCode(value: string) {
     .replace(/[\s_-]/g, "");
 }
 export function identifyCode(value: string): string | undefined {
-  const input = value.normalize("NFKC").toUpperCase();
+  const input = value
+    .normalize("NFKC")
+    .toUpperCase()
+    .replace(/(?:^|[ ._-])(?:CD|DISC|DISK|PART)[ ._-]*\d{1,2}(?=$|[ ._-])/g, " ");
   const fc2Pattern = /(?:^|[^A-Z0-9])FC2[\s_-]*(?:PPV[\s_-]*)?(\d{5,9})(?=$|[^A-Z0-9])/g;
   const fc2 = [...input.matchAll(fc2Pattern)].map((m) => `FC2-${m[1]}`);
   const ordinary = [

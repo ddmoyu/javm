@@ -23,6 +23,7 @@ fs::path executable();
 inline constexpr int nfoParserVersion = 2;
 Json readNfo(const fs::path& path, std::string* original = nullptr);
 std::string writeScrapedNfo(const fs::path& path, const Json& metadata, const Json& source, const std::string& expected);
+std::string serializeNfo(const Json& metadata, const Json& source);
 fs::path saveScrapedArtwork(const fs::path& source, const fs::path& video);
 Json probeDirect(const fs::path& path);
 Json probe(const fs::path& path, const std::atomic_bool& cancelled);

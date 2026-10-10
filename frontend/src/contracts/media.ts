@@ -1,4 +1,6 @@
 export interface MediaImage {
+  id?: string;
+  path?: string;
   src: string;
   title?: string;
   timestamp?: string;
@@ -8,7 +10,11 @@ export interface MediaTrailer {
   format?: "video" | "hls";
 }
 export interface MediaFile {
+  part?: number;
+  parts?: number;
+  subtitles?: string[];
   id?: string;
+  streamUrl?: string;
   missing?: boolean;
   name: string;
   path: string;

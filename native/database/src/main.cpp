@@ -97,9 +97,8 @@ int wmain(int argc, wchar_t* argv[]) {
         // 媒体库迁移、验证目录、分页和收藏在独立队列执行，接收线程继续处理下载和控制消息。
         media::WorkQueue libraryRequests(1, 64);
         media::ProbeService mediaProbes;
-        std::string startupError;
-        try { database = std::make_unique<Database>(fs::absolute(argv[2]).lexically_normal()); }
-        catch (const std::exception& error) { startupError = error.what(); }
+        // 主实例握手先于下载数据库独占锁；第二次启动可转发参数并退出。
+        auto ensureDatabase=[&] {if(!database) database=std::make_unique<Database>(fs::absolute(argv[2]).lexically_normal());};
         std::string message;
         for (;;) {
             char buffer[16384];
@@ -127,7 +126,7 @@ int wmain(int argc, wchar_t* argv[]) {
                     mediaProbes.cancel(data.at("params").at("id").get<std::string>());
                     response["result"] = Json::object();
                 } else if (method.starts_with("library.")) {
-                    if (!database) throw std::runtime_error(startupError);
+                    if(!method.starts_with("library.instance.")) ensureDatabase();
                     const auto current = library.load();
                     if (current && (method == "library.status" || method == "library.cancel" || method == "library.legacy.status" || method == "library.legacy.cancel" || method == "library.scrape.cancel")) {
                         response["result"] = current->handle(method, data.value("params", Json::object()));
@@ -157,7 +156,7 @@ int wmain(int argc, wchar_t* argv[]) {
                         continue;
                     }
                 } else {
-                    if (!database) throw std::runtime_error(startupError);
+                    ensureDatabase();
                     response["result"] = database->handle(method, data.value("params", Json::object()));
                 }
                 response["ok"] = true;

@@ -198,13 +198,14 @@ export class LibraryMaintenanceService {
       while (generation === this.generation && !this.stopped) {
         const result = await this.port.request<{ items: MaintenanceVideo[]; revision: number }>(
           "library.maintenance.read",
-          { after, ...(revision === undefined ? {} : { revision }) },
+          { after, health: mode === "health", ...(revision === undefined ? {} : { revision }) },
         );
         if (generation !== this.generation || this.stopped) return;
         revision = result.revision;
         await this.call({ type: "append", rows: result.items });
         if (generation !== this.generation || this.stopped) return;
         count += result.items.length;
+        if (count > 100_000) throw new Error("单次检查最多 10 万个资源，请分库处理后重试。");
         this.publish({ processed: count });
         if (result.items.length < 500) break;
         after = result.items.at(-1)!.id;
@@ -264,6 +265,46 @@ export class LibraryMaintenanceService {
       this.running = undefined;
     });
     return this.running;
+  }
+  /** 单资源入口仍经过与批量清理相同的逐文件身份复核。 */
+  async removeResource(video: RemovalTarget) {
+    if (this.running || this.snapshot.phase === "reading" || this.snapshot.phase === "cleaning")
+      throw new Error("请等待当前媒体检查或清理结束。");
+    const token = crypto.randomUUID();
+    this.cancelled = false;
+    const job = (async () => {
+      this.publish({ phase: "cleaning", error: "" });
+      try {
+        const plan = await this.port.request<RemovalPlan>("library.maintenance.prepare", {
+          token,
+          ...video,
+          metadataOnly: false,
+        });
+        for (const file of plan.files) {
+          if (this.cancelled || this.stopped)
+            throw new Error("资源删除已停止，请重新扫描目录核对已完成的操作。");
+          const checked = await this.port.request<{ exists: boolean }>(
+            "library.maintenance.checkFile",
+            { token, path: file.path },
+          );
+          if (checked.exists) await this.files.remove(file.path);
+        }
+        await this.port.request("library.maintenance.complete", { token });
+      } finally {
+        try {
+          await this.port.request("library.maintenance.abort", { token });
+        } finally {
+          await this.refreshLibrary();
+          this.publish({ phase: "idle" });
+        }
+      }
+    })();
+    this.running = job;
+    try {
+      await job;
+    } finally {
+      this.running = undefined;
+    }
   }
   private async removeSelected(metadataOnly: boolean) {
     const requireRetainedCopy = !metadataOnly && this.snapshot.mode === "duplicates";

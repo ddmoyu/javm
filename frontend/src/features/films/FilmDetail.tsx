@@ -15,7 +15,7 @@ import {
   Title,
   UnstyledButton,
 } from "@mantine/core";
-import type { Film, MediaImage, MediaTrailer } from "../../contracts/media";
+import type { Film, MediaImage, MediaTrailer, MediaFile } from "../../contracts/media";
 import type { FilmDetailView } from "../../app/state";
 import { useWorkspace } from "../../app/state";
 import { getFilmMetadata } from "./filmMetadata";
@@ -34,12 +34,16 @@ import { ResourceLookupButton } from "../resources/ResourceSearch";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
 import { os } from "@neutralinojs/lib";
 import { libraryError } from "../../services/library/LibraryService";
+import { LibraryDocumentsPanel } from "../directories/LibraryDocumentsPanel";
+import { FileOrganizationModal } from "./FileOrganizationModal";
+import { RelatedMediaModal } from "./RelatedMediaModal";
 
 interface Props {
   film: Film | null;
   initialView: FilmDetailView;
   preview?: boolean;
   onCollect?: () => Promise<void>;
+  previewStatus?: ReactNode;
   onClose: () => void;
 }
 export function FilmDetail({ film, ...props }: Props) {
@@ -50,6 +54,7 @@ function FilmDetailContent({
   initialView,
   preview = false,
   onCollect,
+  previewStatus,
   onClose,
 }: Omit<Props, "film"> & { film: Film }) {
   const {
@@ -66,7 +71,12 @@ function FilmDetailContent({
     resourceSearch,
   } = useWorkspace();
   const [busy, setBusy] = useState(false);
+  const [related, setRelated] = useState<MediaFile | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [organizing, setOrganizing] = useState<{ id: string; path: string } | null>(null);
+  const [removingResource, setRemovingResource] = useState<{ id: string; path: string } | null>(
+    null,
+  );
   const playable = film.files?.some((file) => file.kind === "video" && !file.missing) ?? false;
   const operate = async (operation: () => Promise<unknown>) => {
     if (busy) return;
@@ -90,6 +100,8 @@ function FilmDetailContent({
   const { open, opened } = useImagePreview();
   const [editing, setEditing] = useState(!preview && initialView === "edit");
   const [artwork, setArtwork] = useState<ArtworkMode | null>(null);
+  const [artworkSource, setArtworkSource] = useState<string>();
+  const [removingImages, setRemovingImages] = useState<{ ids?: string[] } | null>(null);
   const [tab, setTab] = useState<string | null>(
     initialView === "files" ? "files" : initialView === "links" ? "links" : "info",
   );
@@ -109,7 +121,15 @@ function FilmDetailContent({
       referer: metadata.homepage || undefined,
     });
   };
-  const overlay = opened || editing || artwork !== null || removing;
+  const overlay =
+    opened ||
+    editing ||
+    artwork !== null ||
+    removing ||
+    !!removingResource ||
+    !!removingImages ||
+    !!organizing ||
+    !!related;
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -150,9 +170,19 @@ function FilmDetailContent({
     ) : (
       "未填写"
     );
-  const action = (value: ScreenshotAction) => {
-    if (value === "capture" || value === "fetch" || value === "long") setArtwork(value);
-    else unavailable("图片管理");
+  const action = (value: ScreenshotAction, index?: number) => {
+    if (!library.artwork) {
+      unavailable("图片管理");
+      return;
+    }
+    if (value === "clear") setRemovingImages({});
+    else if (value === "remove") {
+      const id = film.screenshots?.[index ?? -1]?.id;
+      if (id) setRemovingImages({ ids: [id] });
+    } else {
+      setArtworkSource(value === "cover" ? film.screenshots?.[index ?? -1]?.path : undefined);
+      setArtwork(value);
+    }
   };
   const rows: [string, ReactNode][] = [
     ["演员", facet("演员", metadata.actors)],
@@ -283,51 +313,56 @@ function FilmDetailContent({
                 </Text>
               )}
             </UnstyledButton>
-            {trailers[0] && (
-              <Group gap={6}>
-                <Button
-                  leftSection={<Icon name="play" size={16} />}
-                  onClick={() => playTrailer(trailers[0]!)}
-                >
-                  播放预告片
-                </Button>
-                {trailers.length > 1 && (
-                  <Menu position="bottom-start">
-                    <Menu.Target>
-                      <Button variant="light" px={10} aria-label="其他预告片来源">
-                        <Icon name="down" size={16} />
-                      </Button>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      {trailers.slice(1).map((trailer) => (
-                        <Menu.Item
-                          key={trailer.src}
-                          leftSection={<Icon name="play" size={16} />}
-                          onClick={() => playTrailer(trailer)}
-                        >
-                          {trailer.format === "hls" ? "预告片（流媒体）" : "预告片（普通视频）"}
-                        </Menu.Item>
-                      ))}
-                    </Menu.Dropdown>
-                  </Menu>
+            {(trailers.length > 0 ||
+              (preview && onCollect) ||
+              (tab !== "links" && resourceSearch)) && (
+              <Group gap="sm" wrap="wrap">
+                {trailers[0] && (
+                  <Group gap={6} wrap="nowrap">
+                    <Button
+                      leftSection={<Icon name="play" size={16} />}
+                      onClick={() => playTrailer(trailers[0]!)}
+                    >
+                      播放预告片
+                    </Button>
+                    {trailers.length > 1 && (
+                      <Menu position="bottom-start">
+                        <Menu.Target>
+                          <Button variant="light" px={10} aria-label="其他预告片来源">
+                            <Icon name="down" size={16} />
+                          </Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
+                          {trailers.slice(1).map((trailer) => (
+                            <Menu.Item
+                              key={trailer.src}
+                              leftSection={<Icon name="play" size={16} />}
+                              onClick={() => playTrailer(trailer)}
+                            >
+                              {trailer.format === "hls" ? "预告片（流媒体）" : "预告片（普通视频）"}
+                            </Menu.Item>
+                          ))}
+                        </Menu.Dropdown>
+                      </Menu>
+                    )}
+                  </Group>
+                )}
+                {preview && onCollect && (
+                  <Button loading={busy} onClick={() => void operate(onCollect)}>
+                    收藏并保存资料
+                  </Button>
+                )}
+                {tab !== "links" && resourceSearch && (
+                  <ResourceLookupButton
+                    service={resourceSearch}
+                    code={film.code}
+                    workId={preview ? undefined : String(film.id)}
+                    onStart={() => setTab("links")}
+                  />
                 )}
               </Group>
             )}
-            {preview && onCollect && (
-              <Button loading={busy} onClick={() => void operate(onCollect)}>
-                收藏并保存资料
-              </Button>
-            )}
-            {tab !== "links" && resourceSearch && (
-              <Group>
-                <ResourceLookupButton
-                  service={resourceSearch}
-                  code={film.code}
-                  workId={preview ? undefined : String(film.id)}
-                  onStart={() => setTab("links")}
-                />
-              </Group>
-            )}
+            {preview && previewStatus}
             {!preview && (
               <Group gap="sm">
                 <Button
@@ -373,7 +408,7 @@ function FilmDetailContent({
                   </Menu.Target>
                   <Menu.Dropdown>
                     <Menu.Item onClick={() => setEditing(true)}>编辑资料</Menu.Item>
-                    <Menu.Item onClick={() => setArtwork("fetch")}>获取封面与截图</Menu.Item>
+                    <Menu.Item onClick={() => action("fetch")}>获取封面与截图</Menu.Item>
                     <Menu.Item onClick={() => setTab("files")}>查看本地文件</Menu.Item>
                     <Menu.Divider />
                     <Menu.Item
@@ -410,7 +445,7 @@ function FilmDetailContent({
               <FilmScreenshots
                 film={film}
                 label={preview || film.availability === "metadata_only" ? "预览截图" : "视频截图"}
-                onAction={preview || !playable ? undefined : action}
+                onAction={preview ? undefined : action}
               />
             </SimpleGrid>
             {metadata.plot && (
@@ -427,12 +462,25 @@ function FilmDetailContent({
           </Tabs.Panel>
           {!preview && (
             <Tabs.Panel value="files">
+              {library.documents && (
+                <LibraryDocumentsPanel service={library.documents} workId={String(film.id)} />
+              )}
               {film.files?.length ? (
                 <Stack>
                   {film.files.map((file) => (
                     <Group key={file.path} justify="space-between">
                       <div>
-                        <Text size="sm">{file.name}</Text>
+                        <Text size="sm">
+                          {file.part
+                            ? `第 ${file.part}${file.parts ? `／${file.parts}` : ""} 卷 · `
+                            : ""}
+                          {file.name}
+                        </Text>
+                        {!!file.subtitles?.length && (
+                          <Text size="xs" c="dimmed">
+                            {file.subtitles.length} 个外挂字幕
+                          </Text>
+                        )}
                         <Text size="xs" c="dimmed">
                           {file.missing
                             ? "文件不可用"
@@ -445,7 +493,12 @@ function FilmDetailContent({
                             variant="light"
                             size="xs"
                             disabled={file.missing}
-                            onClick={() => playSource(file.path, { title: file.name })}
+                            onClick={() =>
+                              playSource(file.streamUrl ?? file.path, {
+                                title: file.name,
+                                subtitles: file.subtitles,
+                              })
+                            }
                           >
                             播放
                           </Button>
@@ -453,6 +506,40 @@ function FilmDetailContent({
                         <Button variant="subtle" size="xs" onClick={() => void copy(file.path)}>
                           复制路径
                         </Button>
+                        {file.kind === "video" && file.id && (
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            disabled={busy}
+                            onClick={() => setRelated(file)}
+                          >
+                            分卷／本地字幕
+                          </Button>
+                        )}
+                        {file.kind === "video" && file.id && library.maintenance && (
+                          <Button
+                            color="red"
+                            variant="subtle"
+                            size="xs"
+                            disabled={busy}
+                            onClick={() => setRemovingResource({ id: file.id!, path: file.path })}
+                          >
+                            删除资源
+                          </Button>
+                        )}
+                        {file.kind === "video" &&
+                          file.id &&
+                          !file.missing &&
+                          library.organization && (
+                            <Button
+                              size="xs"
+                              variant="subtle"
+                              disabled={busy}
+                              onClick={() => setOrganizing({ id: file.id!, path: file.path })}
+                            >
+                              改名／移动
+                            </Button>
+                          )}
                       </Group>
                     </Group>
                   ))}
@@ -496,7 +583,82 @@ function FilmDetailContent({
         </Stack>
       </Modal>
       {editing && <FilmEditor film={film} onClose={() => setEditing(false)} />}
-      {artwork && <FilmArtworkEditor film={film} mode={artwork} onClose={() => setArtwork(null)} />}
+      {related && (
+        <RelatedMediaModal file={related} library={library} onClose={() => setRelated(null)} />
+      )}
+      {organizing && library.organization && (
+        <FileOrganizationModal
+          service={library.organization}
+          file={organizing}
+          onClose={() => setOrganizing(null)}
+        />
+      )}
+      <Modal
+        opened={!!removingResource}
+        onClose={() => !busy && setRemovingResource(null)}
+        title="删除本地视频资源"
+        centered
+        closeOnEscape={!busy}
+        closeOnClickOutside={!busy}
+      >
+        <Stack>
+          <Text size="sm" style={{ overflowWrap: "anywhere" }}>
+            {removingResource?.path}
+          </Text>
+          <Text size="sm">将永久删除这个视频及其独占字幕。作品资料、NFO、封面和收藏会保留。</Text>
+          <Group justify="flex-end">
+            <Button variant="default" disabled={busy} onClick={() => setRemovingResource(null)}>
+              取消
+            </Button>
+            <Button
+              color="red"
+              loading={busy}
+              onClick={() =>
+                void operate(async () => {
+                  await library.maintenance!.removeResource(removingResource!);
+                  setRemovingResource(null);
+                  notice("视频资源已删除，作品资料已保留。");
+                })
+              }
+            >
+              删除此资源
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={!!removingImages}
+        onClose={() => !busy && setRemovingImages(null)}
+        title={removingImages?.ids ? "删除截图" : "清空截图"}
+        centered
+      >
+        <Stack>
+          <Text size="sm">删除这部作品的所选截图文件与记录，当前封面会保留。</Text>
+          <Button
+            color="red"
+            loading={busy}
+            onClick={() =>
+              void operate(async () => {
+                await library.artwork!.remove(String(film.id), removingImages?.ids);
+                setRemovingImages(null);
+              })
+            }
+          >
+            确认删除
+          </Button>
+        </Stack>
+      </Modal>
+      {artwork && (
+        <FilmArtworkEditor
+          film={film}
+          mode={artwork}
+          source={artworkSource}
+          onClose={() => {
+            setArtwork(null);
+            setArtworkSource(undefined);
+          }}
+        />
+      )}
     </>
   );
 }

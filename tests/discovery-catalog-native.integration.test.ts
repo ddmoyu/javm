@@ -47,7 +47,7 @@ describe.runIf(enabled)("六类名单原生分页和发行商", () => {
       const result = await host.request<QueryPage<FacetValue>>("library.facets", {
         dimension,
         includeCatalog: true,
-        sort: "count",
+        sort: "source",
       });
       expect(result.total).toBe(2);
       expect(result.items).toEqual([

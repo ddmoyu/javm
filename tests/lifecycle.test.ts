@@ -46,7 +46,9 @@ async function fixture(runInBackground = true) {
     write: async () => {},
   });
   const stopServices = vi.fn(async () => {});
-  const shutdown = vi.fn(async () => {});
+  const shutdown = vi.fn(async (beforeDatabaseClose?: () => Promise<void>) => {
+    await beforeDatabaseClose?.();
+  });
   lifecycle.initializeLifecycle({ shutdown } as unknown as DownloadService, settings, stopServices);
   return { ...lifecycle, settings, stopServices, shutdown };
 }
@@ -68,14 +70,15 @@ describe("关闭主窗口与显式退出", () => {
     app.stopServices.mockImplementation(async () => {
       order.push("services");
     });
-    app.shutdown.mockImplementation(async () => {
+    app.shutdown.mockImplementation(async (beforeDatabaseClose) => {
       order.push("downloads");
+      await beforeDatabaseClose?.();
     });
     native.exit.mockImplementation(async () => {
       order.push("exit");
     });
     await app.closeMainWindow();
-    expect(order).toEqual(["services", "downloads", "exit"]);
+    expect(order).toEqual(["downloads", "services", "exit"]);
     expect(native.hide).not.toHaveBeenCalled();
   });
 

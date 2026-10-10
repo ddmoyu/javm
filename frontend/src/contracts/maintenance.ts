@@ -1,4 +1,4 @@
-export type MaintenanceMode = "duplicates" | "ads";
+export type MaintenanceMode = "duplicates" | "ads" | "health" | "all";
 export interface AdRules {
   keywords: string[];
   excludeKeywords: string[];
@@ -19,6 +19,7 @@ export interface MaintenanceVideo {
   duration: number;
   resolution: string;
   missing: boolean;
+  issues?: string[];
 }
 export interface MaintenanceRow extends MaintenanceVideo {
   group: string;

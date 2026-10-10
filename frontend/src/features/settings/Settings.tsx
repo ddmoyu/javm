@@ -26,6 +26,7 @@ import { BackgroundSettingsPanel } from "./BackgroundSettingsPanel";
 import { LogsPanel } from "./LogsPanel";
 import { LegacyImportSettingsPanel } from "./LegacyImportSettingsPanel";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
+import { ApplicationUpdatePanel } from "./ApplicationUpdatePanel";
 
 const contactLinks = [
   { title: "Telegram 群", label: "点击加入", url: "https://t.me/+5VEFnb2U_xgyNWY1" },
@@ -172,11 +173,7 @@ export function Settings() {
           <SettingRow title="开源许可">
             <Text size="sm">{packageInfo.license}</Text>
           </SettingRow>
-          <SettingRow title="应用更新" hint="自动更新尚未接入">
-            <Button variant="default" size="xs" disabled>
-              检查更新
-            </Button>
-          </SettingRow>
+          <ApplicationUpdatePanel />
         </SettingCard>
         <LogsPanel />
         <SettingCard title="联系方式" icon="link">

@@ -42,6 +42,20 @@ function copyPenalty(path: string) {
 export function usableCopy(video: MaintenanceVideo) {
   return !video.missing && video.size !== 0;
 }
+export function healthRows(videos: MaintenanceVideo[], all = false): MaintenanceRow[] {
+  return videos
+    .filter((video) => all || !!video.issues?.length)
+    .map((video) => ({
+      ...video,
+      group: "",
+      groupId: "",
+      reason: all ? "手动选择的片库资源" : video.issues!.join("；"),
+      crossDirectory: false,
+      suggested: false,
+      suggestedKeep: false,
+      selected: false,
+    }));
+}
 
 // 仅从未选中的可用文件里选择保留副本；实际删除前由原生复核磁盘状态。
 export function retainedCopies(rows: MaintenanceRow[], selected: Set<string>) {

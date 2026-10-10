@@ -7,7 +7,7 @@ import type {
   MaintenanceMode,
   AdRules,
 } from "../../contracts/maintenance";
-import { adRows, duplicateRows, retainedCopies, usableCopy } from "./maintenanceRules";
+import { adRows, duplicateRows, healthRows, retainedCopies, usableCopy } from "./maintenanceRules";
 
 let videos: MaintenanceVideo[] = [],
   rows: MaintenanceRow[] = [];
@@ -53,7 +53,12 @@ self.onmessage = (event: MessageEvent<{ id: number; command: MaintenanceCommand 
         break;
       case "finish":
         unhashed = videos.reduce((count, video) => count + Number(!video.hash), 0);
-        rows = mode === "duplicates" ? duplicateRows(videos) : adRows(videos, rules);
+        rows =
+          mode === "duplicates"
+            ? duplicateRows(videos)
+            : mode === "ads"
+              ? adRows(videos, rules)
+              : healthRows(videos, mode === "all");
         videos = [];
         result = snapshot();
         break;

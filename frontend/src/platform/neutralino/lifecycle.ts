@@ -2,6 +2,7 @@ import { app, events, os, window as nativeWindow, MessageBoxChoice, Icon } from 
 import type { DownloadService } from "../../services/downloads/DownloadService";
 import type { BackgroundSettingsService } from "../../services/settings/BackgroundSettingsService";
 import { flushLogs, logEvent } from "../../services/logging/events";
+import { stopApplicationLaunches } from "./applicationInstance";
 
 let trayReady = false;
 let traySetup: Promise<void> | undefined;
@@ -10,13 +11,34 @@ let exiting = false;
 let stopLibrary: (() => Promise<void>) | undefined;
 let backgroundSettings: BackgroundSettingsService | undefined;
 
+function setTrayMenu() {
+  return os.setTray({
+    icon: "/resources/icon.png",
+    menuItems: [
+      { id: "show", text: "显示 JAVM", isDisabled: exiting },
+      { text: "-" },
+      { id: "exit", text: exiting ? "正在退出…" : "退出 JAVM", isDisabled: exiting },
+    ],
+  });
+}
+
+function refreshTrayMenu() {
+  if (!trayReady) return;
+  void setTrayMenu().catch(() => {
+    logEvent("warn", "app", "tray_update_failed", "托盘状态更新失败");
+  });
+}
+
 export async function exitApplication() {
   if (exiting) return;
   exiting = true;
+  refreshTrayMenu();
+  stopApplicationLaunches();
   logEvent("info", "app", "exit_requested", "正在停止任务并退出应用");
   try {
-    await stopLibrary?.();
-    await service?.shutdown();
+    // 先暂停下载，再收尾依赖共享扩展的服务，最后才能关闭扩展进程。
+    if (service) await service.shutdown(stopLibrary);
+    else await stopLibrary?.();
     logEvent("info", "app", "stopped", "任务收尾完成，应用即将退出");
     await flushLogs();
     await app.exit();
@@ -28,6 +50,7 @@ export async function exitApplication() {
       error instanceof Error ? error.message : "退出收尾失败",
     );
     exiting = false;
+    refreshTrayMenu();
     throw error;
   }
 }
@@ -63,20 +86,14 @@ export function initializeLifecycle(
     void closeMainWindow().catch(report);
   });
   void events.on("trayMenuItemClicked", (event: CustomEvent<{ id: string }>) => {
+    if (exiting) return;
     if (event.detail.id === "show") void nativeWindow.show().then(() => nativeWindow.focus());
     if (event.detail.id === "exit") void exitApplication().catch(report);
   });
-  traySetup = os
-    .setTray({
-      icon: "/resources/icon.png",
-      menuItems: [
-        { id: "show", text: "显示 JAVM" },
-        { text: "-" },
-        { id: "exit", text: "退出 JAVM" },
-      ],
-    })
+  traySetup = setTrayMenu()
     .then(() => {
       trayReady = true;
+      if (exiting) refreshTrayMenu();
     })
     .catch(() => {
       trayReady = false;

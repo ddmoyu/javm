@@ -34,6 +34,10 @@ export interface MovieCandidate {
   title: string;
 }
 export interface MovieDetails {
+  fusion?: {
+    sources: { provider: string; id: string; homepage: string }[];
+    fields: Record<string, { provider: string; id: string }>;
+  };
   fields: Partial<EditableMetadata>;
   provider: string;
   id: string;

@@ -7,6 +7,8 @@
 #include <regex>
 #include <set>
 #include <utility>
+#include <fstream>
+#include <array>
 
 namespace media {
 namespace {
@@ -72,6 +74,14 @@ public:
 std::string stringValue(const Json& object, const char* key) {
     return object.contains(key) && object[key].is_string() ? object[key].get<std::string>() : "";
 }
+std::string aliasDimension(std::string dimension) {
+    if(dimension=="actresses" || dimension=="maleActors") return "actors";
+    return dimension;
+}
+std::string canonicalName(sqlite3* db,const std::string& dimension,const std::string& name) {
+    const auto found=rows(db,"SELECT canonical FROM facet_aliases WHERE dimension=? AND alias=? AND blocked=0",{aliasDimension(dimension),name});
+    return found.empty()?name:found[0]["canonical"].get<std::string>();
+}
 Json relations(sqlite3* db, const std::string& id, const std::string& kind, const std::string&) {
     Json out=Json::array();
     for(const auto& row:rows(db,"SELECT e.name FROM entities e JOIN work_entities r ON r.entity_id=e.id WHERE r.work_id=? AND e.kind=? ORDER BY r.priority,e.name",{id,kind})) out.push_back(row["name"]);
@@ -107,12 +117,12 @@ Store::Store(fs::path path):path_(std::move(path)) {
         exec(db_,"UPDATE directories SET state='interrupted',error='上次扫描中断，可重新扫描' WHERE state='scanning'");
     } catch(...) { if(db_) sqlite3_close(db_); db_=nullptr; throw; }
 }
-Store::~Store() { if(db_) sqlite3_close(db_); }
+Store::~Store() { if(db_) sqlite3_close(db_); if(mainInstance_) CloseHandle(mainInstance_); }
 void Store::migrate() {
     const auto version=rows(db_,"PRAGMA user_version")[0]["user_version"];
     const auto application=rows(db_,"PRAGMA application_id")[0]["application_id"];
     if(version==1 && application==1245793585) {
-        // Additive tables preserve the existing work model and user data.
+        // Additive feature tables preserve the existing 1.0 work model and all user data.
         exec(db_,
 #include "library_features_schema.inc"
         );
@@ -133,6 +143,9 @@ void Store::migrate() {
 #include "store_scrape.inc"
 #include "store_import.inc"
 #include "store_resources.inc"
+#include "store_documents.inc"
+#include "store_artwork.inc"
+#include "store_file_operations.inc"
 Json Store::playbackPosition(const Json& params) {
     const auto key = params.at("key").get<std::string>();
     if (key.size() != 64 || key.find_first_not_of("0123456789abcdef") != std::string::npos)
@@ -209,7 +222,7 @@ struct Predicate {
         sql += ")";
     }
 };
-std::string facetSource(const std::string& dimension) {
+std::string rawFacetSource(const std::string& dimension) {
     if(dimension=="actresses" || dimension=="maleActors")
         return "SELECT e.name,r.work_id AS video_id FROM entities e JOIN work_entities r ON r.entity_id=e.id WHERE e.kind='actors' AND e.name IN (SELECT name FROM javm_discovery_names WHERE dimension='"+dimension+"')";
     if(dimension=="actors" || dimension=="genres")
@@ -219,6 +232,15 @@ std::string facetSource(const std::string& dimension) {
     const auto found = columns.find(dimension);
     if (found == columns.end()) throw std::runtime_error("未知筛选维度");
     return "SELECT " + found->second + " AS name,id AS video_id FROM javm_catalog";
+}
+std::string canonicalFacet(const std::string& source,const std::string& dimension) {
+    if(dimension=="years" || dimension=="qualities") return source;
+    return "SELECT COALESCE(a.canonical,f.name) AS name,f.video_id FROM ("+source+") f LEFT JOIN facet_aliases a ON a.dimension='"+aliasDimension(dimension)+"' AND a.alias=f.name AND a.blocked=0";
+}
+std::string facetSource(const std::string& dimension) { return canonicalFacet(rawFacetSource(dimension),dimension); }
+std::string facetFavoriteSql(const std::string& dimension) {
+    const auto normalized=aliasDimension(dimension);
+    return "EXISTS(SELECT 1 FROM facet_favorites f WHERE f.dimension IN ('"+dimension+"','"+normalized+"') AND f.favorite=1 AND (f.name=facets.name OR f.name IN (SELECT alias FROM facet_aliases WHERE dimension='"+normalized+"' AND canonical=facets.name AND blocked=0)))";
 }
 Json queryRows(sqlite3* db, const std::string& sql, const Json& args) {
     Query query(db,sql,args); auto result = Json::array();
@@ -324,7 +346,7 @@ Json Store::query(const Json& params) {
     if (params.contains("facet")) {
         const auto& facet = params.at("facet");
         where.sql += " AND c.id IN (SELECT video_id FROM (" + facetSource(requestText(facet,"dimension")) + ") WHERE name=?)";
-        where.args.push_back(requestText(facet,"value"));
+        where.args.push_back(canonicalName(db_,requestText(facet,"dimension"),requestText(facet,"value")));
     }
     const std::map<std::string,std::string> sorts{{"added","c.created_at"},{"year","c.catalog_year"},
         {"code","COALESCE(c.local_id,'') COLLATE JAVM_NATURAL"},{"title","COALESCE(c.title,'') COLLATE JAVM_NATURAL"},
@@ -349,6 +371,9 @@ Json Store::catalogAppend(const Json& params) {
     const auto& names = params.at("names");
     if (!allowed.contains(dimension) || !names.is_array() || names.size() > 500)
         throw std::runtime_error("名单导入参数无效");
+    if (params.contains("offset") && (!params.at("offset").is_number_integer() ||
+        params.at("offset") < 0 || params.at("offset") > 100000 - names.size()))
+        throw std::runtime_error("名单顺序参数无效");
     for (const auto& name: names) {
         if (!name.is_string()) throw std::runtime_error("名单名称无效");
         const auto& value = name.get_ref<const std::string&>();
@@ -359,7 +384,12 @@ Json Store::catalogAppend(const Json& params) {
     QueryDeadline deadline(db_);
     Transaction transaction(db_);
     // 临时索引与本地媒体关系隔离；名字没有关联影片时计数仍为零。
-    run(db_,"INSERT OR IGNORE INTO javm_discovery_names(dimension,name) SELECT ?,value FROM json_each(?)",{dimension,names.dump()});
+    const auto offset = params.contains("offset") ? params.at("offset").get<int64_t>() :
+        rows(db_,"SELECT COALESCE(MAX(position)+1,0) AS next FROM javm_discovery_names WHERE dimension=?",{dimension})[0]["next"].get<int64_t>();
+    const auto insert = "INSERT INTO javm_discovery_names(dimension,name,position) SELECT ?,value,?+MIN(CAST(key AS INTEGER)) FROM json_each(?) GROUP BY value ";
+    run(db_,insert+std::string(params.contains("offset") ?
+        "ON CONFLICT(dimension,name) DO UPDATE SET position=excluded.position" :
+        "ON CONFLICT(dimension,name) DO NOTHING"),{dimension,offset,names.dump()});
     const auto count = rows(db_,"SELECT count(*) AS count FROM javm_discovery_names WHERE dimension=?",{dimension})[0]["count"].get<int64_t>();
     if (count > 100000) throw std::runtime_error("名单数量超过限制");
     transaction.commit();
@@ -387,10 +417,19 @@ Json Store::facets(const Json& params) {
         facet += " UNION ALL SELECT value AS name,NULL AS video_id FROM json_each(?)";
         sourceArgs.push_back(names.dump());
     }
-    const auto source = " FROM (SELECT name,count(DISTINCT video_id) AS count FROM (" + facet + ") WHERE name<>'' GROUP BY name)";
+    facet=canonicalFacet(facet,dimension);
+    const auto grouped = "SELECT name,count(DISTINCT video_id) AS count FROM (" + facet + ") WHERE name<>'' GROUP BY name";
+    const auto source = " FROM (" + grouped + ") AS facets";
     Predicate where;
-    where.contains("name",trim(requestText(params,"query")));
+    const auto search=trim(requestText(params,"query"));
+    if(!search.empty()) {
+        where.sql+=" AND (instr(javm_lower(name),javm_lower(?))>0 OR name IN (SELECT canonical FROM facet_aliases WHERE dimension=? AND blocked=0 AND instr(javm_lower(alias),javm_lower(?))>0) OR name IN (SELECT name FROM facet_names WHERE dimension=? AND instr(javm_lower(label),javm_lower(?))>0))";
+        for(const auto& value:Json::array({search,aliasDimension(dimension),search,aliasDimension(dimension),search})) where.args.push_back(value);
+    }
     if (params.contains("names")) where.oneOf("name",params.at("names"),false);
+    if (params.value("favoritesOnly",false)) {
+        where.sql += " AND "+facetFavoriteSql(dimension);
+    }
     auto filteredArgs = sourceArgs;
     for (const auto& value : where.args) filteredArgs.push_back(value);
     Json result = Json::object();
@@ -399,11 +438,22 @@ Json Store::facets(const Json& params) {
         result["available"] = queryRows(db_,"SELECT count(*) AS count" + source,sourceArgs)[0]["count"];
     }
     const auto sort = requestText(params,"sort","name");
-    if (sort != "name" && sort != "count") throw std::runtime_error("未知维度排序方式");
-    const auto order = dimension == "years" ? "CAST(name AS INTEGER) DESC" : sort == "count" ? "count DESC,name COLLATE JAVM_NATURAL" : "name COLLATE JAVM_NATURAL";
+    if (sort != "name" && sort != "source") throw std::runtime_error("未知维度排序方式");
+    std::string order = dimension == "years" ? "CAST(name AS INTEGER) DESC" : "name COLLATE JAVM_NATURAL";
+    auto orderedSource = source;
+    if (sort == "source" && dimension != "years") {
+        // 别名归并后取最早的来源位置；本地独有条目放到来源名单之后。
+        const auto ranked = canonicalFacet("SELECT name,position AS video_id FROM javm_discovery_names WHERE dimension='"+dimension+"'",dimension);
+        orderedSource = " FROM (SELECT counts.*,r.source_position FROM ("+grouped+") counts LEFT JOIN (SELECT name,MIN(video_id) AS source_position FROM ("+ranked+") GROUP BY name) r ON r.name=counts.name) AS facets";
+        order = "source_position IS NULL,source_position,name COLLATE JAVM_NATURAL";
+    }
     const auto offset = std::max(0,params.value("offset",0));
-    auto args = filteredArgs; args.push_back(std::clamp(params.value("limit",100),1,100)); args.push_back(offset);
-    result["items"] = queryRows(db_,"SELECT name,count" + source + " WHERE " + where.sql + " ORDER BY " + order + " LIMIT ? OFFSET ?",args);
+    const bool includeFavorites=params.value("includeFavorites",false);
+    auto args = Json::array();
+    for (const auto& value : filteredArgs) args.push_back(value);
+    args.push_back(std::clamp(params.value("limit",100),1,100)); args.push_back(offset);
+    const auto columns=std::string("SELECT name,count")+(includeFavorites ? ","+facetFavoriteSql(dimension)+" AS favorite" : "")+(params.value("includeLabels",false)?",COALESCE((SELECT label FROM facet_names WHERE dimension='"+aliasDimension(dimension)+"' AND name=facets.name),'') AS label":"");
+    result["items"] = queryRows(db_,columns + orderedSource + " WHERE " + where.sql + " ORDER BY " + order + " LIMIT ? OFFSET ?",args);
     result["offset"] = offset;
     return result;
 }
@@ -429,4 +479,21 @@ void Store::favorite(const std::string& id,bool value) {
     run(db_,"UPDATE works SET favorite=? WHERE id=?",{value,id});
     if(!sqlite3_changes(db_)) throw std::runtime_error("作品不存在");
 }
+void Store::facetFavorite(const Json& params) {
+    std::lock_guard lock(mutex_);
+    const auto dimension=aliasDimension(requestText(params,"dimension")), name=canonicalName(db_,dimension,trim(requestText(params,"name")));
+    facetSource(dimension);
+    if(name.empty() || name.size()>512 || name.find('\0')!=std::string::npos || !params.contains("value") || !params["value"].is_boolean())
+        throw std::runtime_error("收藏参数无效");
+    if(rows(db_,"SELECT count(*) AS count FROM facet_favorites WHERE favorite=1")[0]["count"].get<int64_t>()>=10000 && params["value"]==true &&
+       rows(db_,"SELECT 1 FROM facet_favorites WHERE dimension=? AND name=? AND favorite=1",{dimension,name}).empty())
+        throw std::runtime_error("维度收藏已达到 10000 项上限");
+    Transaction transaction(db_);
+    if(!params.at("value").get<bool>()) run(db_,"UPDATE facet_favorites SET favorite=0 WHERE dimension IN (?,?,?) AND (name=? OR name IN (SELECT alias FROM facet_aliases WHERE dimension=? AND canonical=? AND blocked=0))",{dimension,dimension=="actors"?"actresses":dimension,dimension=="actors"?"maleActors":dimension,name,dimension,name});
+    run(db_,"INSERT INTO facet_favorites VALUES(?,?,?) ON CONFLICT(dimension,name) DO UPDATE SET favorite=excluded.favorite",{dimension,name,params["value"]});
+    transaction.commit();
+}
+#include "store_aliases.inc"
+#include "store_related.inc"
+#include "store_instance.inc"
 }

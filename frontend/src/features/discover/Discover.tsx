@@ -34,6 +34,9 @@ import {
   metadataDimensions,
 } from "./discoverCategories";
 import type { DiscoverCategory } from "./discoverCategories";
+import { EntityAliasesModal } from "./EntityAliasesModal";
+import { OnlineWorks } from "./OnlineWorks";
+import { isAvwikiDimension } from "../../services/catalog/avwikiCsv";
 
 export interface DiscoverHandle {
   select: (dimension: FilmFacet, value: string) => void;
@@ -53,18 +56,20 @@ const avatarGradient = (name: string) =>
   ]!;
 
 export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
-  const { page, library, libraryState, toggleFavorite, openFilm, play } = useWorkspace();
+  const { page, library, libraryState, toggleFavorite, openFilm, play, notice } = useWorkspace();
   const root = useRef<HTMLDivElement>(null);
   const returnTo = useRef<{ name: string; top: number } | null>(null);
   const pendingPosition = useRef<{ top: number; name?: string } | null>(null);
   const [dimension, setDimension] = useState<DiscoverCategory>("女演员");
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedFacet, setSelectedFacet] = useState<FilmFacet | null>(null);
+  const [workSource, setWorkSource] = useState("online");
   const [query, setQuery] = useState("");
   const [search] = useDebouncedValue(query.trim(), 180);
-  const [sort, setSort] = useState<"count" | "name">("count");
+  const [sort, setSort] = useState<"source" | "name">("source");
   const [onlyFavorites, setOnlyFavorites] = useState(false);
-  const [favorites, setFavorites] = useState<Set<string>>(() => new Set());
+  const [aliasesOpened, setAliasesOpened] = useState(false);
+  const [savingFavorites, setSavingFavorites] = useState<Set<string>>(() => new Set());
   const [pageNumber, setPageNumber] = useState(1);
   const [facetView] = useState(() => library.createFacetQuery(true));
   const [workView] = useState(() => library.createFilmQuery());
@@ -75,13 +80,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
       dimension: discoverDimensions[dimension],
       query: search,
       sort,
-      ...(onlyFavorites
-        ? {
-            names: [...favorites]
-              .filter((name) => name.startsWith(`${dimension}:`))
-              .map((name) => name.slice(dimension.length + 1)),
-          }
-        : {}),
+      favoritesOnly: onlyFavorites,
     },
     page === "discover" && !selected && (libraryState.ready || !!library.catalog),
   );
@@ -130,6 +129,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
     setDimension(next);
     setSelected(null);
     setSelectedFacet(null);
+    setWorkSource("online");
     setQuery("");
     setOnlyFavorites(false);
     returnTo.current = null;
@@ -178,6 +178,17 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
           />
           {!selected && (
             <Group gap="xs" wrap="nowrap">
+              {aliasesOpened && (
+                <EntityAliasesModal library={library} onClose={() => setAliasesOpened(false)} />
+              )}
+              <Button
+                size="xs"
+                variant="subtle"
+                disabled={!libraryState.ready || !libraryState.available}
+                onClick={() => setAliasesOpened(true)}
+              >
+                名称管理
+              </Button>
               <TextInput
                 size="xs"
                 w={200}
@@ -210,17 +221,18 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                 aria-label="发现排序"
                 value={sort}
                 data={[
-                  { value: "count", label: "作品最多" },
+                  { value: "source", label: "网站顺序" },
                   { value: "name", label: "名称 A–Z" },
                 ]}
                 allowDeselect={false}
                 onChange={(value) => {
-                  if (value === "count" || value === "name") setSort(value);
+                  if (value === "source" || value === "name") setSort(value);
                   resetPosition();
                 }}
               />
               <Button
                 variant={onlyFavorites ? "light" : "subtle"}
+                disabled={!libraryState.available || !libraryState.ready}
                 color={onlyFavorites ? "rouge" : "gray"}
                 size="xs"
                 aria-label={`只看收藏${dimension}`}
@@ -280,8 +292,8 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               className="facet-grid"
               aria-label={`${dimension}列表`}
             >
-              {shown.map(({ name, count }) => {
-                const favorite = favorites.has(favoriteKey(name));
+              {shown.map(({ name, count, favorite: savedFavorite, label }) => {
+                const favorite = !!savedFavorite;
                 return (
                   <Paper component="li" key={name} className="facet-card" withBorder radius="md">
                     <UnstyledButton
@@ -295,6 +307,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                           top: root.current?.closest(".page-content")?.scrollTop ?? 0,
                         };
                         setSelected(name);
+                        setWorkSource("online");
                         pendingPosition.current = { top: 0 };
                       }}
                     >
@@ -319,7 +332,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                         </Avatar>
                       )}
                       <Text span size="sm" fw={500} truncate style={{ flex: 1 }}>
-                        {labels && Object.hasOwn(labels, name) ? labels[name] : name}
+                        {label || (labels && Object.hasOwn(labels, name) ? labels[name] : name)}
                       </Text>
                       <Text span size="xs" c="dimmed" title={`${count} 部影片`}>
                         {count.toLocaleString()}
@@ -329,15 +342,26 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                       color={favorite ? "champagne" : "gray"}
                       aria-label={`${favorite ? "取消收藏" : "收藏"}${dimension} ${name}`}
                       aria-pressed={favorite}
-                      onClick={() =>
-                        setFavorites((previous) => {
-                          const next = new Set(previous);
-                          const key = favoriteKey(name);
-                          if (next.has(key)) next.delete(key);
-                          else next.add(key);
-                          return next;
-                        })
-                      }
+                      loading={savingFavorites.has(favoriteKey(name))}
+                      disabled={!libraryState.available || !libraryState.ready}
+                      onClick={() => {
+                        const key = favoriteKey(name);
+                        setSavingFavorites((previous) => new Set(previous).add(key));
+                        void library
+                          .setFacetFavorite(discoverDimensions[dimension], name, !favorite)
+                          .catch((error: unknown) =>
+                            notice(
+                              error instanceof Error ? error.message : "收藏保存失败，请重试。",
+                            ),
+                          )
+                          .finally(() =>
+                            setSavingFavorites((previous) => {
+                              const next = new Set(previous);
+                              next.delete(key);
+                              return next;
+                            }),
+                          );
+                      }}
                     >
                       <Icon name="star" size={15} filled={favorite} />
                     </ActionIcon>
@@ -403,34 +427,64 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               {selected}
             </Title>
             {selectedFacet && <Pill>{selectedFacet}</Pill>}
-            <Pill>{works.total.toLocaleString()} 部</Pill>
+            <Pill>本地 {works.total.toLocaleString()} 部</Pill>
           </Group>
-          {works.error && (
-            <Alert color="red" role="alert" mb="md">
-              {works.error}
-              <Button size="xs" variant="subtle" onClick={workView.retry}>
-                重试
-              </Button>
-            </Alert>
-          )}
-          {!works.ready && !works.total && !works.error && (
-            <Group component="output" justify="center" py="xl">
-              <Loader size="sm" />
-              <Text size="sm">正在读取影片…</Text>
-            </Group>
-          )}
-          <FilmCollection
-            items={works.items}
-            count={works.total}
-            onRangeChange={workView.loadRange}
-            layout="poster"
-            active={page === "discover"}
-            openFilm={openFilm}
-            play={play}
-            toggleFavorite={toggleFavorite}
-          />
-          {works.ready && works.total === 0 && !works.error && (
-            <Empty title="暂未收录" description="相关作品入库后会显示在这里。" />
+          {!selectedFacet &&
+            library.catalog &&
+            isAvwikiDimension(discoverDimensions[dimension]) && (
+              <>
+                <SegmentedControl
+                  aria-label="作品来源"
+                  value={workSource}
+                  onChange={setWorkSource}
+                  data={[
+                    { value: "online", label: "在线作品" },
+                    { value: "local", label: "本地已收录" },
+                  ]}
+                />
+                <div hidden={workSource !== "online"}>
+                  <OnlineWorks
+                    service={library.catalog.works}
+                    name={selected}
+                    dimension={discoverDimensions[dimension]}
+                    active={page === "discover" && workSource === "online"}
+                  />
+                </div>
+              </>
+            )}
+          {(selectedFacet || !library.catalog || workSource === "local") && (
+            <>
+              {works.error && (
+                <Alert color="red" role="alert" mb="md">
+                  {works.error}
+                  <Button size="xs" variant="subtle" onClick={workView.retry}>
+                    重试
+                  </Button>
+                </Alert>
+              )}
+              {!works.ready && !works.total && !works.error && (
+                <Group component="output" justify="center" py="xl">
+                  <Loader size="sm" />
+                  <Text size="sm">正在读取影片…</Text>
+                </Group>
+              )}
+              <FilmCollection
+                items={works.items}
+                count={works.total}
+                onRangeChange={workView.loadRange}
+                layout="poster"
+                active={page === "discover"}
+                openFilm={openFilm}
+                play={play}
+                toggleFavorite={toggleFavorite}
+              />
+              {works.ready && works.total === 0 && !works.error && (
+                <Empty
+                  title="暂未收录"
+                  description="保存在线作品资料或导入本地视频后会显示在这里。"
+                />
+              )}
+            </>
           )}
         </section>
       )}

@@ -37,6 +37,7 @@ CREATE TABLE work_entities(
  entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,priority INTEGER NOT NULL DEFAULT 0,
  PRIMARY KEY(work_id,entity_id));
 CREATE INDEX entities_work ON work_entities(entity_id,work_id);
+CREATE TABLE facet_favorites(dimension TEXT NOT NULL,name TEXT NOT NULL,favorite INTEGER NOT NULL CHECK(favorite IN (0,1)),PRIMARY KEY(dimension,name));
 CREATE TABLE directories(
  id TEXT PRIMARY KEY,path TEXT NOT NULL,path_key TEXT NOT NULL UNIQUE,recursive INTEGER NOT NULL DEFAULT 1,
  formats TEXT NOT NULL DEFAULT '[]',state TEXT NOT NULL DEFAULT 'idle',error TEXT NOT NULL DEFAULT '',

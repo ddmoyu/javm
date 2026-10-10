@@ -11,6 +11,30 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
     auto provenance=Json::parse(found[0]["nfo_data"].get<std::string>());
     const auto manual=provenance.value("_manual",Json::object());
     auto current=decorate(found)[0];
+    // 显示别名不改变底层原始资料；只有实际采用的新字段才写回。
+    for(const auto* field:{"studio","label","director","series"}) current[field]=found[0][field];
+    for(const auto* field:{"actors","genres","tags"}) current[field]=relations(db_,id,field,"");
+    auto fusion=details.value("fusion",Json::object());
+    const auto sources=fusion.value("sources",Json::array({{{"provider",provider},{"id",providerId}}}));
+    if(!sources.is_array() || sources.empty() || sources.size()>5 || fusion.dump().size()>16000) throw std::runtime_error("资料来源记录无效");
+    Json identities=Json::array();std::set<std::string> sourceKeys;
+    for(const auto& item:sources) {
+        const auto name=item.at("provider").get<std::string>(),key=item.at("id").get<std::string>();
+        if(name.empty() || name.size()>100 || name.find(':')!=std::string::npos || key.empty() || key.size()>200) throw std::runtime_error("资料来源身份无效");
+        sourceKeys.insert(name+":"+key);identities.push_back({{"type","metatube"},{"value",name+":"+key}});
+    }
+    if(!sourceKeys.contains(provider+":"+providerId)) throw std::runtime_error("资料来源不含主身份");
+    const auto fieldSources=fusion.value("fields",Json::object());Json adopted=Json::object();
+    if(!fieldSources.is_object() || fieldSources.size()>16) throw std::runtime_error("字段来源记录无效");
+    for(const auto& origin:fieldSources) {
+        if(!origin.is_object() || !sourceKeys.contains(origin.value("provider",std::string{})+":"+origin.value("id",std::string{})))
+            throw std::runtime_error("字段来源与资料身份不一致");
+    }
+    auto record=[&](const std::string& key) {
+        const auto origin=fieldSources.value(key,Json{{"provider",provider},{"id",providerId}});
+        if(!sourceKeys.contains(origin.at("provider").get<std::string>()+":"+origin.at("id").get<std::string>())) throw std::runtime_error("字段来源与资料身份不一致");
+        adopted[key]=origin;
+    };
     const auto filePath=params.value("path",std::string{});
     if (!filePath.empty()) {
         const auto path=fs::path(wide(filePath));
@@ -34,13 +58,13 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
             if (!incoming[key].is_string()) throw std::runtime_error("刮削字段格式无效");
             const auto candidate=incoming[key].get<std::string>();
             if (candidate.size()>64000) throw std::runtime_error("刮削字段过长");
-            if (!candidate.empty()) value=candidate;
+            if (!candidate.empty()) {value=candidate;record(key);}
         }
         merged[column]=value;
     }
     for (const auto* key: {"actors","genres","tags"}) {
         auto value=current.value(key,Json::array());
-        if (!manual.contains(key) && value.empty() && incoming.contains(key)) value=incoming[key];
+        if (!manual.contains(key) && value.empty() && incoming.contains(key)) {value=incoming[key];if(!value.empty()) record(key);}
         if (!value.is_array() || value.size()>100) throw std::runtime_error("刮削列表无效或过长");
         Json unique=Json::array(); std::set<std::string> seen;
         for (const auto& entry: value) {
@@ -56,6 +80,7 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
             const auto candidate=incoming[key].get<double>();
             if (!std::isfinite(candidate) || candidate<0 || candidate>(std::string(key)=="rating" ? 5 : 1440)) throw std::runtime_error("刮削评分或时长无效");
             value=candidate*(std::string(key)=="rating" ? 2 : 60);
+            if(candidate>0) record(key);
         }
         merged[key]=value;
     }
@@ -66,7 +91,7 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
         if(part==part.root_path()) break;
     }
     if ((fs::exists(nfoPath) ? stamp(nfoPath) : std::string{})!=params.value("nfoStamp",std::string{})) throw std::runtime_error("NFO 已被修改，请重试以重新读取最新资料");
-    matchWork({{"num",code},{"uniqueids",Json::array({{{"type","metatube"},{"value",provider+":"+providerId}}})}},id);
+    matchWork({{"num",code},{"uniqueids",identities}},id);
     if (cancelled) throw std::runtime_error("刮削已取消");
     std::string warning, poster=stringValue(current,"poster");
     const auto image=params.value("image",std::string{});
@@ -83,12 +108,16 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
         metadata["poster"]=relative.empty() ? poster : utf8(relative.generic_wstring());
     }
     Json source={{"workId",id},{"hasVideo",!current["media_files"].empty()},{"provider",provider},{"id",providerId},{"homepage",details.value("homepage",std::string{})}};
+    source["sources"]=sources;
     // 文件与 SQLite 无法跨介质原子提交；文件先安全替换，数据库失败时可幂等重试。
     const auto original=writeScrapedNfo(nfoPath,metadata,source,params.value("nfoStamp",std::string{}));
     const auto parsed=readNfo(nfoPath);
     Transaction transaction(db_);
     provenance.update(parsed);
     provenance["_scrape"]=source;
+    auto previousFusion=provenance.value("_fusion",Json::object());
+    auto previousFields=previousFusion.value("fields",Json::object());previousFields.update(adopted);
+    fusion["fields"]=previousFields;fusion["sources"]=sources;provenance["_fusion"]=fusion;
     if (!manual.empty()) provenance["_manual"]=manual;
     if (merged["title"]!=current["title"]) provenance.erase("_filenameTitle");
     if (!poster.empty()) provenance["_local_poster"]=poster;
@@ -96,7 +125,7 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
         {merged["title"],merged["original_title"],merged["code"],codeKey(merged["code"]),merged["premiered"],merged["director"],merged["studio"],merged["label"],merged["series"],merged["plot"],merged["rating"],metadata["runtimeSeconds"],poster,provenance.dump(),id});
     for (const auto& [table,key]: {std::pair{"actors","actor"},{"genres","genre"},{"tags","tag"}})
         mergeRelations(db_,id,table,key,merged[table],current[table]);
-    run(db_,"INSERT OR IGNORE INTO work_sources VALUES(?,?,?)",{provider,providerId,id});
+    for(const auto& item:sources) run(db_,"INSERT OR IGNORE INTO work_sources VALUES(?,?,?)",{item["provider"],item["id"],id});
     Query saved(db_,"UPDATE nfo_documents SET stamp=?1,encoding='UTF-8',parser_version=?2,content=?4 WHERE path_key=?3",Json::array({stamp(nfoPath),nfoParserVersion,pathKey(nfoPath)}));
     saved.blob(4,original); saved.next();
     transaction.commit();

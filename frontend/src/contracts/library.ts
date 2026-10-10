@@ -51,6 +51,7 @@ export interface DirectoryInput {
   formats: string[];
 }
 export interface NativeVideo {
+  screenshots?: { id: string; path: string; kind: "screenshot" | "sheet"; seconds: number }[];
   plot?: string;
   metadata_edited?: boolean;
   id: string;
@@ -66,7 +67,16 @@ export interface NativeVideo {
   rating: number | null;
   video_path: string | null;
   availability?: "metadata_only" | "available" | "unavailable";
-  media_files?: { id: string; path: string; file_size: number | null; missing: number }[];
+  media_files?: {
+    id: string;
+    path: string;
+    file_size: number | null;
+    missing: number;
+    stream_url?: string | null;
+    part?: number;
+    parts?: number;
+    subtitles?: string[];
+  }[];
   nfo_files?: { path: string; canonical: number }[];
   dir_path: string;
   file_size: number | null;
@@ -131,12 +141,15 @@ export interface LibraryQuery {
 export interface FacetQuery {
   dimension: FacetDimension;
   query?: string;
-  sort?: "name" | "count";
+  sort?: "name" | "source";
   names?: string[];
+  favoritesOnly?: boolean;
 }
 export interface FacetValue {
+  label?: string;
   name: string;
   count: number;
+  favorite?: boolean | number;
 }
 export interface LibrarySummary {
   total: number;

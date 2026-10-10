@@ -1,6 +1,8 @@
 import type { FacetQuery, FacetValue, PageRequest, QueryPage } from "../../contracts/library";
 import type { GenreLane } from "./catalogData";
 import type { AvwikiDimension } from "./avwikiCsv";
+import type { AvwikiEntity, AvwikiWork, AvwikiWorksPage } from "./avwikiWorks";
+import type { MovieDetails } from "../metadata/MetaTubeService";
 import type {
   ActorDirectoryDimension,
   Additions,
@@ -20,7 +22,24 @@ interface Tasks {
   };
   directory: {
     input: { html: string; dimension: AvwikiDimension; page: number };
-    output: { names: string[]; nextPage: number | null; portraits?: Record<string, string> };
+    output: {
+      names: string[];
+      nextPage: number | null;
+      portraits?: Record<string, string>;
+      entries?: Record<string, string>;
+    };
+  };
+  workEntities: {
+    input: { name: string; dimension: AvwikiDimension };
+    output: AvwikiEntity[];
+  };
+  works: {
+    input: { html: string; entity: AvwikiEntity; page: number };
+    output: AvwikiWorksPage;
+  };
+  workDetails: {
+    input: { html: string; work: AvwikiWork };
+    output: MovieDetails;
   };
   portraits: {
     input: { names: string[]; dimension: "actresses" | "maleActors"; fallback?: boolean };

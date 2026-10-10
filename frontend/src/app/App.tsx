@@ -61,6 +61,7 @@ import type { ResolutionService } from "../services/streamResolution/ResolutionS
 import type { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
 import type { Film } from "../contracts/media";
 import { LegacyImportModal } from "../features/library/LegacyImportModal";
+import { listenApplicationLaunches } from "../platform/neutralino/applicationInstance";
 
 const PlaybackWindow = lazy(() => import("../features/player/PlaybackWindow"));
 
@@ -122,6 +123,7 @@ export function App({
   const [detailView, setDetailView] = useState<FilmDetailView>("info");
   const [toast, setToast] = useState("");
   const [downloadOpened, setDownloadOpened] = useState(false);
+  const [downloadInitial, setDownloadInitial] = useState<{ url: string; name: string }>();
   const [downloadFilm, setDownloadFilm] = useState<Film | undefined>();
   const searchRef = useRef<HTMLInputElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
@@ -135,6 +137,29 @@ export function App({
     setToast(message);
     logEvent("info", "ui", "notice", message);
   };
+  useEffect(() => {
+    if (runtime !== "desktop" || !libraryState.ready) return;
+    return listenApplicationLaunches(
+      async (action) => {
+        if (action.kind === "work") {
+          await library.openWork(action.id);
+          setDetailView("info");
+        }
+        if (action.kind === "search") {
+          const select = () => scraperRef.current?.showSearch(action.code);
+          if (scraperRef.current) select();
+          else pendingNavigation.current = select;
+          setPage("scraper");
+        }
+        if (action.kind === "download") {
+          setDownloadFilm(undefined);
+          setDownloadInitial(action);
+          setDownloadOpened(true);
+        }
+      },
+      (message) => setToast(message),
+    );
+  }, [runtime, libraryState.ready, library, resourceSearch, setPage]);
   const playSource = (source: string, options?: PlaybackOptions) => {
     library.selectFilm(null);
     void playback.play(source, options).catch((error: unknown) => notice(playbackError(error)));
@@ -237,7 +262,11 @@ export function App({
         },
         play: (film) => {
           const file = film.files?.find((item) => item.kind === "video" && !item.missing);
-          if (file) playSource(file.path, { title: `${film.code} ${film.title}`.trim() });
+          if (file)
+            playSource(file.streamUrl ?? file.path, {
+              title: `${film.code} ${film.title}`.trim(),
+              subtitles: file.subtitles,
+            });
           else notice("这部影片尚未关联可播放的视频文件。");
         },
         playSource,
@@ -340,7 +369,16 @@ export function App({
         onClose={() => library.selectFilm(null)}
       />
       {downloadOpened && (
-        <NewDownloadModal opened film={downloadFilm} onClose={() => setDownloadOpened(false)} />
+        <NewDownloadModal
+          key={downloadInitial?.url ?? "manual"}
+          opened
+          film={downloadFilm}
+          initial={downloadInitial}
+          onClose={() => {
+            setDownloadOpened(false);
+            setDownloadInitial(undefined);
+          }}
+        />
       )}
       <AddMediaDirectoryModal ref={directoryModalRef} runtime={runtime} />
       {runtime === "browser" && playbackState.opened && (

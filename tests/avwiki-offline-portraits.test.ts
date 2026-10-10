@@ -80,6 +80,7 @@ describe("AVWikiDB 离线名单及头像兜底", () => {
       '<aside><a href="/actor/2/">侧栏示例</a></aside>';
     expect(parseAvwikiDirectory(html, "actresses", 1)).toEqual({
       names: ["示例演员"],
+      entries: { n123: "示例演员" },
       nextPage: null,
     });
     expect(() =>
@@ -95,6 +96,7 @@ describe("AVWikiDB 离线名单及头像兜底", () => {
     const parsed = parseAvwikiDirectory(html, "maleActors", 1);
     expect(parsed).toEqual({
       names: ["示例男演员"],
+      entries: { "123": "示例男演员" },
       nextPage: null,
       portraits: { 示例男演员: photo },
     });

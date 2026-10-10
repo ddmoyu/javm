@@ -13,6 +13,7 @@ import type {
   DiscoveryUpdate,
 } from "./discoveryData";
 import type { CatalogProcessor } from "./workerClient";
+import { AvwikiWorksService } from "./AvwikiWorksService";
 
 export interface DiscoveryCatalogPort {
   read(): Promise<string | null>;
@@ -39,6 +40,7 @@ const RETRY_DELAY = 60 * 60 * 1000;
 // 目录续页每半小时最多处理八页；单次任务和并发均有界。
 const INCREMENTAL_DELAY = 30 * 60 * 1000;
 export class DiscoveryCatalogService extends Observable<Snapshot> {
+  readonly works: AvwikiWorksService;
   private seeded?: Promise<void>;
   private initialized?: Promise<void>;
   private data?: DiscoveryData;
@@ -78,6 +80,7 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
       errors: {},
       warning: "",
     });
+    this.works = new AvwikiWorksService(processor, port?.fetch.bind(port), () => this.ready());
   }
   private accept(data: DiscoveryData) {
     this.data = data;
@@ -183,6 +186,7 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
         let nextPage: number | null = page;
         const names: string[] = [];
         const portraits: Record<string, string> = Object.create(null);
+        const entries: Record<string, string> = Object.create(null);
         this.publish({ total: 8 });
         // 同时只更新一个目录，每批最多八页；失败或取消不推进持久化游标。
         for (let count = 0; count < 8 && nextPage !== null; count++) {
@@ -194,11 +198,12 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
           });
           names.push(...incoming.names);
           Object.assign(portraits, incoming.portraits);
+          Object.assign(entries, incoming.entries);
           nextPage = incoming.nextPage;
           if (nextPage !== null) page = nextPage;
         }
         this.publish({ total: this.snapshot.completed });
-        update = { directory: { dimension: group, names, nextPage, portraits } };
+        update = { directory: { dimension: group, names, nextPage, portraits, entries } };
       } else if (group === "genres")
         update = {
           genrePages: {
@@ -294,6 +299,7 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
     });
   }
   async shutdown() {
+    await this.works.shutdown();
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.abort?.abort();

@@ -1,6 +1,6 @@
 import { canResume, defaultDownloadSettings, isRunning } from "../../contracts/downloads";
 import type { DownloadSettings, DownloadTask, NewDownload } from "../../contracts/downloads";
-import { createDownloadTasks, redactLog, validateSettings } from "./input";
+import { createDownloadTasks, redactLog, validateSettings, safeName, joinPath } from "./input";
 import type { DownloadEngine, DownloadProgress, DownloadRepository } from "./ports";
 import { StopUnconfirmedError } from "./ports";
 import { logEvent } from "../logging/events";
@@ -35,6 +35,56 @@ export class DownloadService {
   private progressTimer?: ReturnType<typeof setTimeout>;
   private completedHandler?: (task: DownloadTask) => Promise<unknown>;
   private handoffs = new Set<Promise<void>>();
+  private renameFile?: (
+    task: DownloadTask,
+    pending: NonNullable<DownloadTask["rename"]>,
+  ) => Promise<void>;
+  connectFileRename(
+    handler: (task: DownloadTask, pending: NonNullable<DownloadTask["rename"]>) => Promise<void>,
+  ) {
+    this.renameFile = handler;
+  }
+  async edit(id: string, name: string) {
+    await this.initialize();
+    return this.exclusive(async () => {
+      let task = this.find(id);
+      if (
+        this.stopping ||
+        this.active.has(id) ||
+        isRunning(task.status) ||
+        task.status === "queued"
+      )
+        throw new Error("请先暂停任务后再修改。");
+      const cleaned = safeName(name);
+      if (!name.trim() || cleaned !== name.trim())
+        throw new Error("请使用有效的文件名，不含路径或扩展名。");
+      if (task.rename && task.rename.name !== cleaned)
+        throw new Error("请先完成上次改名，再修改名称。");
+      if (cleaned !== task.name || task.rename) {
+        const pending = task.rename ?? {
+          name: cleaned,
+          output: joinPath(task.directory, `${cleaned}.mp4`),
+          operationId: crypto.randomUUID(),
+        };
+        const exists = task.rename || (await this.engine.outputSize(task.output)) !== null;
+        if (exists) {
+          if (!this.renameFile) throw new Error("当前环境无法修改下载文件名。");
+          if (!task.rename) {
+            await this.save({ ...task, rename: pending });
+            task = this.find(id);
+          }
+          await this.renameFile(task, pending);
+        }
+        await this.save({
+          ...this.find(id),
+          name: pending.name,
+          output: pending.output,
+          rename: undefined,
+        });
+        task = this.find(id);
+      }
+    });
+  }
 
   connectScraping(handler: (task: DownloadTask) => Promise<unknown>) {
     this.completedHandler = handler;
@@ -458,6 +508,7 @@ export class DownloadService {
       this.requireReady();
       const task = this.find(id);
       if (this.active.has(id)) throw new Error("正在停止任务，请稍候。");
+      if (task.rename) throw new Error("请先在修改任务中完成上次改名。");
       if (!canResume(task.status)) return;
       await this.save({ ...task, status: "queued", error: "", speed: 0 });
     });
@@ -471,7 +522,7 @@ export class DownloadService {
       this.publish({ tasks: this.snapshot.tasks.filter((item) => item.id !== id) });
     });
   }
-  async shutdown() {
+  async shutdown(beforeDatabaseClose?: () => Promise<void>) {
     await this.recovery?.catch(() => {});
     this.stopping = true;
     this.repository.beginShutdown?.();
@@ -479,6 +530,8 @@ export class DownloadService {
       await this.pauseAll();
       await Promise.all(this.handoffs);
       await this.serial;
+      // 下载已停止，但其他服务仍要通过同一扩展保存状态和停止媒体库任务。
+      await beforeDatabaseClose?.();
       await this.repository.close();
     } catch (error) {
       this.stopping = false;

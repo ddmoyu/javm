@@ -10,6 +10,7 @@ class Store {
     sqlite3* db_ = nullptr;
     fs::path path_;
     std::mutex mutex_;
+    void* mainInstance_ = nullptr;
     void migrate();
     void prepareCatalog();
     std::string matchWork(const Json& nfo, const std::string& requested = "");
@@ -26,7 +27,7 @@ public:
     Json assetRoots();
     Json addDirectory(const fs::path& path, bool recursive, const Json& formats);
     Json removeDirectory(const std::string& id);
-    Json maintenanceRows(const std::string& after);
+    Json maintenanceRows(const std::string& after, bool health = false);
     Json fileIdentity(const std::string& id);
     Json removalInfo(const std::string& id);
     void completeRemoval(const std::string& id, bool metadataOnly);
@@ -43,7 +44,15 @@ public:
     Json video(const std::string& id);
     bool duplicateCode(const std::string& code, const std::string& except);
     void favorite(const std::string& id, bool value);
+    void facetFavorite(const Json& params);
     Json resources(const std::string& method, const Json& params);
+    Json documents(const std::string& method, const Json& params);
+    Json artwork(const std::string& method, const Json& params);
+    Json fileOperations(const std::string& method, const Json& params);
+    Json relatedMedia(const std::string& method, const Json& params);
+    Json applicationInstance(const std::string& method,const Json& params);
+    bool pendingFileOperations();
+    Json aliases(const std::string& method,const Json& params,const std::atomic_bool& cancelled);
     void updateMetadata(const Json& params);
     Json applyScrape(const Json& params, const std::atomic_bool& cancelled);
     Json playbackPosition(const Json& params);

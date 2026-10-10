@@ -6,6 +6,7 @@ import { Observable, serviceError } from "../metadata/shared";
 import { logEvent } from "../logging/events";
 import { identifyCode, normalizeCode } from "./identity";
 import { StopUnconfirmedError } from "../downloads/ports";
+import type { MetadataPipeline } from "./MetadataPipeline";
 
 export interface ScrapeTarget {
   id: string;
@@ -48,10 +49,27 @@ export class ScrapeService extends Observable<{
   paused: boolean;
   error: string;
 }> {
+  pipeline?: MetadataPipeline;
   private serial: Promise<unknown> = Promise.resolve();
   private initialization?: Promise<void>;
   private active?: { id: string; abort: AbortController; done: Promise<void> };
   private stopping = false;
+  async relocateDownload(
+    downloadId: string,
+    from: string,
+    to: string,
+    operation: () => Promise<void>,
+  ) {
+    await this.initialize();
+    return this.exclusive(async () => {
+      const jobs = this.snapshot.tasks.filter(
+        (task) => task.downloadId === downloadId || task.path === from,
+      );
+      if (jobs.some(activeScrape)) throw new Error("请等待或取消此文件的刮削任务后再改名。");
+      await operation();
+      for (const task of jobs) await this.write({ ...task, path: to });
+    });
+  }
   private uncertainStop?: { id: string; error: StopUnconfirmedError };
   private async finishUncertainStop() {
     if (!this.uncertainStop) return;
@@ -63,6 +81,11 @@ export class ScrapeService extends Observable<{
     private port: ScrapePort,
     private provider: ScrapeProvider,
     available = true,
+    private recognize?: (
+      filename: string,
+      title: string,
+      signal: AbortSignal,
+    ) => Promise<string | undefined>,
   ) {
     super({ tasks: [], ready: false, available, paused: false, error: "" });
   }
@@ -213,11 +236,26 @@ export class ScrapeService extends Observable<{
       const target = await this.port.prepare(this.find(id), signal);
       const task = this.find(id);
       await this.stage(id, "search", signal, { workId: target.id, path: target.path });
-      const query =
+      let query =
         task.query?.trim() ||
         target.code ||
         identifyCode(target.path.split(/[\\/]/).at(-1) ?? "") ||
         identifyCode(task.name);
+      if (!query && !task.candidate && this.recognize) {
+        try {
+          query = await this.recognize(
+            target.path.split(/[\\/]/).at(-1) ?? task.name,
+            target.title,
+            signal,
+          );
+          signal.throwIfAborted();
+          if (query) await this.stage(id, "search", signal, { query });
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof StopUnconfirmedError) throw error;
+          throw new NeedsInput(`自动识别未完成：${serviceError(error)}`);
+        }
+      }
       if (!query && !task.candidate)
         throw new NeedsInput("未能识别唯一番号，请填写番号或手动选择来源结果。");
       let candidate = task.candidate;

@@ -10,10 +10,12 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
+import { os } from "@neutralinojs/lib";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import type { ResourceSearchService } from "../../services/streamResolution/ResourceSearchService";
 import type { SavedResource } from "../../services/streamResolution/archive";
+import type { LibraryDocumentsService } from "../../services/library/LibraryDocumentsService";
 import { normalizeCode } from "../../services/streamResolution/sources";
 import {
   mergeResourceLinks,
@@ -77,7 +79,8 @@ export function ResourceSearchPanel({
   service,
   code,
   workId,
-}: LookupProps) {
+  documents,
+}: LookupProps & { documents?: LibraryDocumentsService }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const current = service.matches(code, workId);
   const searching = current && state.searching;
@@ -124,7 +127,7 @@ export function ResourceSearchPanel({
         : 0,
   );
 
-  const use = async (row: ResourceLinkRow, action: "copy" | "download" | "remove") => {
+  const use = async (row: ResourceLinkRow, action: "copy" | "download" | "remove" | "strm") => {
     if (acting.current) return;
     acting.current = true;
     const key = linkKey(row.stream.manifestUrl);
@@ -140,6 +143,8 @@ export function ResourceSearchPanel({
         return;
       }
       if (action === "download" && (row.added || added.has(key))) return;
+      const root = action === "strm" ? await os.showFolderDialog("导出 STRM 与 NFO") : "";
+      if (action === "strm" && !root) return;
       const live = row.liveSourceIds[0];
       let url = "";
       if (live && service.matches(code, workId) && action === "download") {
@@ -147,9 +152,12 @@ export function ResourceSearchPanel({
       } else if (live && service.matches(code, workId)) {
         url = await service.copyResult(live);
       } else {
-        url = await service.useSaved(row, action, workId);
+        url = await service.useSaved(row, action === "strm" ? "copy" : action, workId);
       }
-      if (action === "copy") {
+      if (action === "strm") {
+        await documents!.exportStream(workId!, root, url);
+        setFeedback("已导出至 " + documents!.getSnapshot().directory + "。地址失效后需重新导出。");
+      } else if (action === "copy") {
         await navigator.clipboard.writeText(url);
         setFeedback("已复制资源链接。");
       } else {
@@ -327,6 +335,16 @@ export function ResourceSearchPanel({
                     >
                       {downloaded ? "已加入下载" : "加入下载"}
                     </Button>
+                    {documents && workId && (
+                      <Button
+                        size="xs"
+                        variant="default"
+                        disabled={!!busy}
+                        onClick={() => void use(row, "strm")}
+                      >
+                        导出 STRM
+                      </Button>
+                    )}
                     {!!row.savedIds.length && (
                       <Button
                         size="xs"

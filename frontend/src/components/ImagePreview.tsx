@@ -4,6 +4,7 @@ import { Fancybox } from "@fancyapps/ui/dist/fancybox/";
 import { zh_CN } from "@fancyapps/ui/dist/fancybox/l10n/zh_CN.js";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
 import type { MediaImage } from "../contracts/media";
+import { bindImagePreviewFullscreen } from "../platform/neutralino/imagePreviewFullscreen";
 
 interface Gallery {
   images: MediaImage[];
@@ -54,6 +55,7 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
       return () => window.clearTimeout(timer);
     }
     let disposed = false;
+    let releaseFullscreen: (() => void) | undefined;
     const instance = Fancybox.show(
       gallery.images.map((image) => ({
         src: image.src,
@@ -79,7 +81,11 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
           },
         },
         on: {
+          initLayout: (preview) => {
+            releaseFullscreen = bindImagePreviewFullscreen(preview.getContainer());
+          },
           destroy: () => {
+            releaseFullscreen?.();
             if (!disposed) setGallery(null);
           },
         },
@@ -88,6 +94,7 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
     return () => {
       disposed = true;
       instance?.destroy();
+      releaseFullscreen?.();
     };
   }, [gallery]);
   return <PreviewContext.Provider value={value}>{children}</PreviewContext.Provider>;

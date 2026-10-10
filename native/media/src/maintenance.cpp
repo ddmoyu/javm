@@ -42,7 +42,36 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
         uint64_t revision;
         { std::lock_guard progressLock(progressMutex_); revision = revision_; }
         if (params.contains("revision") && params["revision"] != revision) throw std::runtime_error("片库已发生变化，请重新检查");
-        return {{"revision",revision},{"items",store_.maintenanceRows(params.value("after",std::string{}))}};
+        const bool health=params.value("health",false);
+        auto items=store_.maintenanceRows(params.value("after",std::string{}),health);
+        if(health) for(auto& item:items) {
+            Json issues=Json::array();
+            const fs::path path(wide(item.at("path")));
+            try {
+                if(!checkedFile(path)) { issues.push_back("视频文件缺失"); item["missing"]=true; }
+                else {
+                    item["missing"]=false;
+                    const auto size=fs::file_size(path);
+                    item["size"]=size;
+                    if(size==0) issues.push_back("视频文件为空");
+                    if(!item.at("file_stamp").get<std::string>().empty() && stamp(path)!=item.at("file_stamp").get<std::string>())
+                        issues.push_back("视频已变化，需要重新扫描");
+                    if(item.at("codec")!="STRM" && (item.at("duration").get<int64_t>()<=0 || item.at("resolution")=="")) issues.push_back("视频探测资料不完整");
+                }
+            } catch(const std::exception&) { issues.push_back("目录离线、不可访问或包含链接"); item["missing"]=true; }
+            if(item.at("code")=="" || item.at("scan_status").get<int>()<2) issues.push_back("作品资料未补全");
+            if(item.at("nfo").is_null()) issues.push_back("缺少规范 NFO");
+            else { std::error_code ec; if(!fs::is_regular_file(fs::path(wide(item.at("nfo"))),ec) || ec) issues.push_back("NFO 不可访问"); }
+            bool artwork=false;
+            for(const auto* kind:{"poster","thumb","fanart"}) {
+                const auto value=item.at(kind).get<std::string>();
+                if(!value.empty()) { std::error_code ec; artwork=artwork || (fs::is_regular_file(fs::path(wide(value)),ec) && !ec); }
+                item.erase(kind);
+            }
+            if(!artwork) issues.push_back("缺少可访问的封面");
+            item.erase("file_stamp");item.erase("nfo");item.erase("codec");item.erase("scan_status");item["issues"]=issues;
+        }
+        return {{"revision",revision},{"items",items}};
     }
     const auto token = params.at("token").get<std::string>();
     if (token.empty() || token.size() > 100) throw std::runtime_error("清理请求标识无效");

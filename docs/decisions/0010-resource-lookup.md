@@ -40,6 +40,6 @@
 
 ## 验证与限制
 
-既有隐藏取流能力的证据见 [资源查找验证记录](../verification/2026-10-10-resource-lookup.md)，包含安全跨域 iframe、无后缀 HLS、独立失败与重试、下载交接、超时、取消和带活跃任务退出；不代表本次新界面已完成桌面回归。本次修改文件的定向类型及静态检查通过，[新增的 8 项安全 mock 用例](../../tests/unified-resource-search.test.ts)通过，涵盖影片合并、来源排序、恢复统计、即时追加链接、取消保留复制、迟到结果隔离、下载交接及嵌套 HLS 分辨率。提交前再次从独立快照执行定向类型及静态检查和这 8 项用例，均通过；未包含其他功能的未提交改动。不运行既有回归、完整测试或打包，不访问真实内容站点。不声称已完成新界面的桌面回归或真实站点兼容性验证。
+既有隐藏取流能力的证据见 [资源查找验证记录](../verification/2026-10-10-resource-lookup.md)，包含安全跨域 iframe、无后缀 HLS、独立失败与重试、下载交接、超时、取消和带活跃任务退出；不代表本次新界面已完成桌面回归。本次修改文件的定向类型及静态检查通过，[新增的 8 项安全 mock 用例](../../tests/unified-resource-search.test.ts)通过，涵盖影片合并、来源排序、恢复统计、即时追加链接、取消保留复制、迟到结果隔离、下载交接及嵌套 HLS 分辨率。全仓类型检查另在 `tests/avwiki-works.test.ts:136` 报告一处与本次改动无关的参数类型错误，未扩改该文件。不运行既有回归、完整测试或打包，不访问真实内容站点。不声称已完成新界面的桌面回归或真实站点兼容性验证。
 
 参考：[Neutralino 配置与 WebView2 参数](https://neutralino.js.org/docs/configuration/neutralino.config.json/)、[CDP Network](https://chromedevtools.github.io/devtools-protocol/tot/Network/)、[CDP Target](https://chromedevtools.github.io/devtools-protocol/tot/Target/)、[CDP Browser](https://chromedevtools.github.io/devtools-protocol/tot/Browser/)。

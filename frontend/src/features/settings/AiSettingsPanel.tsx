@@ -1,7 +1,18 @@
 import { useState, useSyncExternalStore } from "react";
-import { Alert, Button, Group, PasswordInput, Stack, Switch, Text, TextInput } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Group,
+  Paper,
+  PasswordInput,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+} from "@mantine/core";
 import { useWorkspace } from "../../app/state";
-import type { AiSettings } from "../../services/metadata/AiService";
+import { aiProviders } from "../../services/metadata/AiService";
+import type { AiProvider, AiSettings } from "../../services/metadata/AiService";
 import { serviceError } from "../../services/metadata/shared";
 import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
 import classes from "./Settings.module.css";
@@ -14,6 +25,7 @@ export function AiSettingsPanel() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const draft = edited ?? current.value;
+  const providers = aiProviders(draft);
   const dirty = JSON.stringify(draft) !== JSON.stringify(current.value);
   const busy = !current.ready || current.saving || task.busy;
   const patch = (value: Partial<AiSettings>) => {
@@ -21,12 +33,25 @@ export function AiSettingsPanel() {
     setError("");
     setMessage("");
   };
-  const perform = async (test: boolean) => {
+  const changeProviders = (value: AiProvider[]) => {
+    const first = value[0]!;
+    patch({ providers: value, endpoint: first.endpoint, model: first.model, apiKey: first.apiKey });
+  };
+  const editProvider = (id: string, value: Partial<AiProvider>) =>
+    changeProviders(
+      providers.map((provider) => (provider.id === id ? { ...provider, ...value } : provider)),
+    );
+  const reorder = (index: number, offset: number) => {
+    const value = [...providers];
+    [value[index], value[index + offset]] = [value[index + offset]!, value[index]!];
+    changeProviders(value);
+  };
+  const perform = async (test: boolean, providerId?: string) => {
     setError("");
     setMessage("");
     try {
       if (test) {
-        await ai.test(draft);
+        await ai.test(draft, providerId);
         setMessage("连接成功，模型已正确响应测试。" + (dirty ? "当前修改尚未保存。" : ""));
       } else {
         await ai.settings.save(draft);
@@ -60,44 +85,140 @@ export function AiSettingsPanel() {
               onChange={(event) => patch({ enabled: event.currentTarget.checked })}
             />
           </SettingRow>
+          <SettingRow
+            title="批量刮削自动识别"
+            hint="规则无法识别时，将文件名和标题发送给下方启用的服务。只有来源返回相同番号时才保存资料。"
+          >
+            <Switch
+              aria-label="批量刮削自动识别"
+              checked={draft.automaticRecognition ?? false}
+              disabled={busy || !draft.enabled}
+              onChange={(event) => patch({ automaticRecognition: event.currentTarget.checked })}
+            />
+          </SettingRow>
         </SettingCard>
-        <SettingCard title="服务配置" icon="key">
+        <SettingCard title="服务顺序" icon="key">
           <Stack className={classes.fields} gap="md">
-            <TextInput
-              label="服务地址"
-              description="OpenAI 兼容的 API 基础地址，通常以 /v1 结尾。"
-              value={draft.endpoint}
-              disabled={busy}
-              onChange={(event) => patch({ endpoint: event.currentTarget.value })}
-            />
-            <TextInput
-              label="模型名称"
-              placeholder="填写服务提供的模型标识"
-              value={draft.model}
-              disabled={busy}
-              onChange={(event) => patch({ model: event.currentTarget.value })}
-            />
-            <PasswordInput
-              label="API Key"
-              description="本机加密保存；无鉴权的本地模型可留空。"
-              value={draft.apiKey}
-              autoComplete="off"
-              disabled={busy}
-              onChange={(event) => patch({ apiKey: event.currentTarget.value })}
-            />
-            <Group justify="space-between">
-              <Text size="xs" c="dimmed">
-                连接测试会发送一条简短请求。
-              </Text>
-              <Button
-                variant="default"
-                disabled={!current.available || busy || !draft.model.trim()}
-                loading={task.busy && task.action === "测试连接"}
-                onClick={() => void perform(true)}
-              >
-                测试连接
-              </Button>
-            </Group>
+            <Text size="xs" c="dimmed">
+              按从上到下的顺序请求，失败后使用下一项。最多 5 项，每次请求总时限为 90 秒。
+            </Text>
+            {providers.map((provider, index) => (
+              <Paper key={provider.id} withBorder p="md" radius="md">
+                <Stack gap="sm">
+                  <Group justify="space-between">
+                    <Text fw={600} size="sm">
+                      {index + 1}. {provider.name}
+                    </Text>
+                    <Switch
+                      aria-label={`启用 ${provider.name}`}
+                      checked={provider.enabled}
+                      disabled={busy}
+                      onChange={(event) =>
+                        editProvider(provider.id, { enabled: event.currentTarget.checked })
+                      }
+                    />
+                  </Group>
+                  <TextInput
+                    label="服务名称"
+                    value={provider.name}
+                    disabled={busy}
+                    maxLength={80}
+                    onChange={(event) =>
+                      editProvider(provider.id, { name: event.currentTarget.value })
+                    }
+                  />
+                  <TextInput
+                    label="服务地址"
+                    description="OpenAI 兼容的 API 基础地址，通常以 /v1 结尾。"
+                    value={provider.endpoint}
+                    disabled={busy}
+                    onChange={(event) =>
+                      editProvider(provider.id, { endpoint: event.currentTarget.value })
+                    }
+                  />
+                  <TextInput
+                    label="模型名称"
+                    placeholder="填写服务提供的模型标识"
+                    value={provider.model}
+                    disabled={busy}
+                    onChange={(event) =>
+                      editProvider(provider.id, { model: event.currentTarget.value })
+                    }
+                  />
+                  <PasswordInput
+                    label="API Key"
+                    description="本机加密保存；无鉴权的本地模型可留空。"
+                    value={provider.apiKey}
+                    autoComplete="off"
+                    disabled={busy}
+                    onChange={(event) =>
+                      editProvider(provider.id, { apiKey: event.currentTarget.value })
+                    }
+                  />
+                  <Group justify="space-between">
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        disabled={busy || index === 0}
+                        onClick={() => reorder(index, -1)}
+                      >
+                        上移
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        disabled={busy || index === providers.length - 1}
+                        onClick={() => reorder(index, 1)}
+                      >
+                        下移
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        disabled={busy || providers.length === 1}
+                        onClick={() =>
+                          changeProviders(providers.filter((item) => item.id !== provider.id))
+                        }
+                      >
+                        移除
+                      </Button>
+                    </Group>
+                    <Button
+                      variant="default"
+                      size="xs"
+                      disabled={!current.available || busy || !provider.model.trim()}
+                      loading={
+                        task.busy && task.action === "测试连接" && task.provider === provider.name
+                      }
+                      onClick={() => void perform(true, provider.id)}
+                    >
+                      测试连接
+                    </Button>
+                  </Group>
+                </Stack>
+              </Paper>
+            ))}
+            <Button
+              variant="default"
+              disabled={busy || providers.length >= 5}
+              onClick={() =>
+                changeProviders([
+                  ...providers,
+                  {
+                    id: crypto.randomUUID(),
+                    name: `备用服务 ${providers.length}`,
+                    enabled: false,
+                    endpoint: "https://api.openai.com/v1",
+                    model: "",
+                    apiKey: "",
+                  },
+                ])
+              }
+            >
+              添加供应商
+            </Button>
           </Stack>
         </SettingCard>
         <SettingNote>
@@ -105,7 +226,10 @@ export function AiSettingsPanel() {
         </SettingNote>
         {task.busy && (
           <Group>
-            <Text size="sm">{task.action}…</Text>
+            <Text size="sm">
+              {task.action}
+              {task.provider ? ` · ${task.provider}` : ""}…
+            </Text>
             <Button variant="subtle" size="xs" onClick={ai.cancel}>
               取消请求
             </Button>

@@ -3,6 +3,7 @@ import type { Film } from "../../contracts/media";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import { useImagePreview } from "../../components/ImagePreview";
+import { ObjectMenu } from "../../components/ObjectMenu";
 
 export type ScreenshotAction = "capture" | "fetch" | "long" | "clear" | "remove" | "cover";
 export function FilmScreenshots({
@@ -57,22 +58,36 @@ export function FilmScreenshots({
       </Group>
       <SimpleGrid cols={3} spacing={8}>
         {images.map((image, index) => (
-          <UnstyledButton
-            key={`${image.src}:${index}`}
-            className="thumb"
-            aria-label={`查看截图 ${index + 1}`}
-            onClick={() => open(images, index)}
+          <ObjectMenu
+            key={image.id ?? `${image.src}:${index}`}
+            items={
+              onAction && (
+                <>
+                  <Menu.Item onClick={() => onAction("cover", index)}>设为封面</Menu.Item>
+                  <Menu.Item color="red" onClick={() => onAction("remove", index)}>
+                    删除截图
+                  </Menu.Item>
+                </>
+              )
+            }
           >
-            <Image
-              src={image.src}
-              alt={image.title || `截图 ${index + 1}`}
-              h="100%"
-              fit="cover"
-              loading="lazy"
-              decoding="async"
-            />
-            {image.timestamp && <time>{image.timestamp}</time>}
-          </UnstyledButton>
+            <UnstyledButton
+              key={`${image.src}:${index}`}
+              className="thumb"
+              aria-label={`查看截图 ${index + 1}`}
+              onClick={() => open(images, index)}
+            >
+              <Image
+                src={image.src}
+                alt={image.title || `截图 ${index + 1}`}
+                h="100%"
+                fit="cover"
+                loading="lazy"
+                decoding="async"
+              />
+              {image.timestamp && <time>{image.timestamp}</time>}
+            </UnstyledButton>
+          </ObjectMenu>
         ))}
       </SimpleGrid>
       {!images.length && (

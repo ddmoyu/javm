@@ -9,6 +9,7 @@ export type DownloadStatus =
   | "cancelled";
 
 export interface DownloadTask {
+  rename?: { name: string; output: string; operationId: string };
   workId?: string;
   id: string;
   revision: number;

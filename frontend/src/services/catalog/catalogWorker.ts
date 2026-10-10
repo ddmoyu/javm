@@ -15,6 +15,7 @@ import type { DiscoveryData } from "./discoveryData";
 import { collected_at as collectedAt } from "../../../../data/catalogs/avwikidb/manifest.json";
 import { loadAvwikiSeed } from "./avwikiSeed";
 import { loadGfriendsIndex, resolveAvwikiPortraits } from "./avwikiPortraits";
+import { parseAvwikiWorkDetails, parseAvwikiWorks, resolveAvwikiEntities } from "./avwikiWorks";
 
 // 请求顺序有界，由客户端限制为八个；避免异步初始化交错覆盖状态。
 let queue = Promise.resolve();
@@ -34,6 +35,17 @@ async function process(request: CatalogRequest) {
       value = parseActorDirectory(payload.html, payload.dimension, payload.page);
     else if (operation === "directory")
       value = parseAvwikiDirectory(payload.html, payload.dimension, payload.page);
+    else if (operation === "workEntities")
+      value = resolveAvwikiEntities(
+        (await loadAvwikiSeed())[payload.dimension],
+        payload.dimension,
+        payload.name,
+        current?.directoryEntries?.[payload.dimension],
+      );
+    else if (operation === "works")
+      value = parseAvwikiWorks(payload.html, payload.entity, payload.page);
+    else if (operation === "workDetails")
+      value = parseAvwikiWorkDetails(payload.html, payload.work);
     else if (operation === "portraits") value = await resolveAvwikiPortraits(payload, current);
     else if (operation === "portraitIndex") {
       loadGfriendsIndex(payload.json);

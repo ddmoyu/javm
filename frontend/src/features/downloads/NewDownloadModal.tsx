@@ -21,17 +21,19 @@ import type { Film } from "../../contracts/media";
 export function NewDownloadModal({
   opened,
   film,
+  initial,
   onClose,
 }: {
   opened: boolean;
   film?: Film;
+  initial?: { url: string; name: string };
   onClose: () => void;
 }) {
   const { downloads, go, notice } = useWorkspace();
   const state = useSyncExternalStore(downloads.subscribe, downloads.getControls);
-  const [urls, setUrls] = useState("");
+  const [urls, setUrls] = useState(initial?.url ?? "");
   const [directory, setDirectory] = useState(downloads.getSnapshot().settings.directory);
-  const [name, setName] = useState(film?.code || "");
+  const [name, setName] = useState(initial?.name ?? film?.code ?? "");
   const [headers, setHeaders] = useState("");
   const [kind, setKind] = useState<NewDownload["kind"]>("auto");
   const [extra, setExtra] = useState(false);

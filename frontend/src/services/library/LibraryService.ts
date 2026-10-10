@@ -16,8 +16,13 @@ import type { EditableMetadata } from "../../contracts/metadata";
 import type { DiscoveryCatalogService } from "../catalog/DiscoveryCatalogService";
 import { isCatalogDimension } from "../catalog/discoveryData";
 import type { CatalogDimension } from "../catalog/discoveryData";
-
 import type { ResourceRecord, SavedResource } from "../streamResolution/archive";
+import type { DirectoryWatchService } from "./DirectoryWatchService";
+import type { LibraryDocumentsService } from "./LibraryDocumentsService";
+import type { ArtworkService } from "./ArtworkService";
+import type { FileOrganizationService } from "./FileOrganizationService";
+import type { MovieDetails } from "../metadata/MetaTubeService";
+import type { ScrapeTarget } from "../scraping/ScrapeService";
 
 export interface LibraryPort {
   request<T>(method: string, params?: unknown): Promise<T>;
@@ -75,7 +80,14 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
         ? video.rating / 2
         : undefined,
     genre: video.genres[0] ?? "",
-    quality: shortSide >= 2160 ? "4K" : shortSide ? `${shortSide}p` : "",
+    quality:
+      shortSide >= 2160
+        ? "4K"
+        : shortSide
+          ? `${shortSide}p`
+          : video.media_files?.some((file) => file.stream_url)
+            ? "STRM"
+            : "",
     size,
     favorite: !!video.favorite,
     missing: (video.scan_status ?? 0) < 2,
@@ -84,6 +96,26 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
     createdAt: video.created_at,
     actor: video.actors[0],
     coverUrl: artwork.length ? asset(artwork[0]!) : undefined,
+    artwork: artwork.flatMap((path) => {
+      const src = asset(path);
+      return src ? [{ src, path }] : [];
+    }),
+    screenshots: (video.screenshots ?? []).flatMap((shot) => {
+      const src = asset(shot.path);
+      return src
+        ? [
+            {
+              src,
+              path: shot.path,
+              id: shot.id,
+              timestamp:
+                shot.seconds > 0
+                  ? `${Math.floor(shot.seconds / 60)}:${String(Math.floor(shot.seconds % 60)).padStart(2, "0")}`
+                  : undefined,
+            },
+          ]
+        : [];
+    }),
     metadata: {
       plot: video.plot ?? "",
       originalTitle: video.original_title ?? "",
@@ -109,11 +141,19 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
     files: [
       ...(video.media_files ?? []).map((file) => ({
         id: file.id,
+        streamUrl: file.stream_url ?? undefined,
+        part: file.part,
+        parts: file.parts,
+        subtitles: file.subtitles,
         name: file.path.split(/[\\/]/).at(-1) ?? "视频",
         path: file.path,
         kind: "video" as const,
         missing: !!file.missing,
-        size: file.file_size ? `${(file.file_size / 1024 ** 2).toFixed(1)} MB` : "",
+        size: file.stream_url
+          ? "STRM 网络资源"
+          : file.file_size
+            ? `${(file.file_size / 1024 ** 2).toFixed(1)} MB`
+            : "",
       })),
       ...(video.nfo_files ?? []).map((file) => ({
         name: file.path.split(/[\\/]/).at(-1) ?? "NFO",
@@ -131,12 +171,17 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
 
 export class LibraryService {
   maintenance?: LibraryMaintenanceService;
+  watcher?: DirectoryWatchService;
+  documents?: LibraryDocumentsService;
+  artwork?: ArtworkService;
+  organization?: FileOrganizationService;
   private snapshot: LibrarySnapshot;
   private listeners = new Set<() => void>();
   private refreshing?: Promise<void>;
   private initialized?: Promise<void>;
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  private collecting?: Promise<Film>;
   private loadedRevision = -1;
   private favoritePending = new Set<Film["id"]>();
   private catalogViews = new WeakSet<object>();
@@ -200,18 +245,27 @@ export class LibraryService {
     const view = new PagedQuery<FacetValue, FacetQuery>(async (query, page) => {
       if (includeCatalog && isCatalogDimension(query.dimension) && this.catalog) {
         await this.catalog.ready();
-        if (!this.port || !this.snapshot.ready || this.snapshot.error)
+        if (!this.port || !this.snapshot.ready || this.snapshot.error) {
+          if (query.favoritesOnly) throw new Error("无法读取收藏，请恢复媒体库连接后重试。");
           return this.catalog.query(query, page);
+        }
         await this.syncCatalog(query.dimension);
         return this.port.request<QueryPage<FacetValue>>("library.facets", {
           ...query,
           ...page,
           includeCatalog: true,
+          includeFavorites: true,
+          includeLabels: true,
         });
       }
       if (!this.port) return { items: [], total: 0, available: 0, offset: page.offset };
       await this.initialize();
-      return this.port.request<QueryPage<FacetValue>>("library.facets", { ...query, ...page });
+      return this.port.request<QueryPage<FacetValue>>("library.facets", {
+        ...query,
+        ...page,
+        includeFavorites: true,
+        includeLabels: true,
+      });
     });
     if (includeCatalog) this.catalogViews.add(view);
     return view;
@@ -236,6 +290,7 @@ export class LibraryService {
         if (this.stopped) return;
         await this.port!.request("library.catalogAppend", {
           dimension,
+          offset,
           names: names.slice(offset, offset + 500),
         });
       }
@@ -388,9 +443,87 @@ export class LibraryService {
       this.favoritePending.delete(id);
     }
   }
+  async setFacetFavorite(dimension: FacetQuery["dimension"], name: string, value: boolean) {
+    const key = `facet:${dimension}:${name}`;
+    if (this.favoritePending.has(key)) return;
+    if (this.stopped || this.favoritePending.size >= 32)
+      throw new Error("请等待当前收藏保存完成。");
+    this.favoritePending.add(key);
+    try {
+      await this.initialize();
+      await this.requirePort().request("library.facetFavorite", { dimension, name, value });
+      for (const view of this.views) view.invalidate();
+    } finally {
+      this.favoritePending.delete(key);
+    }
+  }
   async readResources(code: string, workId?: string) {
     await this.initialize();
     return this.requirePort().request<SavedResource[]>("library.resources.read", { code, workId });
+  }
+  async relatedMedia<T>(operation: "save" | "discover", params: unknown): Promise<T> {
+    const result = await this.requirePort().request<T>(`library.related.${operation}`, params);
+    if (operation === "save") await this.refreshAfterMutation();
+    return result;
+  }
+  async openWork(id: string) {
+    const video = await this.requirePort().request<NativeVideo | null>("library.video", { id });
+    if (!video) throw new Error("链接对应的作品已不存在。");
+    this.selectFilm(toFilm(video, this.asset));
+  }
+  collectMetadata(details: MovieDetails): Promise<Film> {
+    if (this.stopped || this.collecting)
+      return Promise.reject(new Error("请等待当前资料保存完成。"));
+    if (!details.fields.code || !details.fields.title)
+      return Promise.reject(new Error("来源没有完整的番号和标题。"));
+    const operation = async () => {
+      await this.initialize();
+      const port = this.requirePort();
+      const jobId = crypto.randomUUID();
+      try {
+        // 复用现有身份去重、只补空字段、NFO 安全写入及本地视频关联逻辑。
+        const target = await port.request<ScrapeTarget>("library.scrape.prepare", {
+          jobId,
+          collect: true,
+          candidate: {
+            provider: details.provider,
+            id: details.id,
+            code: details.fields.code,
+            title: details.fields.title,
+          },
+        });
+        await port.request("library.scrape.commit", {
+          jobId,
+          id: target.id,
+          path: target.path,
+          fileStamp: target.fileStamp,
+          nfoStamp: target.nfoStamp ?? "",
+          details,
+          image: "",
+        });
+        const video = await port.request<NativeVideo | null>("library.video", { id: target.id });
+        if (!video) throw new Error("已保存的作品暂时无法读取，请刷新片库。");
+        return toFilm(video, this.asset);
+      } finally {
+        await this.refreshAfterMutation();
+      }
+    };
+    this.collecting = operation().finally(() => {
+      this.collecting = undefined;
+    });
+    return this.collecting;
+  }
+  async manageAliases<T>(
+    operation: "list" | "save" | "remove" | "restore",
+    params: Record<string, unknown> = {},
+  ) {
+    await this.initialize();
+    const result = await this.requirePort().request<T>(`library.aliases.${operation}`, params);
+    if (operation !== "list") await this.refreshAfterMutation();
+    return result;
+  }
+  cancelAliasRestore() {
+    return this.requirePort().request("library.cancel");
   }
   async saveResource(record: ResourceRecord) {
     await this.initialize();
@@ -412,6 +545,11 @@ export class LibraryService {
     await this.refreshAfterMutation();
   }
   async shutdown() {
+    await this.collecting?.catch(() => {});
+    await this.watcher?.shutdown();
+    await this.organization?.shutdown();
+    await this.documents?.shutdown();
+    await this.artwork?.shutdown();
     await this.maintenance?.shutdown();
     this.stopped = true;
     const activeViews = [...this.views].filter((view) => view.isActive());

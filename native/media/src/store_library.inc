@@ -91,7 +91,8 @@ std::string Store::saveWork(const Json& file,const Json& nfo,const std::string* 
     const auto duration=number("runtime_seconds","runtimeSeconds","duration");
     for(const auto* kind:{"poster","thumb","fanart"}) {
         auto value=stringValue(old,kind);
-        if(file.contains(kind) && (value.empty() || (sameSource && previous.value(std::string("_local_")+kind,std::string{})==value))) value=file[kind].get<std::string>();
+        if(manual.contains(kind)) value=manual[kind].get<std::string>();
+        else if(file.contains(kind) && (value.empty() || (sameSource && previous.value(std::string("_local_")+kind,std::string{})==value))) value=file[kind].get<std::string>();
         merged[kind]=value;
         if(!value.empty()) provenance[std::string("_local_")+kind]=value;
     }
@@ -115,6 +116,13 @@ ON CONFLICT(path_key) DO UPDATE SET stamp=excluded.stamp,encoding=excluded.encod
             {pathKey(fs::path(wide(nfoPath))),id,nfoPath,file.value("nfo_stamp",std::string{}),canonical,nfo.value("_encoding",std::string{}),file.value("nfo_parser",0)});
         if(source) { Query saved(db_,"UPDATE nfo_documents SET content=?2 WHERE path_key=?1",Json::array({pathKey(fs::path(wide(nfoPath)))})); saved.blob(2,*source); saved.next(); }
     }
+    if(file.contains("stream_url")) run(db_,"INSERT INTO stream_targets(media_id,url) SELECT id,? FROM media_files WHERE path_key=? ON CONFLICT(media_id) DO UPDATE SET url=excluded.url",{file.at("stream_url"),pathKey(fs::path(wide(path)))});
+    if(!path.empty()) {
+        const auto name=pathText(fs::path(wide(path)).stem());std::smatch part;
+        static const std::regex pattern(R"((?:^|[ ._-])(?:CD|DISC|DISK|PART)[ ._-]*([0-9]{1,2})(?:$|[ ._-]))",std::regex::icase);
+        if(std::regex_search(name,part,pattern) && std::stoi(part[1])>0)
+            run(db_,"INSERT OR IGNORE INTO media_parts(media_id,part_number) SELECT id,? FROM media_files WHERE path_key=?",{std::stoi(part[1]),pathKey(fs::path(wide(path)))});
+    }
     for(const auto& item:nfo.value("uniqueids",Json::array())) if(!oldEditedCode && item.value("type",std::string{})=="metatube") {
         const auto value=item.value("value",std::string{}); const auto at=value.find(':'); if(at==std::string::npos) continue;
         const auto provider=value.substr(0,at), sourceId=value.substr(at+1);
@@ -131,11 +139,17 @@ Json Store::decorate(Json result) {
     for(auto& work:result) {
         const auto id=work["id"].get<std::string>();
         for(const auto* kind:{"actors","genres","tags"}) work[kind]=relations(db_,id,kind,"");
+        for(const auto* kind:{"actors","genres"}) {
+            Json names=Json::array(); for(const auto& raw:work[kind]) { const auto name=canonicalName(db_,kind,raw); if(std::find(names.begin(),names.end(),name)==names.end()) names.push_back(name); } work[kind]=names;
+        }
+        for(const auto& [field,dimension]:{std::pair{"studio","studios"},{"label","labels"},{"director","directors"},{"series","series"}}) work[field]=canonicalName(db_,dimension,work[field]);
         const auto provenance=Json::parse(work["provenance"].get<std::string>());
         work["metadata_edited"]=!provenance.value("_manual",Json::object()).empty();
         work["year"]=provenance.value("year",0);
-        work["media_files"]=rows(db_,"SELECT id,path,file_size,width,height,duration_ms,codec,missing FROM media_files WHERE work_id=? ORDER BY missing,created_at,id",{id});
+        work["media_files"]=rows(db_,"SELECT m.id,path,file_size,width,height,duration_ms,codec,missing,s.url AS stream_url,COALESCE(p.part_number,0) AS part,COALESCE(p.total,0) AS parts FROM media_files m LEFT JOIN stream_targets s ON s.media_id=m.id LEFT JOIN media_parts p ON p.media_id=m.id WHERE work_id=? ORDER BY missing,CASE WHEN p.part_number>0 THEN p.part_number ELSE 100 END,created_at,m.id",{id});
+        for(auto& file:work["media_files"]) {file["subtitles"]=Json::array();for(const auto& sub:rows(db_,"SELECT path FROM media_subtitles WHERE media_id=? ORDER BY path_key LIMIT 16",{file["id"]})) file["subtitles"].push_back(sub["path"]);}
         work["nfo_files"]=rows(db_,"SELECT path,canonical FROM nfo_documents WHERE work_id=? AND stamp<>'' ORDER BY canonical DESC,path_key",{id});
+        work["screenshots"]=rows(db_,"SELECT id,path,kind,seconds FROM work_artwork WHERE work_id=? AND kind<>'poster' ORDER BY rowid LIMIT 100",{id});
         work.erase("provenance"); work.erase("nfo_data");
     }
     return result;
@@ -238,11 +252,12 @@ void Store::finish(const Json& directory,const std::string& state,const std::str
         run(db_,"UPDATE directories SET state=?,error=?,scanned_at=CURRENT_TIMESTAMP WHERE id=?",{cancelled && *cancelled && state!="failed"?"cancelled":state,error,directory["id"]}); }
 }
 
-Json Store::maintenanceRows(const std::string& after) {
+Json Store::maintenanceRows(const std::string& after, bool health) {
     std::lock_guard lock(mutex_);
+    const std::string extra=health ? ",m.file_stamp,m.codec,w.scan_status,w.poster,w.thumb,w.fanart,(SELECT path FROM nfo_documents WHERE work_id=w.id AND canonical=1) AS nfo" : "";
     auto result = rows(db_,R"SQL(SELECT m.id,m.path,w.title,w.code,m.fast_hash AS hash,m.file_size AS size,m.duration_ms/1000 AS duration,m.missing,
  CASE WHEN m.width>0 AND m.height>0 THEN m.width||'x'||m.height ELSE '' END AS resolution
- FROM media_files m JOIN works w ON w.id=m.work_id WHERE m.id>? ORDER BY m.id LIMIT 500)SQL",{after});
+)SQL"+extra+" FROM media_files m JOIN works w ON w.id=m.work_id WHERE m.id>? ORDER BY m.id LIMIT 500",{after});
     for (auto& row: result) row["missing"] = row["missing"].get<int>() != 0;
     return result;
 }

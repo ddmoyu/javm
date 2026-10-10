@@ -20,6 +20,7 @@ import { playerWindowId } from "../../services/playback/windowChannel";
 import { PreferredPlaybackController } from "../../services/playback/PreferredPlaybackController";
 import { createPlaybackSettings, openExternalPlayer } from "./playbackSettings";
 import { createPlaybackHistory } from "./playbackHistory";
+import { prepareSubtitles } from "./subtitles";
 
 function mediaPort(runtime: Runtime): PlaybackPort {
   return {
@@ -147,13 +148,27 @@ export function playbackPort(runtime: Runtime): PlaybackPort {
         runtime === "desktop" ? await createPlaybackHistory().session(request) : undefined;
       signal.throwIfAborted();
       const media = await port.prepare(request, signal);
+      let tracks: Awaited<ReturnType<typeof prepareSubtitles>> | undefined;
+      try {
+        if (runtime === "desktop" && request.subtitles?.length)
+          tracks = await prepareSubtitles(
+            request.subtitles,
+            AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+          );
+      } catch (e) {
+        await media.dispose();
+        throw e;
+      }
       return {
         ...media,
         progress,
+        subtitles: tracks?.subtitles,
+        subtitleWarning: tracks?.warning,
         dispose: async () => {
           try {
             await progress?.flush();
           } finally {
+            tracks?.dispose();
             await media.dispose();
           }
         },

@@ -81,16 +81,8 @@ fs::path saveScrapedArtwork(const fs::path& source, const fs::path& video) {
     atomicWrite(target,content,"");
     return target;
 }
-std::string writeScrapedNfo(const fs::path& path, const Json& metadata, const Json& source, const std::string& expected) {
-    pugi::xml_document document;
-    if ((fs::exists(path) ? stamp(path) : std::string{})!=expected) throw std::runtime_error("NFO 已被修改，请重新刮削");
-    if (fs::exists(path)) {
-        if (reparse(path)) throw std::runtime_error("NFO 不支持符号链接");
-        std::string original;
-        auto ignored=readNfo(path,&original); // 使用相同的有界、无 DTD 校验。
-        auto content=nfo::repair(nfo::decode(original,ignored),ignored);
-        if (!document.load_buffer(content.data(),content.size(),pugi::parse_default|pugi::parse_comments,pugi::encoding_utf8)) throw std::runtime_error("已有 NFO 无法解析，原文件保留");
-    }
+namespace {
+std::string renderNfo(pugi::xml_document& document, const Json& metadata, const Json& source) {
     auto movie=document.document_element();
     if (!movie) movie=document.append_child("movie");
     auto erase=[&](std::initializer_list<const char*> names) {
@@ -146,8 +138,11 @@ std::string writeScrapedNfo(const fs::path& path, const Json& metadata, const Js
         if (nfo::tag(node)=="uniqueid" && (std::string(node.attribute("type").value())=="metatube" || std::string(node.attribute("type").value())=="javm-work")) movie.remove_child(node);
         node=next;
     }
-    auto unique=movie.append_child("uniqueid"); unique.append_attribute("type")="metatube";
-    unique.text().set((source.at("provider").get<std::string>()+":"+source.at("id").get<std::string>()).c_str());
+    const auto sources=source.value("sources",Json::array({{{"provider",source.value("provider",std::string{})},{"id",source.value("id",std::string{})}}}));
+    for(const auto& item:sources) if(!item.value("provider",std::string{}).empty() && !item.value("id",std::string{}).empty()) {
+        auto unique=movie.append_child("uniqueid"); unique.append_attribute("type")="metatube";
+        unique.text().set((item.at("provider").get<std::string>()+":"+item.at("id").get<std::string>()).c_str());
+    }
     auto identity=movie.append_child("uniqueid"); identity.append_attribute("type")="javm-work";
     identity.text().set(source.at("workId").get<std::string>().c_str());
     const auto poster=metadata.value("poster",std::string{});
@@ -159,6 +154,24 @@ std::string writeScrapedNfo(const fs::path& path, const Json& metadata, const Js
     std::ostringstream output; document.save(output,"  ",pugi::format_default,pugi::encoding_utf8);
     const auto bytes=output.str();
     if (bytes.size()>2*1024*1024) throw std::runtime_error("生成的 NFO 超过 2 MiB");
+    return bytes;
+}
+}
+std::string serializeNfo(const Json& metadata,const Json& source) {
+    pugi::xml_document document;
+    return renderNfo(document,metadata,source);
+}
+std::string writeScrapedNfo(const fs::path& path,const Json& metadata,const Json& source,const std::string& expected) {
+    pugi::xml_document document;
+    if ((fs::exists(path) ? stamp(path) : std::string{})!=expected) throw std::runtime_error("NFO 已被修改，请重新刮削");
+    if (fs::exists(path)) {
+        if (reparse(path)) throw std::runtime_error("NFO 不支持符号链接");
+        std::string original;
+        auto ignored=readNfo(path,&original);
+        auto content=nfo::repair(nfo::decode(original,ignored),ignored);
+        if (!document.load_buffer(content.data(),content.size(),pugi::parse_default|pugi::parse_comments,pugi::encoding_utf8)) throw std::runtime_error("已有 NFO 无法解析，原文件保留");
+    }
+    const auto bytes=renderNfo(document,metadata,source);
     atomicWrite(path,bytes,expected);
     return bytes;
 }

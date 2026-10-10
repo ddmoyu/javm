@@ -48,6 +48,8 @@ export function LibraryMaintenanceModal({
   const [localError, setLocalError] = useState("");
   const [ruleError, setRuleError] = useState("");
   const duplicates = state.mode === "duplicates";
+  const ads = state.mode === "ads";
+  const health = state.mode === "health";
   const cleaning = state.phase === "cleaning",
     reading = state.phase === "reading";
   const busy = cleaning || reading || state.changing;
@@ -94,7 +96,9 @@ export function LibraryMaintenanceModal({
       <Modal
         opened={opened}
         onClose={close}
-        title={duplicates ? "重复视频" : "广告视频"}
+        title={
+          duplicates ? "重复视频" : ads ? "广告视频" : health ? "片库健康检查" : "片库资源清理"
+        }
         size="min(1100px, 96vw)"
         centered
         closeOnClickOutside={!busy}
@@ -113,7 +117,7 @@ export function LibraryMaintenanceModal({
               >
                 重新检查
               </Button>
-              {!duplicates && (
+              {ads && (
                 <Button
                   size="xs"
                   variant="default"
@@ -166,7 +170,11 @@ export function LibraryMaintenanceModal({
           <Text size="xs" c="dimmed">
             {duplicates
               ? "按相同番号或头尾文件指纹分组，优先保留可用、时长完整、清晰度高的视频。相同番号可能是分段或不同版本，清理前请核对。"
-              : "从已入库视频中筛选零字节、重复文件名和关键词命中项，排除词优先。不进行视频内容识别。"}
+              : ads
+                ? "从已入库视频中筛选零字节、重复文件名和关键词命中项，排除词优先。不进行视频内容识别。"
+                : health
+                  ? "检查文件可访问性、文件变化、视频资料、NFO 和封面。检查只生成报告，修复后可重新扫描目录；离线文件不会自动删除。"
+                  : "选择需要删除的本地视频资源。作品资料与收藏会保留，删除前请核对路径。"}
           </Text>
           {duplicates && state.unhashed > 0 && (
             <Text size="xs" c="yellow">
@@ -248,7 +256,7 @@ export function LibraryMaintenanceModal({
                             >
                               打开所在目录
                             </Menu.Item>
-                            {!duplicates && (
+                            {ads && (
                               <Menu.Item
                                 leftSection={<Icon name="plus" />}
                                 disabled={busy}
@@ -311,7 +319,7 @@ export function LibraryMaintenanceModal({
                             </Text>
                             {video.missing && (
                               <Text size="xs" c="dimmed">
-                                上次扫描确认缺失；文件恢复后请重新扫描。
+                                文件当前不可用或上次扫描确认缺失；恢复后请重新扫描。
                               </Text>
                             )}
                           </Table.Td>
@@ -355,11 +363,23 @@ export function LibraryMaintenanceModal({
           {state.phase === "ready" && !state.total && (
             <Empty
               icon={duplicates ? "copy" : "filter"}
-              title={duplicates ? "未发现重复候选" : "未发现广告候选"}
+              title={
+                duplicates
+                  ? "未发现重复候选"
+                  : ads
+                    ? "未发现广告候选"
+                    : health
+                      ? "未发现资源问题"
+                      : "暂无本地视频"
+              }
               description={
                 duplicates
                   ? "当前片库没有匹配的番号或文件指纹。"
-                  : "可以调整关键词或排除规则后重新检查。"
+                  : ads
+                    ? "可以调整关键词或排除规则后重新检查。"
+                    : health
+                      ? `已检查 ${state.processed} 个本地资源。`
+                      : "导入视频后可在这里管理。"
               }
             />
           )}

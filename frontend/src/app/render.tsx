@@ -33,6 +33,10 @@ export async function start() {
   const root = document.getElementById("root");
   if (!root) throw new Error("缺少应用根节点");
   const id = runtime === "desktop" ? playerWindowId() : undefined;
+  if (runtime === "desktop" && !id) {
+    const { claimApplicationInstance } = await import("../platform/neutralino/applicationInstance");
+    if (!(await claimApplicationInstance())) return;
+  }
   if (!id) createApplicationLogs(runtime);
   frontendLoadedAt = performance.now();
   logEvent("info", "app", "frontend_loaded", "前端基础模块已加载", {

@@ -6,9 +6,10 @@ import { serviceError } from "../../services/metadata/shared";
 import { Pill } from "../../components/ui";
 import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
 import classes from "./Settings.module.css";
+import { MetadataPipelinePanel } from "./MetadataPipelinePanel";
 
 export function MetaTubeSettingsPanel() {
-  const { metatube } = useWorkspace();
+  const { metatube, scraping } = useWorkspace();
   const current = useSyncExternalStore(metatube.settings.subscribe, metatube.settings.getSnapshot);
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
   const [edited, setEdited] = useState<MetaTubeSettings | null>(null);
@@ -42,6 +43,7 @@ export function MetaTubeSettingsPanel() {
   ];
   return (
     <Stack gap="lg">
+      {scraping?.pipeline && <MetadataPipelinePanel service={scraping.pipeline} />}
       {!current.available && <SettingNote>请在 Windows 桌面端配置和管理 MetaTube。</SettingNote>}
       <SettingCard title="MetaTube" icon="radar" extra={<Pill>{status}</Pill>}>
         <SettingRow title="内置版本" hint="随 JAVM 提供和更新，无需单独下载安装。">

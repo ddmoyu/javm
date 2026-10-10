@@ -14,6 +14,8 @@ export type NativeMediaFetch = (
   range?: { start: number; end?: number },
 ) => Promise<MediaResponse>;
 export interface PreparedPlayback {
+  subtitles?: { url: string; label: string }[];
+  subtitleWarning?: string;
   request: PlaybackRequest;
   url: string;
   format: PlaybackFormat;
