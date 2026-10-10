@@ -2,6 +2,8 @@
 
 本文规定 JAVM 从 Vue 与 Tauri Rust 迁移到 React、TypeScript、Mantine、Vite+ 和 Neutralinojs 的实施范围、模块边界、技术选型与验收标准。普通业务优先使用 TypeScript、Web 标准和 Neutralino 官方能力；SQLite 由独立 C++ 数据库扩展访问，使用 Neutralino 官方 Extension 协议通信。
 
+2026-10-10 功能核对：当前实现与剩余工作见 [功能开发状态](FEATURE_STATUS.md)。下文保留阶段规划及初始决策；早期状态和最终验收复选框不能替代当前源码与逐项验证记录。磁力按用户要求暂不开发。
+
 2026-10-09 实施更新：工程与 Mantine 界面已完成初始化，目录扫描和下载按用户授权接入。目录枚举、MediaInfo 探测、pugixml NFO 解析属于已批准的 C++ 范围，覆盖下文原先 TS 扫描/XML 与“C++ 仅 SQLite”的规划；以 [目录扫描 ADR](decisions/0006-directory-scanning.md) 为准。所有功能均遵循耗时操作异步、不阻塞 UI 的基础准则；按 2026-10-10 用户要求，MediaInfo 并发由原生自动计算为 `max(1, min(逻辑处理器数 - 2, 16))`，不提供手动设置，硬上限 16。下表的初始状态仅记录计划创建时的阶段。
 
 目标是完整迁移现有媒体管理流程，重新设计 React 界面，减少重复基础设施和不必要的原生依赖。Windows 为首个交付平台，架构预留 macOS 和 Linux 适配。关闭主窗口后进入托盘，下载和刮削继续；主动退出应用才停止任务。

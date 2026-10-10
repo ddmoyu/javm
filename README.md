@@ -1,6 +1,6 @@
 # JAVM
 
-JAVM 新工程，基于 `dev` 分支从 React、TypeScript、Mantine、Vite+ 和官方 Neutralinojs 开始重建。C++20 与 SQLite 的构建骨架位于 `native/database`。
+JAVM 新工程，基于 `dev` 分支使用 React、TypeScript、Mantine、Vite+ 和官方 Neutralinojs 重建。C++20 的 SQLite 扩展与后台媒体服务位于 `native/database` 和 `native/media`。
 
 当前版本为 **1.0.0**，采用全新数据模型，旧库迁移面向 `0.5.3`。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
 
@@ -11,6 +11,8 @@ JAVM 新工程，基于 `dev` 分支从 React、TypeScript、Mantine、Vite+ 和
 **正式前端已按原型2（Velvet）实现 Mantine 界面，目录扫描、媒体数据库与下载按授权逐项接入。** 默认入口展示媒体库、发现、下载、资源刮削、目录和设置，未导入数据时使用真实空状态，不注入 mock 数据。图片预览沿用旧版 Fancybox。旧 Vue/Tauri/Rust 代码可从 Git 历史查看。
 
 后续开发具体功能时，查阅 [竞品与功能参考](docs/REFACTOR_PLAN.md#竞品与功能参考)，其中收录七个竞品的仓库地址及适合借鉴的功能方向。
+
+当前已接入功能、未完成项与验证边界见 [功能开发状态](docs/FEATURE_STATUS.md)，按正式源码核对，区别于早期原型范围。
 
 Windows 视频下载已接入：支持 MP4 直链、m3u8 分片与独立音视频轨合并、暂停续传、任务持久化、失败重试和只重试合并。下载管理及下载设置直接操作真实服务，完成前检查输出文件；使用和依赖说明见 [视频下载与合并](docs/decisions/0007-video-downloads.md)。
 
@@ -106,8 +108,8 @@ frontend/src/
   app/                    应用外框、界面状态与 Velvet 主题
   components/             共享控件、海报与 Fancybox 图箱
   features/               片库、发现、下载、刮削、目录、设置和详情界面
-  services/               应用级服务预留
-  platform/neutralino/    官方客户端启动边界
+  services/               片库、下载、刮削、取流、播放、资料与设置服务
+  platform/neutralino/    官方客户端、进程、文件、网络及窗口适配
   repositories/           数据访问预留
   contracts/              影片、图片、文件与任务类型
   scrapers/               站点适配预留
@@ -116,15 +118,16 @@ native/database/          C++20 / SQLite 官方 Extension
 native/media/             MediaInfo、pugixml、有界后台扫描与媒体数据库
 resources/                宿主和前端共用静态资源
 scripts/                  本机开发脚本
-tests/                    后续样本和集成验证
+tests/                    安全样例、单元与集成验证
 docs/                     重构约定、选型和验证记录
 ```
 
 ## 当前边界
 
-- 下载器、FFmpeg 合并、下载任务 SQLite、内置播放器、MetaTube 管理／资料查询及 AI 识别／翻译已接入。其他站点资源搜索、批量刮削、图片落盘、多 AI 供应商轮换尚未接入。
-- 旧库兼容已用合成的 v2/v3 数据库验证；旧维度收藏、别名与下载任务表保留，但不代表相关旧业务已全部接入。真实用户旧库、NAS、机械硬盘与大型片库尚未验收。只处理用户明确提供到新数据目录的数据库副本。
-- 桌面窗口使用官方窗口 API，首次启动居中显示；关闭后留在托盘继续任务，托盘菜单提供显式退出。退出先停止任务并保存状态；窗口隐藏与托盘菜单的原生视觉验收仍需独立进行，见下载验证记录。
+- 下载、播放、MetaTube 单片／批量刮削、封面落盘、规范 NFO 写回与下载后入库已接入。番号资源查找使用隐藏 Neutralino，完成 HLS 校验后可复制或交接下载；真实站点兼容性未验证，见 [资源查找验证](docs/verification/2026-10-10-resource-lookup.md)。
+- 截图及封面编辑、影片详情的资源结果回显、维度收藏持久化、文件改名／移动、健康检查、多源字段融合、多 AI 供应商轮换、深度链接与自动更新尚未完成。磁力按用户要求暂不开发，完整清单见 [功能开发状态](docs/FEATURE_STATUS.md)。
+- 0.5.3 迁移已用合成数据库验证；旧任务、维度收藏、别名等尚未接入的数据归档保留，不自动恢复执行。开发验证不读取真实用户数据库；NAS、慢盘及完整发行环境仍需独立验收。
+- 桌面窗口使用官方窗口 API，首次启动居中显示；关闭窗口可按设置留在托盘继续任务，显式退出先停止任务并保存状态。已验证对应事件处理器，长期托盘队列和系统级交互仍需独立验收，见 [后台运行验证](docs/verification/2026-10-10-background-running.md)。
 - `pnpm test` 包含查询规则、空资料边界、下载状态机与播放会话测试；`pnpm test:downloads` 覆盖实际下载、合并、进程退出与 SQLite，`pnpm test:playback` 覆盖合成素材的真实播放。通过测试不代表网站、所有编解码器或发布包已全面验收。
 - GitHub Actions 仅保留手动触发。提交、推送和 PR 不自动运行检查；旧发布工作流已移除，不自动创建 Release。
 - `pnpm test:metadata` 使用隔离的桌面宿主和本机模拟接口验证真实传输与加密存储，并运行已准备的包内 MetaTube，验证按需启动、驻留及宿主退出后的进程回收。测试不使用真实片库或供应商密钥，初始验证见 [资料辅助验证](docs/verification/2026-10-09-metatube-ai.md)。
