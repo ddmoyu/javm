@@ -22,8 +22,12 @@ if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notm
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed.' }
 $installer = Join-Path $output "JAVM-$version-windows-x64-setup.exe"
 if (!(Test-Path -LiteralPath $installer)) { throw 'Installer output missing.' }
+$hashAlgorithm = [Security.Cryptography.SHA256]::Create()
+$bootstrapperStream = [IO.File]::OpenRead($bootstrapper)
+try { $bootstrapperHash = [BitConverter]::ToString($hashAlgorithm.ComputeHash($bootstrapperStream)).Replace('-', '').ToLowerInvariant() }
+finally { $bootstrapperStream.Dispose(); $hashAlgorithm.Dispose() }
 [IO.File]::WriteAllText((Join-Path $stage 'receipt.json'), (@{
     version=$version; installer=$installer; compiler=(Get-Item -LiteralPath $iscc).VersionInfo.FileVersion
-    bootstrapperSha256=(Get-FileHash -LiteralPath $bootstrapper -Algorithm SHA256).Hash.ToLowerInvariant()
+    bootstrapperSha256=$bootstrapperHash
     signed=$false
 } | ConvertTo-Json))
