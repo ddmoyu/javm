@@ -30,7 +30,10 @@ jobs:
         run: node scripts/release-alpha.mjs verify-source
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
-      - run: pnpm test
+      - name: 执行默认测试集
+        run: |
+          New-Item -ItemType Directory -Force -Path .tmp | Out-Null
+          pnpm test
       - name: 下载并校验已发布组件
         env:
           GH_TOKEN: ${{ github.token }}
