@@ -47,6 +47,24 @@ if (command === "plan") {
       continue;
     }
     publish.push(name);
+    // Reserve the source ref before a long build. The workflow token may not
+    // create a tag for an older commit after dev receives workflow changes.
+    if (process.env.JAVM_RESERVE_COMPONENT_TAGS === "1") {
+      if (!process.env.GITHUB_SHA) throw new Error("组件标签缺少构建提交");
+      try {
+        const ref = api("repos/" + repository + "/git/ref/tags/" + encodeURIComponent(spec.tag));
+        if (ref.object.sha !== process.env.GITHUB_SHA)
+          throw new Error("未完成组件标签属于先前构建，请重跑原工作流：" + spec.tag);
+      } catch (error) {
+        if (!String(error.stderr).includes("HTTP 404")) throw error;
+        api("repos/" + repository + "/git/refs", [
+          "-f",
+          "ref=refs/tags/" + spec.tag,
+          "-f",
+          "sha=" + process.env.GITHUB_SHA,
+        ]);
+      }
+    }
     for (const platform of platforms) include.push({ component: name, platform });
   }
   const outputs = {

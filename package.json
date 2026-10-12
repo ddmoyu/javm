@@ -16,7 +16,7 @@
     "catalog:build": "node --disable-warning=ExperimentalWarning scripts/build-catalog-seed.mjs",
     "icons:generate": "node scripts/generate-icon-assets.mjs",
     "test": "vp test run --passWithNoTests",
-    "desktop:setup": "neu update",
+    "desktop:setup": "node scripts/setup-desktop.mjs",
     "desktop:dev": "pnpm native:build && neu run",
     "desktop:build": "pnpm native:build --Release && pnpm build && node scripts/build-desktop.mjs",
     "desktop:offline": "pnpm offline:setup && pnpm desktop:build && node scripts/package-offline.mjs",

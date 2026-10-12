@@ -56,7 +56,8 @@ export async function buildCatalogSeed(input, output, now = Date.now()) {
       sourceRows: entries.length,
       rows: kept.length,
       removed: entries.length - kept.length,
-      sourceSha256: createHash("sha256").update(csv).digest("hex"),
+      // Git stores these sources with LF; local editors may leave CRLF on Windows.
+      sourceSha256: createHash("sha256").update(csv.replaceAll("\r\n", "\n")).digest("hex"),
     });
     for (let position = 0; position < kept.length; position++)
       records.push({ ...kept[position], position });

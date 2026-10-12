@@ -34,6 +34,8 @@ concurrency:
 jobs:
   plan:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     outputs:
       changed: ${{ steps.plan.outputs.changed }}
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -50,6 +52,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           COMPONENT: ${{ inputs.component || 'all' }}
+          JAVM_RESERVE_COMPONENT_TAGS: "1"
         run: node scripts/third-party/release.mjs plan "$COMPONENT"
 
   build:
