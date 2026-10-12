@@ -1,4 +1,9 @@
-import type { LibraryFilters, LibrarySort, SortDirection } from "../../contracts/library";
+import type {
+  LibraryFilters,
+  LibraryQuery,
+  LibrarySort,
+  SortDirection,
+} from "../../contracts/library";
 export type {
   LibraryFilters,
   LibrarySort,
@@ -37,6 +42,15 @@ export const sizeOptions = [
   { value: "medium", label: "4–8 GB", min: 4, max: 8 },
   { value: "large", label: "8–12 GB", min: 8, max: 12 },
   { value: "largest", label: "12 GB 及以上", min: 12, max: Infinity },
+];
+export const availabilityOptions: {
+  value: NonNullable<LibraryQuery["availability"]>;
+  label: string;
+}[] = [
+  { value: "all", label: "全部状态" },
+  { value: "metadata_only", label: "未下载" },
+  { value: "available", label: "有本地视频" },
+  { value: "unavailable", label: "文件不可用" },
 ];
 export const metadataOptions = [
   { value: "all", label: "全部状态" },

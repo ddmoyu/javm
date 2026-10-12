@@ -61,7 +61,6 @@ import { SquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
 import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
 import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
 import { StopIcon } from "@phosphor-icons/react/dist/csr/Stop";
-import { SubtitlesIcon } from "@phosphor-icons/react/dist/csr/Subtitles";
 import { SunIcon } from "@phosphor-icons/react/dist/csr/Sun";
 import { TagIcon } from "@phosphor-icons/react/dist/csr/Tag";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
@@ -132,7 +131,6 @@ const icons = {
   shield: ShieldIcon,
   bell: BellIcon,
   keyboard: KeyboardIcon,
-  subtitles: SubtitlesIcon,
   gauge: GaugeIcon,
   scan: ScanIcon,
   chevron: CaretRightIcon,

@@ -37,14 +37,9 @@ vi.mock("@neutralinojs/lib", () => ({
     unmount: async () => {},
   },
 }));
-vi.mock("../frontend/src/platform/neutralino/process", () => ({
-  findOnPath: async () => "fixture-curl",
-  runNativeProcess: async (_tool: string, args: string[]) => {
-    if (args.includes("--version"))
-      return { exitCode: 0, stdOut: "curl 8.10.0 fixture", stdErr: "" };
-    const url = args[args.indexOf("--url") + 1]!;
+vi.mock("../frontend/src/platform/neutralino/http", () => ({
+  requestHttp: async ({ url, output: path }: { url: string; output: string }) => {
     fixture.requests.push(url);
-    const path = args[args.indexOf("--output") + 1]!;
     // 纯字节夹具，不读取或下载真实图片。
     fixture.files.set(
       path,
@@ -54,8 +49,7 @@ vi.mock("../frontend/src/platform/neutralino/process", () => ({
     );
     return {
       exitCode: 0,
-      stdOut: fixture.failMirror && url.includes("jsdelivr") ? "503" : "200",
-      stdErr: "",
+      status: fixture.failMirror && url.includes("jsdelivr") ? 503 : 200,
     };
   },
 }));

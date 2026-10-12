@@ -5,6 +5,8 @@ import type { ScrapeProvider } from "./ScrapeService";
 import { normalizeCode } from "./identity";
 import { StopUnconfirmedError } from "../downloads/ports";
 import type { EditableMetadata } from "../../contracts/metadata";
+import type { ResolvedMovie } from "../metadata/MovieMetadataResolver";
+import { requireMovieDetails } from "../metadata/movieSearch";
 
 export interface MetadataPipelineSettings {
   fusion: boolean;
@@ -45,11 +47,13 @@ export async function retryMetadata<T>(
   for (let attempt = 0; ; attempt++) {
     signal.throwIfAborted();
     try {
-      return await operation();
+      const result = await operation();
+      signal.throwIfAborted();
+      return result;
     } catch (error) {
+      if (error instanceof StopUnconfirmedError) throw error;
       signal.throwIfAborted();
       if (
-        error instanceof StopUnconfirmedError ||
         attempt >= count ||
         (error instanceof JsonHttpError &&
           error.status !== 408 &&
@@ -117,44 +121,58 @@ export class MetadataPipeline implements ScrapeProvider {
     this.settings = new Settings(store, defaultPipeline, validatePipeline, available);
     void this.settings.initialize();
   }
-  async search(query: string, signal: AbortSignal) {
+  async search(query: string, signal: AbortSignal, options?: { refresh?: boolean }) {
     const settings = await this.settings.require(),
       active = AbortSignal.any([signal, AbortSignal.timeout(90000)]);
     return (
-      await retryMetadata(() => this.metatube.search(query, active), settings.retries, active)
+      await retryMetadata(
+        () => this.metatube.search(query, active, options),
+        settings.retries,
+        active,
+      )
     ).slice(0, 500);
   }
   async details(candidate: MovieCandidate, signal: AbortSignal) {
+    return (await this.resolve(candidate, signal)).details;
+  }
+  async resolve(candidate: MovieCandidate, signal: AbortSignal): Promise<ResolvedMovie> {
     const settings = await this.settings.require(),
       active = AbortSignal.any([signal, AbortSignal.timeout(120000)]);
     const load = async (item: MovieCandidate) => {
-      const result = await retryMetadata(
-        () => this.metatube.details(item, active),
+      const resolved = await retryMetadata(
+        async () =>
+          this.metatube.resolve
+            ? this.metatube.resolve(item, active)
+            : { candidate: item, details: await this.metatube.details(item, active) },
         settings.retries,
         active,
       );
+      const result = resolved.details;
+      active.throwIfAborted();
       if (
         !result.fields.title ||
         !result.fields.code ||
         normalizeCode(result.fields.code) !== normalizeCode(candidate.code) ||
-        result.provider !== item.provider ||
-        result.id !== item.id
+        normalizeCode(resolved.candidate.code) !== normalizeCode(candidate.code) ||
+        result.provider !== resolved.candidate.provider ||
+        result.id !== resolved.candidate.id
       )
         throw new Error("资料来源身份不一致，未采用结果。");
-      return result;
+      requireMovieDetails(result, resolved.candidate);
+      return resolved;
     };
     const primary = await load(candidate);
     if (!settings.fusion) return primary;
     let candidates: MovieCandidate[];
     try {
-      candidates = await this.search(candidate.code, active);
+      candidates = await this.search(candidate.code, active, { refresh: true });
     } catch (e) {
-      active.throwIfAborted();
       if (e instanceof StopUnconfirmedError) throw e;
+      active.throwIfAborted();
       return primary;
     }
     const others: MovieDetails[] = [],
-      seen = new Set([candidate.provider]);
+      seen = new Set([primary.candidate.provider]);
     for (const item of candidates) {
       if (seen.has(item.provider) || normalizeCode(item.code) !== normalizeCode(candidate.code))
         continue;
@@ -172,13 +190,18 @@ export class MetadataPipeline implements ScrapeProvider {
       )
         continue;
       try {
-        others.push(await load(item));
+        const other = (await load(item)).details;
+        if (
+          other.provider !== primary.details.provider &&
+          !others.some((value) => value.provider === other.provider)
+        )
+          others.push(other);
       } catch (e) {
-        active.throwIfAborted();
         if (e instanceof StopUnconfirmedError) throw e;
+        active.throwIfAborted();
       }
       if (others.length >= 2) break;
     }
-    return fuseMetadata(primary, others);
+    return { candidate: primary.candidate, details: fuseMetadata(primary.details, others) };
   }
 }

@@ -4,6 +4,8 @@ build/
 bin/
 .neutralino/
 .tmp/
+data/catalogs/javbus/*.bak
+data/catalogs/javbus/*.part
 .vite/
 .vp/
 coverage/

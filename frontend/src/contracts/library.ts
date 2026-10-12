@@ -35,6 +35,7 @@ export interface ScanProgress {
   notices: { path: string; message: string }[];
 }
 export interface LibraryStatus {
+  recoveryError?: string;
   directories: MediaDirectory[];
   scan: ScanProgress | null;
   revision: number;
@@ -75,7 +76,6 @@ export interface NativeVideo {
     stream_url?: string | null;
     part?: number;
     parts?: number;
-    subtitles?: string[];
   }[];
   nfo_files?: { path: string; canonical: number }[];
   dir_path: string;
@@ -141,7 +141,7 @@ export interface LibraryQuery {
 export interface FacetQuery {
   dimension: FacetDimension;
   query?: string;
-  sort?: "name" | "source";
+  sort?: "name" | "source" | "videoCount";
   names?: string[];
   favoritesOnly?: boolean;
 }
@@ -149,6 +149,8 @@ export interface FacetValue {
   label?: string;
   name: string;
   count: number;
+  /** JavBus 明确提供的影片数；缺失时不可用本地数量代替。 */
+  videoCount?: number | null;
   favorite?: boolean | number;
 }
 export interface LibrarySummary {

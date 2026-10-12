@@ -17,12 +17,16 @@ import { Empty, Pill } from "../../components/ui";
 import { FilmDetail } from "../films/FilmDetail";
 import { movieDetailsToFilm } from "../resources/movieDetailsFilm";
 import type { AvwikiWorksService } from "../../services/catalog/AvwikiWorksService";
-import type { AvwikiDimension } from "../../services/catalog/avwikiCsv";
+import type { WorksDimension } from "../../services/catalog/javbusWorks";
 import type { AvwikiWork } from "../../services/catalog/avwikiWorks";
 import { ResourceLookupButton } from "../resources/ResourceSearch";
+import { publicMessage } from "../../services/publicMessage";
+import { onlineWorkChoices } from "./onlineWorkChoices";
+
+const noSubscribe = () => () => {};
 
 const candidateOf = (work: AvwikiWork) => ({
-  provider: "AVWikiDB",
+  provider: work.url.startsWith("https://www.javbus.com/") ? "JavBus" : "AVWikiDB",
   id: work.code,
   code: work.code,
   title: work.title,
@@ -34,6 +38,7 @@ function summaryFilm(work: AvwikiWork) {
       ...candidate,
       homepage: work.url,
       coverUrl: work.coverUrl,
+      coverCandidates: work.coverCandidates,
       fields: { code: work.code, title: work.title },
     },
     candidate,
@@ -47,13 +52,24 @@ export function OnlineWorks({
   active,
 }: {
   service: AvwikiWorksService;
-  dimension: AvwikiDimension;
+  dimension: WorksDimension;
   name: string;
   active: boolean;
 }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const { library, libraryState, openFilm, resourceSearch, notice } = useWorkspace();
+  const catalog = library.catalog;
+  const artwork = library.artwork;
+  const artworkState = useSyncExternalStore(
+    artwork?.subscribe ?? noSubscribe,
+    () => artwork?.getSnapshot() ?? null,
+  );
+  const savedCount = useSyncExternalStore(catalog?.subscribe ?? noSubscribe, () => {
+    const counts = catalog?.getSnapshot().catalogs[dimension].videoCounts;
+    return counts && Object.hasOwn(counts, name) ? counts[name] : undefined;
+  });
   const [detailView, setDetailView] = useState<"info" | "links">("info");
+  const [collecting, setCollecting] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const detailOrigin = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -72,7 +88,10 @@ export function OnlineWorks({
   }, [state.detail]);
   const matches = state.selection?.dimension === dimension && state.selection.name === name;
   const result = matches ? state.result : null;
+  const videoCount =
+    result?.total ?? (matches && state.entities.length > 1 ? undefined : savedCount);
   const detail = matches ? state.detail : null;
+  const choices = onlineWorkChoices(dimension, matches ? state.entities : []);
   const page = (value: number) => {
     service.loadPage(value);
     root.current?.scrollIntoView({ block: "start" });
@@ -86,8 +105,7 @@ export function OnlineWorks({
     <div ref={root} aria-busy={state.loading}>
       <Group justify="space-between" my="md">
         <Text size="sm" c="dimmed">
-          AVWikiDB ·{" "}
-          {result?.total === undefined ? "在线作品" : `${result.total.toLocaleString()} 部作品`}
+          {videoCount === undefined ? "作品数量未知" : `${videoCount.toLocaleString()} 部作品`}
           {result ? ` · 第 ${result.page} 页` : ""}
         </Text>
         <Group gap="xs">
@@ -103,16 +121,13 @@ export function OnlineWorks({
       </Group>
       {matches && state.entities.length > 1 && (
         <Select
-          label="选择对应的来源条目"
-          description="同名条目拥有不同来源编号，选择后查看各自作品。"
+          label={choices.label}
+          description={choices.description}
           mb="md"
           value={state.entity?.id ?? null}
-          placeholder="请选择来源编号"
+          placeholder={choices.placeholder}
           allowDeselect={false}
-          data={state.entities.map((entity) => ({
-            value: entity.id,
-            label: `${entity.name} · ${entity.id}`,
-          }))}
+          data={choices.data}
           onChange={(id) => {
             if (id) service.choose(id);
           }}
@@ -120,7 +135,7 @@ export function OnlineWorks({
       )}
       {matches && state.error && (
         <Alert color="red" role="alert" mb="md">
-          {state.error}
+          {publicMessage(state.error)}
           <Button size="xs" variant="subtle" onClick={service.retry}>
             重试
           </Button>
@@ -129,7 +144,7 @@ export function OnlineWorks({
       {state.loading && (
         <Group component="output" justify="center" py="md" aria-live="polite">
           <Loader size="sm" />
-          <Text size="sm">正在读取作品…</Text>
+          <Text size="sm">{state.entity ? "正在读取作品…" : "正在查找条目…"}</Text>
         </Group>
       )}
       {!!result?.items.length && (
@@ -198,10 +213,10 @@ export function OnlineWorks({
         </SimpleGrid>
       )}
       {result && !result.items.length && !state.loading && !state.error && (
-        <Empty title="暂无在线作品" description="来源尚未收录该条目的作品。" />
+        <Empty title="暂无在线作品" description="暂未找到该条目的作品。" />
       )}
       {!result && !state.loading && !state.error && state.entities.length <= 1 && (
-        <Empty title="尚未读取作品" description="点击读取或刷新，获取来源的作品分页。">
+        <Empty title="尚未读取作品" description="点击读取或刷新，获取作品列表。">
           <Button size="xs" onClick={service.retry}>
             读取作品
           </Button>
@@ -237,21 +252,38 @@ export function OnlineWorks({
         onCollect={
           detail?.value && libraryState.available && libraryState.ready
             ? async () => {
-                const saved = await library.collectMetadata(detail.value!);
-                service.closeDetail();
-                notice("资料已保存到片库，可查找资源或关联本地视频。");
-                openFilm(saved);
+                setCollecting(true);
+                try {
+                  let warning = "";
+                  const saved = await library.collectMetadata(detail.value!, (message) => {
+                    warning = message;
+                  });
+                  service.closeDetail();
+                  notice(warning || "资料已保存到片库，可查找资源或关联本地视频。");
+                  openFilm(saved);
+                } finally {
+                  setCollecting(false);
+                }
               }
             : undefined
         }
         previewStatus={
-          detail?.loading ? (
+          collecting && artworkState?.busy ? (
+            <Group justify="space-between">
+              <Text size="sm" component="output" aria-live="polite">
+                正在保存图片 · {artworkState.processed} / {artworkState.total}
+              </Text>
+              <Button size="xs" variant="default" onClick={artwork?.cancel}>
+                停止获取图片
+              </Button>
+            </Group>
+          ) : detail?.loading ? (
             <Text size="sm" component="output">
               正在读取完整资料…
             </Text>
           ) : detail?.error ? (
             <Alert color="yellow" role="alert">
-              {detail.error}
+              {publicMessage(detail.error)}
               <Button size="xs" variant="subtle" onClick={() => service.open(detail.work)}>
                 重试详情
               </Button>

@@ -65,12 +65,14 @@ function mergeEntries(base: GenreEntry[], additions: GenreEntry[]) {
 }
 function result(entries: GenreEntry[], updatedAt: number | null): CatalogData {
   const names = [...new Set(entries.map((entry) => entry.name))];
-  names.sort(new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" }).compare);
   return { names, updatedAt, cache: JSON.stringify({ version: 1, entries, updatedAt }) };
 }
 export function loadCatalog(seed: GenreEntry[], cache: string | null, now: number): CatalogData {
   const saved = readCache(cache, now);
   return result(mergeEntries(seed, saved.entries), saved.updatedAt);
+}
+export function catalogEntries(seed: GenreEntry[], cache: string | null, now: number) {
+  return mergeEntries(seed, readCache(cache, now).entries);
 }
 function decodeText(value: string) {
   const entities: Record<string, string> = {
@@ -118,7 +120,14 @@ export function parseGenrePage(html: string, lane: GenreLane, known: GenreEntry[
     if (seen.has(id)) continue;
     seen.add(id);
     if (match[2]!.length > 2048) continue;
-    const name = decodeText(match[2]!.replace(/<[^>]*>/g, "")).replace(/\s+/g, " ");
+    const name = decodeText(
+      match[2]!
+        .replace(
+          /<(?:span|strong)\b[^>]*class\s*=\s*["'][^"']*\b(?:video-count|work-count|movie-count|result-count|total-count)\b[^"']*["'][^>]*>[^]*?<\/(?:span|strong)\s*>/gi,
+          "",
+        )
+        .replace(/<[^>]*>/g, ""),
+    ).replace(/\s+/g, " ");
     const entry = { lane, id, name, category: "其他" };
     if (entryValid(entry)) entries.push(entry);
   }
@@ -149,6 +158,7 @@ export function queryCatalog(
   names: string[],
   query: FacetQuery,
   page: PageRequest,
+  videoCounts: Record<string, number> = {},
 ): QueryPage<FacetValue> {
   const search = query.query?.trim().toLocaleLowerCase() ?? "";
   const selected = query.names ? new Set(query.names) : undefined;
@@ -158,8 +168,18 @@ export function queryCatalog(
   );
   if (query.sort === "name")
     matches.sort(new Intl.Collator("zh-CN", { numeric: true, sensitivity: "base" }).compare);
+  else if (query.sort === "videoCount")
+    matches.sort((left, right) => {
+      const a = Object.hasOwn(videoCounts, left) ? videoCounts[left] : undefined;
+      const b = Object.hasOwn(videoCounts, right) ? videoCounts[right] : undefined;
+      return a === undefined ? (b === undefined ? 0 : 1) : b === undefined ? -1 : b - a;
+    });
   return {
-    items: matches.slice(page.offset, page.offset + page.limit).map((name) => ({ name, count: 0 })),
+    items: matches.slice(page.offset, page.offset + page.limit).map((name) => ({
+      name,
+      count: 0,
+      ...(Object.hasOwn(videoCounts, name) ? { videoCount: videoCounts[name] } : {}),
+    })),
     offset: page.offset,
     total: matches.length,
     available: names.length,

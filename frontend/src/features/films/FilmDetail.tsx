@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Anchor,
@@ -31,7 +31,6 @@ import type { ArtworkMode } from "./FilmArtworkEditor";
 import { FilmEditor } from "./FilmEditor";
 import { FilmResources } from "./FilmResources";
 import { ResourceLookupButton } from "../resources/ResourceSearch";
-import { openExternalLink } from "../../platform/neutralino/externalLinks";
 import { os } from "@neutralinojs/lib";
 import { libraryError } from "../../services/library/LibraryService";
 import { LibraryDocumentsPanel } from "../directories/LibraryDocumentsPanel";
@@ -104,6 +103,12 @@ function FilmDetailContent({
   const [removingImages, setRemovingImages] = useState<{ ids?: string[] } | null>(null);
   const [tab, setTab] = useState<string | null>(
     initialView === "files" ? "files" : initialView === "links" ? "links" : "info",
+  );
+  const lookupWorkId = preview ? undefined : String(film.id);
+  // 资源查找随详情页存在；关闭或切换到其他影片后结束该番号仍在进行的后台取流。
+  useEffect(
+    () => resourceSearch?.holdView(film.code, lookupWorkId),
+    [resourceSearch, film.code, lookupWorkId],
   );
   const metadata = getFilmMetadata(film);
   const covers: MediaImage[] = film.artwork?.length
@@ -207,31 +212,6 @@ function FilmDetailContent({
         ? [["分辨率", metadata.resolution || "未知"] as [string, ReactNode]]
         : []),
     );
-  rows.push(["资料来源", metadata.source || "未知"]);
-  if (metadata.sourceId) rows.push(["来源编号", metadata.sourceId]);
-  if (metadata.homepage)
-    rows.push([
-      "来源网页",
-      <Anchor
-        key="homepage"
-        href={metadata.homepage}
-        target="_blank"
-        rel="noopener noreferrer"
-        size="sm"
-        aria-label="查看原始资料（在浏览器中打开）"
-        onClick={(event) => {
-          if (runtime !== "desktop") return;
-          event.preventDefault();
-          void openExternalLink(metadata.homepage!).catch(() =>
-            notice("打开链接失败，请检查默认浏览器后重试。"),
-          );
-        }}
-      >
-        <Group gap={5} component="span">
-          查看原始资料 <Icon name="external" size={14} />
-        </Group>
-      </Anchor>,
-    ]);
   return (
     <>
       <Drawer
@@ -253,7 +233,7 @@ function FilmDetailContent({
               className="detail-poster"
               aria-label="查看影片封面"
               disabled={!film.coverUrl}
-              onClick={() => open(gallery)}
+              onClick={() => open(gallery, 0, metadata.homepage)}
             >
               <Poster film={film} natural />
             </UnstyledButton>
@@ -263,7 +243,7 @@ function FilmDetailContent({
                 size="compact-xs"
                 fullWidth
                 mt="xs"
-                onClick={() => open(gallery)}
+                onClick={() => open(gallery, 0, metadata.homepage)}
               >
                 查看封面（{covers.length}）
               </Button>
@@ -328,7 +308,7 @@ function FilmDetailContent({
                     {trailers.length > 1 && (
                       <Menu position="bottom-start">
                         <Menu.Target>
-                          <Button variant="light" px={10} aria-label="其他预告片来源">
+                          <Button variant="light" px={10} aria-label="其他预告片">
                             <Icon name="down" size={16} />
                           </Button>
                         </Menu.Target>
@@ -476,11 +456,6 @@ function FilmDetailContent({
                             : ""}
                           {file.name}
                         </Text>
-                        {!!file.subtitles?.length && (
-                          <Text size="xs" c="dimmed">
-                            {file.subtitles.length} 个外挂字幕
-                          </Text>
-                        )}
                         <Text size="xs" c="dimmed">
                           {file.missing
                             ? "文件不可用"
@@ -496,7 +471,6 @@ function FilmDetailContent({
                             onClick={() =>
                               playSource(file.streamUrl ?? file.path, {
                                 title: file.name,
-                                subtitles: file.subtitles,
                               })
                             }
                           >
@@ -513,7 +487,7 @@ function FilmDetailContent({
                             disabled={busy}
                             onClick={() => setRelated(file)}
                           >
-                            分卷／本地字幕
+                            分卷设置
                           </Button>
                         )}
                         {file.kind === "video" && file.id && library.maintenance && (
@@ -605,7 +579,7 @@ function FilmDetailContent({
           <Text size="sm" style={{ overflowWrap: "anywhere" }}>
             {removingResource?.path}
           </Text>
-          <Text size="sm">将永久删除这个视频及其独占字幕。作品资料、NFO、封面和收藏会保留。</Text>
+          <Text size="sm">将永久删除这个视频文件。作品资料、NFO、封面、收藏和其他文件会保留。</Text>
           <Group justify="flex-end">
             <Button variant="default" disabled={busy} onClick={() => setRemovingResource(null)}>
               取消

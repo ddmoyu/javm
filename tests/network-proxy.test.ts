@@ -4,11 +4,10 @@ import { NetworkSettingsService } from "../frontend/src/services/network/Network
 import type { ProxyProbe } from "../frontend/src/services/network/NetworkSettingsService";
 import { StopUnconfirmedError } from "../frontend/src/services/downloads/ports";
 import { testProxyConnection } from "../frontend/src/platform/neutralino/proxyTest";
-import { findOnPath, runNativeProcess } from "../frontend/src/platform/neutralino/process";
+import { requestHttp } from "../frontend/src/platform/neutralino/http";
 
-vi.mock("../frontend/src/platform/neutralino/process", () => ({
-  findOnPath: vi.fn(),
-  runNativeProcess: vi.fn(),
+vi.mock("../frontend/src/platform/neutralino/http", () => ({
+  requestHttp: vi.fn(),
 }));
 
 const proxy = "http://127.0.0.1:7890";
@@ -120,13 +119,19 @@ describe("代理连通性测试服务", () => {
   });
 });
 
-describe("curl 代理连通性适配", () => {
+describe("常驻 HTTP 代理连通性适配", () => {
   beforeEach(() => {
-    vi.mocked(findOnPath).mockResolvedValue("C:/tools/curl.exe");
-    vi.mocked(runNativeProcess).mockResolvedValue({
+    vi.mocked(requestHttp).mockResolvedValue({
       exitCode: 0,
-      stdOut: "204\n200\n0.125",
-      stdErr: "",
+      status: 204,
+      tunnelStatus: 200,
+      elapsedMs: 125,
+      bytes: 0,
+      headers: {},
+      setCookie: false,
+      ambiguousHeaders: false,
+      effectiveUrl: "",
+      connections: 1,
     });
   });
   it.each([proxy, "https://localhost:7890", "socks5://localhost:1080", "socks5h://localhost:1080"])(
@@ -134,18 +139,10 @@ describe("curl 代理连通性适配", () => {
     async (address) => {
       const signal = new AbortController().signal;
       expect(await testProxyConnection(address, signal)).toEqual({ elapsedMs: 125 });
-      const [file, args, actualSignal, , cancellable] = vi.mocked(runNativeProcess).mock.calls[0]!;
-      expect(file).toBe("C:/tools/curl.exe");
+      const [request, actualSignal] = vi.mocked(requestHttp).mock.calls[0]!;
       expect(actualSignal).toBe(signal);
-      expect(cancellable).toBe(true);
-      expect(args[0]).toBe("--disable");
-      expect(args[args.indexOf("--proxy") + 1]).toBe(address);
-      expect(args[args.indexOf("--noproxy") + 1]).toBe("");
-      expect(args[args.indexOf("--connect-timeout") + 1]).toBe("5");
-      expect(args[args.indexOf("--max-time") + 1]).toBe("15");
-      expect(args).not.toContain("--location");
-      expect(args).not.toContain("--insecure");
-      expect(args).not.toContain("--proxy-insecure");
+      expect(request).toMatchObject({ proxy: address, timeoutMs: 15000, maxBytes: 1024 });
+      expect(request.maxRedirects).toBeUndefined();
     },
   );
   it.each([
@@ -158,19 +155,27 @@ describe("curl 代理连通性适配", () => {
     [0, "204\n200\nnot-a-number", "HTTP 204"],
     [97, "000\n000\n0.010", "SOCKS5"],
   ])("拒绝错误响应 %s / %s，不泄露代理凭据", async (exitCode, stdOut, message) => {
-    vi.mocked(runNativeProcess).mockResolvedValue({
+    const [status, tunnelStatus, seconds] = stdOut.split("\n").map(Number);
+    vi.mocked(requestHttp).mockResolvedValue({
       exitCode,
-      stdOut,
-      stdErr: "curl failed: http://user:private-password@localhost:7890",
+      status: status!,
+      tunnelStatus: tunnelStatus!,
+      elapsedMs: seconds! * 1000,
+      bytes: 0,
+      headers: {},
+      setCookie: false,
+      ambiguousHeaders: false,
+      effectiveUrl: "",
+      connections: 1,
     });
     await expect(testProxyConnection(proxy, new AbortController().signal)).rejects.toThrow(message);
-    expect(runNativeProcess).toHaveBeenCalledTimes(1);
+    expect(requestHttp).toHaveBeenCalledTimes(1);
   });
-  it("测试工具缺失不发起进程", async () => {
-    vi.mocked(findOnPath).mockResolvedValue("");
+  it("常驻模块不可用时不回退到外部程序", async () => {
+    vi.mocked(requestHttp).mockRejectedValueOnce(new Error("常驻网络模块未响应。"));
     await expect(testProxyConnection(proxy, new AbortController().signal)).rejects.toThrow(
-      "找不到 curl",
+      "常驻网络模块未响应",
     );
-    expect(runNativeProcess).not.toHaveBeenCalled();
+    expect(requestHttp).toHaveBeenCalledOnce();
   });
 });

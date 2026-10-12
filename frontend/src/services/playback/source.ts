@@ -1,6 +1,5 @@
 export type PlaybackFormat = "video" | "hls";
 export interface PlaybackOptions {
-  subtitles?: string[];
   title?: string;
   /** 无扩展名且服务器未声明类型时，调用方可明确指定 HLS。 */
   format?: PlaybackFormat;
@@ -16,20 +15,6 @@ export interface PlaybackRequest extends PlaybackOptions {
 const mediaExtension = /\.(mp4|m4v|webm|mov|mkv|avi|wmv|mpg|mpeg|ts|m2ts|mts|m3u8|ogv|3gp|flv)$/i;
 
 export function playbackRequest(source: string, options: PlaybackOptions = {}): PlaybackRequest {
-  if (
-    options.subtitles &&
-    (!Array.isArray(options.subtitles) ||
-      options.subtitles.length > 16 ||
-      options.subtitles.some(
-        (path) =>
-          typeof path !== "string" ||
-          path.length > 4096 ||
-          /[\0-\x1f]/.test(path) ||
-          !/^(?:[a-z]:[\\/]|\\\\|\/)/i.test(path) ||
-          !/\.(srt|vtt|ass|ssa)$/i.test(path),
-      ))
-  )
-    throw new Error("外挂字幕路径无效或超过 16 个。");
   source = source.trim();
   if (!source || Array.from(source).some((char) => char.charCodeAt(0) < 32))
     throw new Error("视频地址为空或包含无效字符。");

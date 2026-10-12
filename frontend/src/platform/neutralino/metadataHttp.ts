@@ -2,7 +2,8 @@ import { filesystem, os } from "@neutralinojs/lib";
 import { JsonHttpError } from "../../services/metadata/shared";
 import type { JsonHttp, Store } from "../../services/metadata/shared";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
-import { encodedPowerShell, findOnPath, runNativeProcess } from "./process";
+import { encodedPowerShell } from "./process";
+import { requestHttp } from "./http";
 import { playbackStorage } from "./playbackSettings";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 
@@ -58,7 +59,6 @@ export function protectedSettingsStore<T>(key: string): Store<T> {
 }
 export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
   let active = 0;
-  let curl: Promise<string> | undefined;
   return async (request, signal) => {
     if (active >= 4) throw new Error("服务请求已达并发上限，请稍后重试。");
     ++active;
@@ -73,8 +73,6 @@ export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
     };
     try {
       signal.throwIfAborted();
-      const executable = await (curl ??= findOnPath("curl.exe"));
-      if (!executable) throw new Error("找不到系统 curl，无法访问资料服务。");
       directory = `${await os.getPath("temp")}/javm-metadata-${crypto.randomUUID()}`;
       await filesystem.createDirectory(directory);
       const headers = Object.entries({
@@ -84,47 +82,26 @@ export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
       });
       if (headers.some(([key, value]) => /[\r\n]/.test(key + value)))
         throw new Error("请求头格式无效。");
-      await filesystem.writeFile(
-        `${directory}/headers`,
-        headers.map(([key, value]) => `${key}: ${value}`).join("\n"),
-      );
       const url = new URL(request.url);
       if (!["http:", "https:"].includes(url.protocol)) throw new Error("服务地址无效。");
       const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
       const proxy = local ? "" : await network.getProxy();
-      const args = [
-        "--disable",
-        "--silent",
-        "--show-error",
-        "--connect-timeout",
-        "5",
-        "--max-time",
-        String(request.timeout ?? 45),
-        "--max-filesize",
-        "1048576",
-        "--proto",
-        "=http,https",
-        "--proxy",
-        proxy,
-        "--noproxy",
-        local ? "*" : "",
-        "--header",
-        `@${directory}/headers`,
-        "--output",
-        `${directory}/response`,
-        "--write-out",
-        "%{http_code}",
-        "--request",
-        request.method ?? "GET",
-      ];
-      if (request.body !== undefined) {
-        const body = JSON.stringify(request.body);
-        if (body.length > 64000) throw new Error("请求内容过长，请缩短资料后重试。");
-        await filesystem.writeFile(`${directory}/body`, body);
-        args.push("--data-binary", `@${directory}/body`);
-      }
-      args.push("--url", request.url);
-      const result = await runNativeProcess(executable, args, signal, undefined, true);
+      const payload = request.body === undefined ? undefined : JSON.stringify(request.body);
+      if (payload && payload.length > 64000) throw new Error("请求内容过长，请缩短资料后重试。");
+      const result = await requestHttp(
+        {
+          purpose: "metadata",
+          url: request.url,
+          proxy,
+          output: `${directory}/response`,
+          method: request.method ?? "GET",
+          body: payload,
+          headers: Object.fromEntries(headers),
+          maxBytes: 1048576,
+          timeoutMs: (request.timeout ?? 45) * 1000,
+        },
+        signal,
+      );
       signal.throwIfAborted();
       if (result.exitCode !== 0)
         throw new Error(
@@ -134,7 +111,7 @@ export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
               ? "服务响应超过大小限制。"
               : "无法连接资料服务，请检查地址、网络与代理。",
         );
-      const status = Number(result.stdOut.trim());
+      const status = result.status;
       if (status === 401 || status === 403)
         throw new Error(
           request.headers?.Authorization

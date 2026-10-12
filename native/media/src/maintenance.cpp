@@ -18,7 +18,6 @@ bool checkedFile(const fs::path& path) {
 }
 std::string ext(const fs::path& path) { return lower(pathText(path.extension())); }
 const std::set<std::string> images{".jpg",".jpeg",".png",".webp"};
-const std::set<std::string> subtitles{".srt",".ass",".ssa",".vtt",".sub",".idx",".smi",".sup",".sbv",".dfxp",".ttml",".scc",".usf"};
 void checkRetainedCopy(const Json& retained) {
     if (retained.is_null()) return;
     const fs::path path(wide(retained.at("path")));
@@ -141,22 +140,6 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
             add(path.parent_path()/wide(pathText(path.stem())+"-"+kind+extension));
         }
         if (!metadataOnly) {
-            for (const auto& entry: fs::directory_iterator(path.parent_path())) {
-                const auto candidate = entry.path();
-                const auto name = lower(pathText(candidate.stem()));
-                if (!subtitles.contains(ext(candidate)) || !name.starts_with(stem)) continue;
-                const auto suffix = name.substr(stem.size());
-                bool belongsToAnother=false;
-                for (const auto& value: info["siblingStems"]) {
-                    const auto other=value.get<std::string>();
-                    if (other.size()<stem.size() || !name.starts_with(other)) continue;
-                    const auto rest=name.substr(other.size());
-                    if (rest.empty() || std::string("._- [(").find(rest.front())!=std::string::npos) belongsToAnother=true;
-                }
-                if (belongsToAnother) { ++preserved; continue; }
-                if (suffix.empty() || std::string("._- [(").find(suffix.front()) != std::string::npos) add(candidate);
-                if (files.size() > 256) throw std::runtime_error("关联文件过多，请先手动整理后再清理");
-            }
             add(path);
         }
         if (checkedFile(path) != exists)

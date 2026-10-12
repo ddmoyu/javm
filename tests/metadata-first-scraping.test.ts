@@ -86,7 +86,7 @@ describe("资料优先刮削调度", () => {
       expect.any(AbortSignal),
     );
   });
-  it("相同候选在排队时幂等；不同来源候选保持独立任务", async () => {
+  it("相同候选及不同来源的同一番号在排队时复用任务", async () => {
     const { service } = fixture();
     await service.initialize();
     service.pauseQueue(true);
@@ -97,7 +97,7 @@ describe("资料优先刮削调度", () => {
         candidate: { ...candidate, provider: "Second" },
         name: candidate.title,
       }),
-    ).not.toBe(first);
+    ).toBe(first);
   });
   it("MetaTube 搜索在取消时仍传播未确认停止，保留清理回调", async () => {
     const abort = new AbortController();

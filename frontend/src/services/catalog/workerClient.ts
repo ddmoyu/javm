@@ -3,6 +3,8 @@ import type { GenreLane } from "./catalogData";
 import type { AvwikiDimension } from "./avwikiCsv";
 import type { AvwikiEntity, AvwikiWork, AvwikiWorksPage } from "./avwikiWorks";
 import type { MovieDetails } from "../metadata/MetaTubeService";
+import type { JavbusPlan, WorksDimension } from "./javbusWorks";
+import type { JavbusCatalogDimension, JavbusCatalogEntry } from "./javbusCatalog";
 import type {
   ActorDirectoryDimension,
   Additions,
@@ -12,6 +14,31 @@ import type {
 } from "./discoveryData";
 
 interface Tasks {
+  javbusActorSearch: {
+    input: { html: string; url: string; page: number };
+    output: { items: AvwikiEntity[]; nextPage: number | null };
+  };
+  javbusImportCsv: {
+    input: { files: Partial<Record<JavbusCatalogDimension, string>> };
+    output: JavbusCatalogEntry[];
+  };
+  javbusExportCsv: { input: { dimension: JavbusCatalogDimension }; output: string };
+  javbusActresses: {
+    input: { html: string; lane: GenreLane; page: number };
+    output: { entries: JavbusCatalogEntry[]; nextPage: number | null };
+  };
+  javbusRelations: { input: { html: string }; output: JavbusCatalogEntry[] };
+  javbusPlan: {
+    input: { name: string; dimension: WorksDimension };
+    output: JavbusPlan;
+  };
+  javbusActors: { input: { html: string; names: string[] }; output: AvwikiEntity[] };
+  javbusFacets: {
+    input: { html: string; names: string[]; dimension: WorksDimension };
+    output: AvwikiEntity[];
+  };
+  javbusWorks: { input: { html: string; url: string; page: number }; output: AvwikiWorksPage };
+  javbusDetails: { input: { html: string; work: AvwikiWork }; output: MovieDetails };
   discoveryLoad: { input: { cache: string | null }; output: DiscoveryData };
   discoveryMerge: { input: { cache: string; update: DiscoveryUpdate }; output: DiscoveryData };
   listing: { input: { html: string; lane: GenreLane }; output: CrawlCursor };
@@ -47,7 +74,12 @@ interface Tasks {
   };
   portraitIndex: { input: { json: string }; output: boolean };
   query: {
-    input: { names: string[]; query: FacetQuery; page: PageRequest };
+    input: {
+      names: string[];
+      query: FacetQuery;
+      page: PageRequest;
+      videoCounts?: Record<string, number>;
+    };
     output: QueryPage<FacetValue>;
   };
 }

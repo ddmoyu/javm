@@ -5,8 +5,10 @@ import type { MovieCandidate, MovieDetails } from "../metadata/MetaTubeService";
 import { Observable, serviceError } from "../metadata/shared";
 import { logEvent } from "../logging/events";
 import { identifyCode, normalizeCode } from "./identity";
+import { mergeScrapeHistory, sameScrapeTarget, scrapeTarget } from "./taskIdentity";
 import { StopUnconfirmedError } from "../downloads/ports";
 import type { MetadataPipeline } from "./MetadataPipeline";
+import type { ResolvedMovie } from "../metadata/MovieMetadataResolver";
 
 export interface ScrapeTarget {
   id: string;
@@ -36,8 +38,13 @@ export interface ScrapePort {
   refresh(): Promise<void>;
 }
 export interface ScrapeProvider {
-  search(query: string, signal: AbortSignal): Promise<MovieCandidate[]>;
+  search(
+    query: string,
+    signal: AbortSignal,
+    options?: { refresh?: boolean },
+  ): Promise<MovieCandidate[]>;
   details(candidate: MovieCandidate, signal: AbortSignal): Promise<MovieDetails>;
+  resolve?(candidate: MovieCandidate, signal: AbortSignal): Promise<ResolvedMovie>;
 }
 class NeedsInput extends Error {}
 const limit = 1000;
@@ -110,7 +117,8 @@ export class ScrapeService extends Observable<{
           await new Promise<void>((resolve) => setTimeout(resolve, 0));
         }
         this.publish({ tasks });
-        for (const task of tasks)
+        await this.mergeRestoredTasks();
+        for (const task of this.snapshot.tasks)
           if (activeScrape(task))
             await this.write({
               ...task,
@@ -138,6 +146,65 @@ export class ScrapeService extends Observable<{
         : [...this.snapshot.tasks, next],
     });
   }
+  private async discard(task: ScrapeTask) {
+    await this.port.remove(task);
+    this.publish({ tasks: this.snapshot.tasks.filter((item) => item.id !== task.id) });
+  }
+  private async mergeRestoredTasks() {
+    type Group = {
+      task: ScrapeTask;
+      target: ReturnType<typeof scrapeTarget>;
+      duplicates: ScrapeTask[];
+      order: number;
+    };
+    const groups: Group[] = [];
+    for (const [index, task] of this.snapshot.tasks.entries()) {
+      let group: Group = { task, target: scrapeTarget(task), duplicates: [], order: index };
+      for (let merged = 0; ; merged++) {
+        const match = groups.findIndex((item) => sameScrapeTarget(item.target, group.target));
+        if (match < 0) break;
+        const previous = groups.splice(match, 1)[0]!;
+        const [keep, other] = previous.order < group.order ? [previous, group] : [group, previous];
+        const task = mergeScrapeHistory(keep.task, other.task);
+        group = {
+          task,
+          target: scrapeTarget(task),
+          duplicates: [...keep.duplicates, ...other.duplicates, other.task],
+          order: keep.order,
+        };
+        // 新得到的作品身份可能连接之前尚未匹配的来源任务，继续合并。
+        if (merged % 25 === 24) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+      groups.push(group);
+      if (index % 25 === 24) await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    for (const { task, duplicates } of groups.sort((left, right) => left.order - right.order)) {
+      if (!duplicates.length) continue;
+      // 先保存合并结果，再移除多余任务；中途失败可在下次启动继续，不触碰媒体文件。
+      await this.write(task);
+      for (const duplicate of duplicates) await this.discard(duplicate);
+    }
+  }
+  private async mergeResolvedTasks(id: string) {
+    const task = this.find(id);
+    const target = scrapeTarget(task);
+    const duplicates = this.snapshot.tasks.filter(
+      (item) => item.id !== id && sameScrapeTarget(scrapeTarget(item), target),
+    );
+    if (!duplicates.length) return;
+    const active = duplicates.find((item) => item.id === this.active?.id);
+    if (active) {
+      await this.mergeResolvedTasks(active.id);
+      return;
+    }
+    // 来源候选经 prepare 才得到片库 ID；此时也吸收已存在的任务，避免再执行一次。
+    await this.write({
+      ...task,
+      downloadId: task.downloadId || duplicates.find((item) => item.downloadId)?.downloadId,
+      collect: task.collect || duplicates.some((item) => item.collect),
+    });
+    for (const duplicate of duplicates) await this.discard(duplicate);
+  }
   private requireReady() {
     if (!this.snapshot.available) throw new Error("请在 Windows 桌面应用中刮削。");
     if (this.stopping) throw new Error("应用正在退出。");
@@ -156,17 +223,30 @@ export class ScrapeService extends Observable<{
     await this.initialize();
     const id = await this.exclusive(async () => {
       this.requireReady();
+      const target = scrapeTarget(input);
       const existing = this.snapshot.tasks.find((task) =>
-        input.downloadId
-          ? task.downloadId === input.downloadId
-          : activeScrape(task) &&
-            ((input.workId && task.workId === input.workId) ||
-              (input.path && task.path === input.path) ||
-              (input.candidate &&
-                task.candidate?.provider === input.candidate.provider &&
-                task.candidate?.id === input.candidate.id)),
+        sameScrapeTarget(scrapeTarget(task), target),
       );
-      if (existing) return existing.id;
+      if (existing) {
+        // 下载回调幂等；手动重新添加已结束任务则在原行重试。
+        if (!input.downloadId && !activeScrape(existing)) {
+          if (this.active?.id === existing.id) throw new Error("当前任务正在收尾，请稍候。");
+          const query = input.query?.trim();
+          await this.write({
+            ...existing,
+            ...input,
+            collect: input.collect || existing.collect,
+            query: query || existing.query,
+            candidate: input.candidate ?? (query ? undefined : existing.candidate),
+            status: "queued",
+            phase: "prepare",
+            error: "",
+          });
+        } else if (input.collect && !existing.collect) {
+          await this.write({ ...existing, collect: true });
+        }
+        return existing.id;
+      }
       if (this.snapshot.tasks.length >= limit)
         throw new Error("最多保留 1000 个刮削任务，请先清理已结束记录。");
       if (!input.workId && !input.path && !input.candidate)
@@ -223,9 +303,10 @@ export class ScrapeService extends Observable<{
     patch: Partial<ScrapeTask> = {},
   ) {
     signal.throwIfAborted();
-    await this.exclusive(() =>
-      this.write({ ...this.find(id), ...patch, status: "running", phase, error: "" }),
-    );
+    await this.exclusive(async () => {
+      await this.write({ ...this.find(id), ...patch, status: "running", phase, error: "" });
+      if (patch.workId || patch.candidate) await this.mergeResolvedTasks(id);
+    });
     signal.throwIfAborted();
   }
   private async execute(id: string, signal: AbortSignal) {
@@ -233,14 +314,15 @@ export class ScrapeService extends Observable<{
     let warning = "";
     try {
       await this.stage(id, "prepare", signal);
-      const target = await this.port.prepare(this.find(id), signal);
+      const preparing = this.find(id);
+      const target = await this.port.prepare(preparing, signal);
       const task = this.find(id);
-      await this.stage(id, "search", signal, { workId: target.id, path: target.path });
       let query =
         task.query?.trim() ||
         target.code ||
         identifyCode(target.path.split(/[\\/]/).at(-1) ?? "") ||
         identifyCode(task.name);
+      await this.stage(id, "search", signal, { workId: target.id, path: target.path, query });
       if (!query && !task.candidate && this.recognize) {
         try {
           query = await this.recognize(
@@ -274,7 +356,16 @@ export class ScrapeService extends Observable<{
         candidate = exact[0]!;
       }
       await this.stage(id, "details", signal, { candidate });
-      const details = await this.provider.details(candidate, signal);
+      const resolved = this.provider.resolve
+        ? await this.provider.resolve(candidate, signal)
+        : { candidate, details: await this.provider.details(candidate, signal) };
+      if (normalizeCode(resolved.candidate.code) !== normalizeCode(candidate.code))
+        throw new NeedsInput("后备资料番号与候选不一致，请重新确认。");
+      const sourceChanged =
+        resolved.candidate.provider !== candidate.provider ||
+        resolved.candidate.id !== candidate.id;
+      candidate = resolved.candidate;
+      const details = resolved.details;
       if (
         !details.fields.title ||
         !details.fields.code ||
@@ -285,6 +376,7 @@ export class ScrapeService extends Observable<{
         throw new NeedsInput("详情番号与候选不一致或资料不完整，请重新确认。");
       if (target.code && normalizeCode(target.code) !== normalizeCode(details.fields.code))
         throw new NeedsInput("片库番号与来源不一致，请先在影片编辑中确认番号。");
+      if (sourceChanged) await this.stage(id, "details", signal, { candidate });
       if (!target.hasArtwork) {
         await this.stage(id, "artwork", signal);
         try {
@@ -299,9 +391,12 @@ export class ScrapeService extends Observable<{
       // 保存为不可拆分的提交阶段；取消/退出等待这一阶段收尾。
       const saved = await this.port.commit(this.find(id), target, details, image?.path ?? "");
       warning = [warning, saved.warning].filter(Boolean).join("；");
-      await this.exclusive(() =>
-        this.write({ ...this.find(id), status: warning ? "partial" : "completed", error: warning }),
-      );
+      await this.exclusive(async () => {
+        const task = this.find(id);
+        // 运行中合入的收藏请求也要生效；按已确认的作品 ID 收藏，不重新获取资料和图片。
+        if (task.collect && !preparing.collect) await this.port.prepare(task, signal);
+        await this.write({ ...task, status: warning ? "partial" : "completed", error: warning });
+      });
     } catch (error) {
       if (error instanceof StopUnconfirmedError) {
         this.uncertainStop = { id, error };
@@ -333,18 +428,22 @@ export class ScrapeService extends Observable<{
     }
   }
   async retry(id: string, query?: string, candidate?: MovieCandidate) {
+    await this.initialize();
     await this.exclusive(async () => {
       await this.finishUncertainStop();
       this.requireReady();
+      const task = this.find(id);
+      if (activeScrape(task)) return;
       if (this.active?.id === id) throw new Error("当前任务正在收尾，请稍候。");
       await this.write({
-        ...this.find(id),
-        query: query?.trim() || this.find(id).query,
-        candidate: candidate ?? (query ? undefined : this.find(id).candidate),
+        ...task,
+        query: query?.trim() || task.query,
+        candidate: candidate ?? (query ? undefined : task.candidate),
         status: "queued",
         phase: "prepare",
         error: "",
       });
+      await this.mergeResolvedTasks(id);
     });
     this.pump();
   }
@@ -368,8 +467,7 @@ export class ScrapeService extends Observable<{
       if (this.uncertainStop?.id === id) throw new Error("请先重试以确认资料请求进程已停止。");
       const task = this.find(id);
       if (activeScrape(task) || this.active?.id === id) throw new Error("请先停止刮削任务。");
-      await this.port.remove(task);
-      this.publish({ tasks: this.snapshot.tasks.filter((item) => item.id !== id) });
+      await this.discard(task);
     });
   }
   async shutdown() {

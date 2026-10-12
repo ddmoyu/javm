@@ -140,7 +140,8 @@ export class ResolutionService {
         (job) =>
           [...this.active].filter((item) => item.source === job.source).length < bounds.perSource &&
           (job.request.provider !== "webview" ||
-            ![...this.active].some((item) => item.request.provider === "webview")),
+            [...this.active].filter((item) => item.request.provider === "webview").length <
+              bounds.webviews),
       );
       if (index < 0) break;
       const job = this.waiting.splice(index, 1)[0]!;
@@ -208,6 +209,15 @@ export class ResolutionService {
               discoveredBy: "webview" as const,
               pageUrl: job.request.url,
             }));
+            // 影片页常带预告或广告短片；不足正片时长的点播不能作为资源返回。
+            if (
+              !streams.some((stream) =>
+                stream.tracks.some((track) => track.duration >= bounds.featureSeconds),
+              )
+            ) {
+              streams = undefined;
+              throw new ResolutionError("not_found");
+            }
             break;
           } catch (error) {
             if (

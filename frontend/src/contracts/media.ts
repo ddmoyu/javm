@@ -12,7 +12,6 @@ export interface MediaTrailer {
 export interface MediaFile {
   part?: number;
   parts?: number;
-  subtitles?: string[];
   id?: string;
   streamUrl?: string;
   missing?: boolean;

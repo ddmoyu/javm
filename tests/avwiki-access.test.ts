@@ -29,9 +29,8 @@ vi.mock("@neutralinojs/lib", () => ({
     readFile: native.read,
   },
 }));
-vi.mock("../frontend/src/platform/neutralino/process", () => ({
-  findOnPath: async () => "mock-curl.exe",
-  runNativeProcess: native.run,
+vi.mock("../frontend/src/platform/neutralino/http", () => ({
+  requestHttp: native.run,
 }));
 vi.mock("../frontend/src/platform/neutralino/hiddenWebview", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../frontend/src/platform/neutralino/hiddenWebview")>()),
@@ -42,7 +41,7 @@ const url = "https://avwikidb.com/actor/1/";
 const entity = { id: "1", name: "示例女演员甲", url };
 const proxy = "http://127.0.0.1:7890";
 const network = { getProxy: async () => proxy } as unknown as NetworkSettingsService;
-const success = { exitCode: 0, stdOut: "200", stdErr: "" };
+const success = { exitCode: 0, status: 200 };
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -119,17 +118,18 @@ describe("发现作品访问失败修复（安全 mock）", () => {
       listing(),
     );
     expect(browser).not.toHaveBeenCalled();
-    const args = native.run.mock.calls[0]![1] as string[];
-    expect(args).toContain("User-Agent: Mozilla/5.0 SafeFixture");
-    expect(args).toContain("Referer: https://avwikidb.com/");
-    expect(args).toContain("Sec-Fetch-Mode: navigate");
-    expect(args[args.indexOf("--proxy") + 1]).toBe(proxy);
-    expect(args).not.toContain("--insecure");
-    expect(args).not.toContain("--location");
+    const request = native.run.mock.calls[0]![0];
+    expect(request.headers).toMatchObject({
+      "User-Agent": "Mozilla/5.0 SafeFixture",
+      Referer: "https://avwikidb.com/",
+      "Sec-Fetch-Mode": "navigate",
+    });
+    expect(request.proxy).toBe(proxy);
+    expect(request.maxRedirects).toBeUndefined();
     expect(native.remove).toHaveBeenCalledOnce();
   });
   it("HTTP 403 后按同一演员、同一代理读取隐藏页面，再交给正式作品解析", async () => {
-    native.run.mockResolvedValue({ ...success, stdOut: "403" });
+    native.run.mockResolvedValue({ ...success, status: 403 });
     const browser = new BrowserMock();
     native.browser.mockImplementation(async (_signal, _proxy, read) => read(browser, _signal));
     const processor = {
@@ -160,7 +160,7 @@ describe("发现作品访问失败修复（安全 mock）", () => {
   it("直连 TLS 错误明确显示 curl 35，不盲目改变 TLS 或创建隐藏窗口", async () => {
     native.run.mockResolvedValue({
       exitCode: 35,
-      stdOut: "000",
+      status: 0,
       stdErr: "mock secret https://private.invalid/ Cookie: mock-private",
     });
     const browser = vi.fn();
@@ -175,7 +175,7 @@ describe("发现作品访问失败修复（安全 mock）", () => {
     [302, "返回重定向"],
     [429, "过于频繁"],
   ])("HTTP %s 不作为 403 反复尝试", async (status, message) => {
-    native.run.mockResolvedValue({ ...success, stdOut: String(status) });
+    native.run.mockResolvedValue({ ...success, status });
     const browser = vi.fn();
     await expect(
       createCatalogHttp(network, async () => {}, browser)(url, new AbortController().signal),
@@ -183,7 +183,7 @@ describe("发现作品访问失败修复（安全 mock）", () => {
     expect(browser).not.toHaveBeenCalled();
   });
   it("后台名单更新不创建隐藏浏览器，403 与重定向明确区分", async () => {
-    native.run.mockResolvedValue({ ...success, stdOut: "403" });
+    native.run.mockResolvedValue({ ...success, status: 403 });
     const browser = vi.fn();
     await expect(
       createCatalogHttp(
@@ -198,14 +198,14 @@ describe("发现作品访问失败修复（安全 mock）", () => {
     const abort = new AbortController();
     native.run.mockImplementation(async () => {
       abort.abort();
-      return { ...success, stdOut: "403" };
+      return { ...success, status: 403 };
     });
     const browser = vi.fn();
     await expect(
       createCatalogHttp(network, async () => {}, browser)(url, abort.signal),
     ).rejects.toThrow();
     expect(browser).not.toHaveBeenCalled();
-    native.run.mockResolvedValue({ ...success, stdOut: "403" });
+    native.run.mockResolvedValue({ ...success, status: 403 });
     native.remove.mockClear();
     const cleanup = vi.fn(async () => {});
     browser.mockRejectedValue(new StopUnconfirmedError(cleanup));

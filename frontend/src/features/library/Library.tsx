@@ -38,7 +38,7 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [filters, setFilters] = useState(emptyLibraryFilters);
   const [backToTopVisible, setBackToTopVisible] = useState(false);
-  const chips = libraryFilterLabels(filters);
+  const chips = libraryFilterLabels(filters, availability);
   const scrollTop = () => {
     rootRef.current?.closest(".page-content")?.scrollTo({ top: 0 });
   };
@@ -129,22 +129,6 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
           />
           <Group gap={6} wrap="nowrap" pb={8}>
             <Select
-              aria-label="本地视频状态"
-              size="xs"
-              w={112}
-              allowDeselect={false}
-              value={availability}
-              data={[
-                { value: "all", label: "全部状态" },
-                { value: "metadata_only", label: "未下载" },
-                { value: "available", label: "有本地视频" },
-                { value: "unavailable", label: "文件不可用" },
-              ]}
-              onChange={(value) =>
-                setAvailability(value as NonNullable<LibraryQuery["availability"]>)
-              }
-            />
-            <Select
               aria-label="排序方式"
               value={sort}
               data={librarySortOptions}
@@ -169,6 +153,8 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
               filters={filters}
               resultCount={results.total}
               onChange={setFilters}
+              availability={availability}
+              onAvailabilityChange={setAvailability}
             />
             <Group gap={2} className="toolbar-divider">
               <IconButton
@@ -211,17 +197,22 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
                 key={`${chip.key}:${chip.value}`}
                 withRemoveButton
                 removeButtonProps={{ "aria-label": `移除筛选 ${chip.label}` }}
-                onRemove={() =>
+                onRemove={() => {
+                  const key = chip.key;
+                  if (key === "availability") {
+                    setAvailability("all");
+                    return;
+                  }
                   setFilters((previous) => {
-                    const value = previous[chip.key];
+                    const value = previous[key];
                     return {
                       ...previous,
-                      [chip.key]: Array.isArray(value)
+                      [key]: Array.isArray(value)
                         ? value.filter((item) => item !== chip.value)
                         : "all",
                     };
-                  })
-                }
+                  });
+                }}
               >
                 {chip.label}
               </MantinePill>

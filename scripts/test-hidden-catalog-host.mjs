@@ -82,7 +82,7 @@ await writeFile(
 await writeFile(
   path.join(root, "launch.json"),
   JSON.stringify({
-    file: path.join(bundle.directory, "javm-win_x64.exe"),
+    file: path.join(bundle.directory, bundle.entryPoint ?? "javm-win_x64.exe"),
     arguments: `--res-mode=directory --path="${root.replaceAll("\\", "/")}"`,
     profile: path.join(root, "profile"),
     ownerPid: process.pid,

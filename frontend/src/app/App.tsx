@@ -52,6 +52,7 @@ import type { NetworkSettingsService } from "../services/network/NetworkSettings
 import type { PlaybackSettingsService } from "../services/playback/PlaybackSettingsService";
 import type { AiService } from "../services/metadata/AiService";
 import type { MetaTubeService } from "../services/metadata/MetaTubeService";
+import { publicMessage } from "../services/publicMessage";
 import type { BackgroundSettingsService } from "../services/settings/BackgroundSettingsService";
 import type { LogService } from "../services/logging/LogService";
 import { logEvent } from "../services/logging/events";
@@ -134,7 +135,7 @@ export function App({
   const collapsed = preferences.navCollapsed;
   const current = pages.find((item) => item.id === page)!;
   const notice = (message: string) => {
-    setToast(message);
+    setToast(publicMessage(message));
     logEvent("info", "ui", "notice", message);
   };
   useEffect(() => {
@@ -265,7 +266,6 @@ export function App({
           if (file)
             playSource(file.streamUrl ?? file.path, {
               title: `${film.code} ${film.title}`.trim(),
-              subtitles: file.subtitles,
             });
           else notice("这部影片尚未关联可播放的视频文件。");
         },

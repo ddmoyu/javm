@@ -22,6 +22,12 @@ import { createArtworkService } from "../platform/neutralino/artwork";
 import type { ResourcePreferences } from "../services/streamResolution/archive";
 import { createApplicationUpdater } from "../platform/neutralino/applicationUpdates";
 import { initializeMainWindowSize } from "../platform/neutralino/mainWindowSize";
+import { shutdownHttp } from "../platform/neutralino/http";
+import { createImageSources } from "../platform/neutralino/imageSources";
+import { ImageSourcesProvider } from "../components/ImageSources";
+import { LibraryBackupService } from "../services/library/LibraryBackupService";
+import { isRunning } from "../contracts/downloads";
+import { activeScrape } from "../contracts/scraping";
 
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
@@ -30,6 +36,7 @@ export function createMainView(runtime: Runtime) {
   const updater = createApplicationUpdater(runtime, network);
   const backgroundSettings = createBackgroundSettings(runtime);
   const downloads = createDownloadService(runtime, network);
+  const images = createImageSources(runtime, network, () => downloads.initialize());
   const resolution = createResolutionService(runtime, network, () => downloads.initialize());
   const catalog = createDiscoveryCatalogService(runtime, network, () => downloads.initialize());
   const library = createLibraryService(runtime, catalog);
@@ -69,6 +76,7 @@ export function createMainView(runtime: Runtime) {
     metadata.metatube,
     network,
     () => downloads.getSnapshot().settings.ffmpegPath,
+    images,
   );
   const scraping = createScrapeService(
     runtime,
@@ -79,6 +87,36 @@ export function createMainView(runtime: Runtime) {
     metadata.ai,
   );
   downloads.connectScraping(scraping.enqueueDownload);
+  library.backups = new LibraryBackupService(
+    runtime === "desktop" ? new NativeLibraryPort() : undefined,
+    async (operation) => {
+      await downloads.initialize();
+      await library.initialize();
+      await scraping.initialize();
+      const tasks = downloads.getSnapshot().tasks;
+      const maintenance = library.maintenance?.getSnapshot().phase;
+      if (
+        tasks.some((task) => task.status === "queued" || isRunning(task.status)) ||
+        scraping.getSnapshot().tasks.some(activeScrape) ||
+        legacyImport.getSnapshot().state === "running" ||
+        maintenance === "reading" ||
+        maintenance === "cleaning" ||
+        library.hasPendingWrites() ||
+        downloads.hasPendingHandoffs() ||
+        library.artwork?.getSnapshot().busy ||
+        library.documents?.getSnapshot().running ||
+        library.organization?.getSnapshot().busy ||
+        library.organization?.getSnapshot().pending.length ||
+        library.getSnapshot().scan?.state === "scanning"
+      )
+        throw new Error("请先暂停下载，并等待扫描、刮削、图片和文件任务完成后再备份或恢复。");
+      if (operation === "restore") await playback.close();
+    },
+    async () => {
+      library.selectFilm(null);
+      await library.refreshAfterRestore();
+    },
+  );
   downloads.connectFileRename((task, pending) =>
     scraping.relocateDownload(task.id, task.output, pending.output, async () => {
       if (!library.organization) throw new Error("文件整理服务不可用。");
@@ -120,35 +158,39 @@ export function createMainView(runtime: Runtime) {
   if (runtime === "desktop")
     initializeLifecycle(downloads, backgroundSettings, async () => {
       await updater.shutdown();
+      await library.artwork?.shutdown();
+      await images.shutdown();
       await resourceSearch.shutdown();
       await resolution.shutdown();
       await scraping.shutdown();
-      await library.artwork?.shutdown();
       await legacyImport.shutdown();
       await catalog.shutdown();
       await network.shutdown();
       await playback.shutdown();
       await metadata.ai.shutdown();
       await metadata.metatube.shutdown();
+      await shutdownHttp();
       await library.shutdown();
     });
   return (
-    <ImagePreviewProvider>
-      <App
-        runtime={runtime}
-        downloads={downloads}
-        resolution={resolution}
-        resourceSearch={resourceSearch}
-        scraping={scraping}
-        library={library}
-        legacyImport={legacyImport}
-        playback={playback}
-        network={network}
-        playbackSettings={createPlaybackSettings(runtime)}
-        backgroundSettings={backgroundSettings}
-        logs={logs}
-        {...metadata}
-      />
-    </ImagePreviewProvider>
+    <ImageSourcesProvider value={images}>
+      <ImagePreviewProvider>
+        <App
+          runtime={runtime}
+          downloads={downloads}
+          resolution={resolution}
+          resourceSearch={resourceSearch}
+          scraping={scraping}
+          library={library}
+          legacyImport={legacyImport}
+          playback={playback}
+          network={network}
+          playbackSettings={createPlaybackSettings(runtime)}
+          backgroundSettings={backgroundSettings}
+          logs={logs}
+          {...metadata}
+        />
+      </ImagePreviewProvider>
+    </ImageSourcesProvider>
   );
 }

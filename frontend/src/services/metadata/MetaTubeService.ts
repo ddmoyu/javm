@@ -47,6 +47,7 @@ export interface MovieDetails {
   bigThumbUrl?: string;
   coverUrl?: string;
   bigCoverUrl?: string;
+  coverCandidates?: string[];
   previewVideoUrl?: string;
   previewVideoHlsUrl?: string;
   previewImages?: string[];

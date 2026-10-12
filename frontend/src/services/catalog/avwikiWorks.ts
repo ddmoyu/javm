@@ -13,6 +13,7 @@ export interface AvwikiWork {
   title: string;
   url: string;
   coverUrl?: string;
+  coverCandidates?: string[];
 }
 export interface AvwikiWorksPage {
   items: AvwikiWork[];

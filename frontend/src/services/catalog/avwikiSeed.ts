@@ -33,5 +33,8 @@ export function loadAvwikiSeed() {
       result[dimension] = parseAvwikiCsv(await response.text(), dimension);
     }
     return result;
-  })());
+  })().catch((error: unknown) => {
+    loading = undefined;
+    throw error;
+  }));
 }

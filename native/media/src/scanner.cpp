@@ -107,7 +107,17 @@ Json LibraryService::start(const Json& directory, unsigned concurrency) {
     catch (...) { busy_ = false; store_.finish(directory,"failed","无法启动扫描任务",false); throw; }
     return {{"directoryId",directory["id"]}};
 }
+#include "backup.inc"
 Json LibraryService::handle(const std::string& method, const Json& params) {
+    if(method.starts_with("library.backup.")) return backup(method,params);
+    if(!store_.healthy()) {
+        if(method.starts_with("library.instance.")) return store_.applicationInstance(method,params);
+        if(method=="library.status") return {{"directories",Json::array()},{"scan",nullptr},{"revision",revision_},{"databasePath",pathText(store_.path())},{"recoveryError",store_.recoveryError()}};
+        if(method=="library.shutdown" || method=="library.cancel") {shutdown();return Json::object();}
+        throw std::runtime_error(store_.recoveryError());
+    }
+    if(recovering_ && method!="library.status" && method!="library.cancel" && method!="library.shutdown")
+        throw std::runtime_error("片库正在备份或恢复，请等待完成后重试。");
     if (method == "library.scrape.cancel") {
         std::lock_guard lock(scrapeMutex_);
         cancelledScrape_=params.at("jobId");

@@ -87,7 +87,7 @@ export function AiSettingsPanel() {
           </SettingRow>
           <SettingRow
             title="批量刮削自动识别"
-            hint="规则无法识别时，将文件名和标题发送给下方启用的服务。只有来源返回相同番号时才保存资料。"
+            hint="规则无法识别时，将文件名和标题发送给下方启用的服务。只有查询结果返回相同番号时才保存资料。"
           >
             <Switch
               aria-label="批量刮削自动识别"

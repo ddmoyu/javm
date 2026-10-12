@@ -31,7 +31,10 @@ export class PagedQuery<T, Q> {
   private running = false;
   private countKnown = false;
   private wanted = [0];
-  constructor(private fetch: (query: Q, page: PageRequest) => Promise<QueryPage<T>>) {}
+  constructor(
+    private fetch: (query: Q, page: PageRequest) => Promise<QueryPage<T>>,
+    private readonly cachePages = LIBRARY_CACHE_PAGES,
+  ) {}
   getSnapshot = () => this.snapshot;
   isActive = () => this.active;
   subscribe = (listener: () => void) => {
@@ -81,7 +84,7 @@ export class PagedQuery<T, Q> {
   loadRange = (first: number, last: number) => {
     const start = Math.floor(Math.max(0, first) / LIBRARY_PAGE_SIZE);
     const end = Math.min(
-      start + LIBRARY_CACHE_PAGES - 1,
+      start + this.cachePages - 1,
       Math.floor(Math.max(first, last) / LIBRARY_PAGE_SIZE),
     );
     this.wanted = Array.from({ length: end - start + 1 }, (_, index) => start + index);
@@ -115,6 +118,8 @@ export class PagedQuery<T, Q> {
             includeTotal: !this.countKnown,
           });
           if (generation !== this.generation) continue;
+          // 发现页只保留当前页；快速翻页时迟到的旧页不再写回或阻塞新页。
+          if (this.cachePages === 1 && !this.wanted.includes(page)) continue;
           if (result.items.length > LIBRARY_PAGE_SIZE || result.offset !== page * LIBRARY_PAGE_SIZE)
             throw new Error("片库分页响应无效，请重试。");
           const total = result.total ?? this.snapshot.total;
@@ -122,7 +127,7 @@ export class PagedQuery<T, Q> {
             throw new Error("片库计数响应无效，请重试。");
           this.countKnown = true;
           this.pages.set(page, result.items);
-          while (this.pages.size > LIBRARY_CACHE_PAGES) {
+          while (this.pages.size > this.cachePages) {
             const oldest =
               [...this.pages.keys()].find((key) => !this.wanted.includes(key)) ??
               this.pages.keys().next().value!;
@@ -142,7 +147,10 @@ export class PagedQuery<T, Q> {
           if (this.wanted[0]! * LIBRARY_PAGE_SIZE >= total)
             this.wanted = [Math.max(0, Math.ceil(total / LIBRARY_PAGE_SIZE) - 1)];
         } catch (error) {
-          if (generation === this.generation)
+          if (
+            generation === this.generation &&
+            (this.cachePages !== 1 || this.wanted.includes(page))
+          )
             this.publish({
               error: error instanceof Error ? error.message : "片库读取失败，请重试。",
             });

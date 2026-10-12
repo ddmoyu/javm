@@ -9,6 +9,7 @@ let state: WindowState = { maximized: false, fullScreen: false };
 let initialized = false;
 let revision = 0;
 const listeners = new Set<() => void>();
+let toggling: Promise<void> | undefined;
 
 export const getWindowState = () => state;
 export function subscribeWindowState(listener: () => void) {
@@ -35,6 +36,16 @@ export async function refreshWindowState() {
   ]);
   // 查询期间如果收到了更新的原生事件，不能用旧结果覆盖它。
   if (request === revision) updateWindowState({ maximized, fullScreen });
+}
+
+export function toggleWindowMaximize() {
+  return (toggling ??= (async () => {
+    const maximized = await nativeWindow.isMaximized();
+    await (maximized ? nativeWindow.unmaximize() : nativeWindow.maximize());
+    await refreshWindowState();
+  })().finally(() => {
+    toggling = undefined;
+  }));
 }
 
 export function initializeWindowFrame() {

@@ -6,7 +6,6 @@ import {
 } from "../frontend/src/services/scraping/MetadataPipeline";
 import type { MovieDetails } from "../frontend/src/services/metadata/MetaTubeService";
 import { JsonHttpError } from "../frontend/src/services/metadata/shared";
-import { subtitleVtt } from "../frontend/src/services/playback/subtitles";
 import { identifyCode } from "../frontend/src/services/scraping/identity";
 const movie = (provider: string, title: string): MovieDetails => ({
   provider,
@@ -79,20 +78,7 @@ describe("已有来源的资料补全与本地字幕安全样例", () => {
     cancelled.abort();
     await expect(retryMetadata(async () => 1, 3, cancelled.signal)).rejects.toThrow();
   });
-  it("分卷不污染番号，手动提供的字幕转为纯文本且拒绝逆序时间", () => {
+  it("分卷不污染番号", () => {
     expect(identifyCode("SAFE-001-CD02.mp4")).toBe("SAFE-001");
-    const bytes = (s: string) => new TextEncoder().encode(s).buffer;
-    expect(
-      subtitleVtt(bytes("1\n00:00:00,000 --> 00:00:01,000\n<b>安全样例</b>"), "safe.srt"),
-    ).toContain("00:00:00.000 --> 00:00:01.000\n安全样例");
-    expect(
-      subtitleVtt(
-        bytes("[Events]\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,{\\b1}安全\\N字幕"),
-        "safe.ass",
-      ),
-    ).toContain("安全\n字幕");
-    expect(() => subtitleVtt(bytes("00:00:02.000 --> 00:00:01.000\n无效"), "safe.vtt")).toThrow(
-      "有效",
-    );
   });
 });

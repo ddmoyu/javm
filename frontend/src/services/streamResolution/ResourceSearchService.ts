@@ -10,6 +10,7 @@ import type { ResourceSource } from "./sources";
 import { rankResourceSources, readSourcePerformance } from "./sourcePerformance";
 import type { SourcePerformanceMap } from "./sourcePerformance";
 import { resourceLinkKey } from "./resourceLinks";
+import { bounds } from "./shared";
 import { archivedStream, resourceRecord } from "./archive";
 import type {
   ResourceArchive,
@@ -70,6 +71,7 @@ export class ResourceSearchService {
   private preferenceWrite?: Promise<void>;
   private preferencesDirty = false;
   private pendingSources: ResourceSource[] = [];
+  private views = new Map<string, number>();
   constructor(
     private readonly resolution: ResolutionService,
     private readonly downloads: ResourceDownloadPort,
@@ -375,9 +377,9 @@ export class ResourceSearchService {
     }
   };
   private startNextSource() {
-    if (this.stopped || this.sources.some((source) => this.handles.has(source.id))) return;
-    const source = this.pendingSources.shift();
-    if (source) this.startSource(source);
+    // 各来源并行查找，按隐藏实例上限提交，其余来源在有空位时依次补上。
+    while (!this.stopped && this.handles.size < bounds.webviews && this.pendingSources.length)
+      this.startSource(this.pendingSources.shift()!);
   }
   private startSource(source: ResourceSource) {
     const revision = this.revision;
@@ -466,7 +468,6 @@ export class ResourceSearchService {
           error: "资源查找暂时停止，请处理运行环境或清理问题后重试。",
         };
       }
-      // 只提交一个来源，避免低优先级任务占满底层队列或在排队中超时。
       this.startNextSource();
       this.publish();
     });
@@ -478,6 +479,30 @@ export class ResourceSearchService {
     if (!source || !this.snapshot.code) return;
     this.startSource(source);
     this.publish();
+  };
+  /** 详情页挂载期间持有对应番号；最后一个详情关闭后取消该番号仍在进行的查找。 */
+  holdView = (code: string, workId?: string) => {
+    let key: string;
+    try {
+      key = `${normalizeCode(code)}
+${workId ?? ""}`;
+    } catch {
+      return () => {};
+    }
+    this.views.set(key, (this.views.get(key) ?? 0) + 1);
+    return () => {
+      const left = (this.views.get(key) ?? 1) - 1;
+      if (left > 0) {
+        this.views.set(key, left);
+        return;
+      }
+      this.views.delete(key);
+      // StrictMode 和切换详情会先卸载再挂载，延后一拍确认确实没有详情在显示。
+      setTimeout(() => {
+        if (!this.views.has(key) && this.snapshot.searching && this.matches(code, workId))
+          this.cancel();
+      }, 0);
+    };
   };
   cancel = () => {
     this.pendingSources = [];

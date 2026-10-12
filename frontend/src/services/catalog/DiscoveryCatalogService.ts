@@ -6,7 +6,6 @@ import { avwikiSources, isAvwikiDimension } from "./avwikiCsv";
 import type { AvwikiDimension } from "./avwikiCsv";
 import type { PortraitService } from "./PortraitService";
 import type {
-  Additions,
   CatalogDimension,
   CatalogList,
   DiscoveryData,
@@ -14,15 +13,24 @@ import type {
 } from "./discoveryData";
 import type { CatalogProcessor } from "./workerClient";
 import { AvwikiWorksService } from "./AvwikiWorksService";
+import { OnlineActorSearchService } from "./OnlineActorSearchService";
+import { JavbusMovieLookup } from "./JavbusMovieLookup";
+import { javbusActressesUrl } from "./javbusCatalog";
+import type { JavbusCatalogDimension } from "./javbusCatalog";
+import { MovieDetailsCache } from "../metadata/MovieDetailsCache";
 
 export interface DiscoveryCatalogPort {
   read(): Promise<string | null>;
   write(cache: string): Promise<void>;
   fetch(url: string, signal: AbortSignal): Promise<string>;
+  readCsv?(): Promise<Partial<Record<JavbusCatalogDimension, string>>>;
+  writeCsv?(dimension: JavbusCatalogDimension, csv: string): Promise<void>;
 }
 type Group = AvwikiDimension | "genres" | "entities";
 const groupOf = (dimension: CatalogDimension): Group =>
-  isAvwikiDimension(dimension) || dimension === "genres" ? dimension : "entities";
+  dimension === "actresses" || dimension === "maleActors" || dimension === "genres"
+    ? dimension
+    : "entities";
 interface Snapshot {
   ready: boolean;
   available: boolean;
@@ -41,10 +49,15 @@ const RETRY_DELAY = 60 * 60 * 1000;
 const INCREMENTAL_DELAY = 30 * 60 * 1000;
 export class DiscoveryCatalogService extends Observable<Snapshot> {
   readonly works: AvwikiWorksService;
+  readonly actorSearch: OnlineActorSearchService;
+  readonly movieLookup: JavbusMovieLookup;
+  readonly scrapeLookup: JavbusMovieLookup;
+  readonly movieDetails = new MovieDetailsCache();
   private seeded?: Promise<void>;
   private initialized?: Promise<void>;
   private data?: DiscoveryData;
   private active?: Promise<void>;
+  private merging: Promise<void> = Promise.resolve();
   private abort?: AbortController;
   private timer?: ReturnType<typeof setTimeout>;
   private due: Record<Group, number> = {
@@ -58,6 +71,7 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
   };
   private stopPending?: () => Promise<void>;
   private stopped = false;
+  private csvWritesBlocked = false;
   constructor(
     private processor: CatalogProcessor,
     private port?: DiscoveryCatalogPort,
@@ -80,7 +94,27 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
       errors: {},
       warning: "",
     });
-    this.works = new AvwikiWorksService(processor, port?.fetch.bind(port), () => this.ready());
+    this.actorSearch = new OnlineActorSearchService(processor, port?.fetch.bind(port));
+    this.movieLookup = new JavbusMovieLookup(processor, port?.fetch.bind(port), this.movieDetails);
+    // 前台查询与后台刮削各一个有界槽，取消前台不会中断后台任务。
+    this.scrapeLookup = new JavbusMovieLookup(processor, port?.fetch.bind(port), this.movieDetails);
+    this.works = new AvwikiWorksService(
+      processor,
+      port?.fetch.bind(port),
+      () => this.initialize(),
+      "JavBus",
+      async (entries, signal) => {
+        if (!entries.length) return;
+        try {
+          await this.commit({ javbusRecords: entries }, signal);
+        } catch (error) {
+          signal.throwIfAborted();
+          if (error instanceof StopUnconfirmedError) throw error;
+          this.publish({ warning: "作品已读取，但目录资料更新失败，请重试。" });
+        }
+      },
+      (details) => this.movieDetails.remember(details),
+    );
   }
   private accept(data: DiscoveryData) {
     this.data = data;
@@ -90,7 +124,10 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
     return (this.seeded ??= this.processor
       .run("discoveryLoad", { cache: null })
       .then((data) => {
-        if (!this.stopped) this.accept(data);
+        if (!this.stopped) {
+          this.accept(data);
+          this.publish({ warning: "" });
+        }
       })
       .catch(() => {
         this.seeded = undefined;
@@ -114,22 +151,30 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
       } catch {
         this.publish({ warning: "缓存读取失败，正在使用内置名单。" });
       }
+      if (this.port.readCsv && !this.stopped) {
+        try {
+          const files = await this.port.readCsv();
+          const entries = await this.processor.run("javbusImportCsv", { files });
+          if (entries.length && !this.stopped)
+            await this.commit({ javbusRecords: entries }, new AbortController().signal);
+        } catch {
+          this.csvWritesBlocked = true;
+          this.publish({ warning: "JavBus CSV 读取失败，已保留现有名单和文件；修正后重新启动。" });
+        }
+      }
       this.due = {
-        ...(Object.fromEntries(
-          (Object.keys(avwikiSources) as AvwikiDimension[]).map((dimension) => [
-            dimension,
-            Math.max(
-              this.snapshot.catalogs[dimension].updatedAt ?? 0,
-              this.snapshot.catalogs[dimension].seedAt ?? 0,
-            ) + (this.data!.directoryPages[dimension] === 1 ? DAY : INCREMENTAL_DELAY),
-          ]),
-        ) as Record<AvwikiDimension, number>),
+        actresses: Infinity,
+        maleActors: Infinity,
+        directors: Infinity,
+        studios: Infinity,
+        series: Infinity,
         genres: (this.snapshot.catalogs.genres.updatedAt ?? 0) + DAY,
         entities: Infinity,
       };
       this.schedule();
     } catch {
       /* 加载失败通过状态显示，手动更新可以重试。 */
+      this.initialized = undefined;
     }
   }
   private schedule() {
@@ -145,6 +190,9 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
     );
   }
   refresh = (dimension: CatalogDimension) => {
+    // Existing actor snapshots are sufficient. Searches request only user-selected pages.
+    if (dimension === "actresses" || dimension === "maleActors" || dimension === "actors")
+      return Promise.resolve();
     if (!this.port || this.stopped) return Promise.resolve();
     if (this.active) return this.active;
     if (this.timer) clearTimeout(this.timer);
@@ -181,7 +229,25 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
         return body;
       };
       let update: DiscoveryUpdate;
-      if (isAvwikiDimension(group)) {
+      if (group === "actresses") {
+        const lane = this.data!.javbusLane!,
+          entries = [];
+        let page = this.data!.javbusPages![lane],
+          nextPage: number | null = page;
+        this.publish({ total: 8 });
+        for (let count = 0; count < 8 && nextPage !== null; count++) {
+          const incoming = await this.processor.run("javbusActresses", {
+            html: await fetch(javbusActressesUrl(lane, page)),
+            lane,
+            page,
+          });
+          entries.push(...incoming.entries);
+          nextPage = incoming.nextPage;
+          if (nextPage !== null) page = nextPage;
+        }
+        this.publish({ total: this.snapshot.completed });
+        update = { javbusDirectory: { lane, entries, nextPage } };
+      } else if (isAvwikiDimension(group)) {
         let page = this.data!.directoryPages[group];
         let nextPage: number | null = page;
         const names: string[] = [];
@@ -212,43 +278,11 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
           },
         };
       else {
-        const lane = this.data!.lane;
-        let cursor = this.data!.cursors[lane];
-        if (!cursor.pending.length)
-          cursor = await this.processor.run("listing", {
-            html: await fetch(`https://www.javbus.com${cursor.page}`),
-            lane,
-          });
-        const batch = cursor.pending.slice(0, 8);
-        this.publish({ total: this.snapshot.completed + batch.length });
-        const names: Additions = {};
-        for (const path of batch) {
-          abort.signal.throwIfAborted();
-          const incoming = await this.processor.run("entities", {
-            html: await fetch(`https://www.javbus.com${path}`),
-          });
-          for (const dimension of catalogDimensions)
-            if (incoming[dimension]) (names[dimension] ??= []).push(...incoming[dimension]!);
-        }
-        update = {
-          entities: {
-            names,
-            lane,
-            cursor: { ...cursor, pending: cursor.pending.slice(batch.length) },
-          },
-        };
+        // 导演、制作商、发行商和系列由已有本地资料及已读取详情汇总，不另行遍历作品。
+        this.publish({ total: 0 });
+        update = {};
       }
-      const data = await this.processor.run("discoveryMerge", { cache: this.data!.cache, update });
-      abort.signal.throwIfAborted();
-      this.publish({ saving: true });
-      let warning = "";
-      try {
-        await this.port!.write(data.cache);
-      } catch {
-        warning = "名单已更新，但缓存保存失败，下次启动仍使用原名单。";
-      }
-      if (!this.stopped) this.accept(data);
-      this.publish({ warning });
+      await this.commit(update, abort.signal);
       success = true;
     } catch (error) {
       if (error instanceof StopUnconfirmedError) {
@@ -264,18 +298,59 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
           },
         });
     } finally {
-      this.due[group] = abort.signal.aborted
-        ? Infinity
-        : Date.now() +
-          (success
-            ? group === "entities" ||
-              (isAvwikiDimension(group) && this.data!.directoryPages[group] !== 1)
-              ? INCREMENTAL_DELAY
-              : DAY
-            : RETRY_DELAY);
+      this.due[group] =
+        group === "entities" || abort.signal.aborted
+          ? Infinity
+          : Date.now() +
+            (success
+              ? (group === "actresses" &&
+                  (this.data!.javbusLane !== "censored" ||
+                    this.data!.javbusPages!.censored !== 1)) ||
+                (group !== "actresses" &&
+                  isAvwikiDimension(group) &&
+                  this.data!.directoryPages[group] !== 1)
+                ? INCREMENTAL_DELAY
+                : DAY
+              : RETRY_DELAY);
       this.abort = undefined;
       this.publish({ updating: null, saving: false });
     }
+  }
+  private commit(update: DiscoveryUpdate, signal: AbortSignal) {
+    const work = this.merging.then(async () => {
+      signal.throwIfAborted();
+      if (this.stopped) return;
+      const data = await this.processor.run("discoveryMerge", { cache: this.data!.cache, update });
+      signal.throwIfAborted();
+      this.publish({ saving: true });
+      let warning = "";
+      try {
+        await this.port!.write(data.cache);
+      } catch {
+        warning = "名单已更新，但缓存保存失败，请重试更新。";
+      }
+      if (!this.stopped) this.accept(data);
+      if (this.csvWritesBlocked)
+        warning = warning || "JavBus CSV 读取失败，已保留原文件；修正后重新启动。";
+      if (this.port?.writeCsv && !this.csvWritesBlocked) {
+        const dimensions = new Set((update.javbusRecords ?? []).map((entry) => entry.dimension));
+        if (update.javbusDirectory) dimensions.add("actresses");
+        if (update.genrePages) dimensions.add("genres");
+        try {
+          for (const dimension of dimensions) {
+            const csv = await this.processor.run("javbusExportCsv", { dimension });
+            await this.port.writeCsv(dimension, csv);
+          }
+        } catch {
+          warning = warning || "名单已更新，但 CSV 保存失败，下次更新时将重试。";
+        }
+      }
+      this.publish({ warning, saving: false });
+    });
+    this.merging = work.catch(() => {
+      this.publish({ saving: false });
+    });
+    return work;
   }
   cancel = () => {
     if (!this.snapshot.saving) this.abort?.abort();
@@ -296,14 +371,21 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
         : [],
       query,
       page,
+      videoCounts: isCatalogDimension(query.dimension)
+        ? this.snapshot.catalogs[query.dimension].videoCounts
+        : undefined,
     });
   }
   async shutdown() {
+    await this.scrapeLookup.shutdown();
+    await this.movieLookup.shutdown();
+    await this.actorSearch.shutdown();
     await this.works.shutdown();
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
     this.abort?.abort();
     await this.active;
+    await this.merging;
     if (this.stopPending) {
       try {
         await this.stopPending();
@@ -315,6 +397,7 @@ export class DiscoveryCatalogService extends Observable<Snapshot> {
     }
     await this.initialized;
     await this.portraits?.shutdown();
+    this.movieDetails.clear();
     this.processor.close();
   }
 }

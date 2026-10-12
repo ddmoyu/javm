@@ -14,6 +14,12 @@ const stage = await mkdtemp(path.join(buildRoot, "desktop-package-"));
 const require = createRequire(import.meta.url);
 const config = JSON.parse(await readFile(path.join(root, "neutralino.config.json"), "utf8"));
 config.cli.distributionPath = "/dist/desktop";
+// Vite's public directory also holds distribution-only documents. The native
+// icon is embedded separately by neu; its public-root copy is unused by the UI.
+const distributionOnly = String.raw`(?:^|[/\\])dist[/\\]frontend[/\\](?:licenses(?:[/\\]|$)|offline(?:[/\\]|$)|\.gitkeep$|icon\.png$)`;
+config.cli.resourcesExclude = config.cli.resourcesExclude
+  ? `(?:${config.cli.resourcesExclude})|${distributionOnly}`
+  : distributionOnly;
 delete config.cli.frontendLibrary;
 const copy = async (relative) => {
   const source = path.resolve(root, relative);

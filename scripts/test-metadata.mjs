@@ -141,17 +141,19 @@ if (offlinePackage) {
   delete hostEnv.WEBVIEW2_BROWSER_EXECUTABLE_FOLDER;
   hostEnv.PATH = `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0`;
 }
-const host = spawn(
-  offlinePackage
-    ? path.join(offlinePackage, "javm-win_x64.exe")
-    : path.join(project, "bin/neutralino-win_x64.exe"),
-  ["--res-mode=directory", `--path=${root.replaceAll("\\", "/")}`],
-  {
-    windowsHide: true,
-    stdio: "ignore",
-    env: hostEnv,
-  },
-);
+const hostBinary = offlinePackage
+  ? path.join(
+      offlinePackage,
+      (await fs.stat(path.join(offlinePackage, "javm-win_x64.exe")).catch(() => null))?.isFile()
+        ? "javm-win_x64.exe"
+        : "JAVM.exe",
+    )
+  : path.join(project, "bin/neutralino-win_x64.exe");
+const host = spawn(hostBinary, ["--res-mode=directory", `--path=${root.replaceAll("\\", "/")}`], {
+  windowsHide: true,
+  stdio: "ignore",
+  env: hostEnv,
+});
 console.log(`Metadata desktop test: ${root}`);
 try {
   let report;

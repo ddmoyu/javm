@@ -5,7 +5,6 @@ import {
   Group,
   Loader,
   Paper,
-  Select,
   Stack,
   Text,
   UnstyledButton,
@@ -39,33 +38,13 @@ function Media({ media }: { media: PreparedPlayback }) {
   const [progressError, setProgressError] = useState("");
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
-  const [subtitle, setSubtitle] = useState("off");
-  useLayoutEffect(() => {
-    const element = video.current;
-    if (!element) return;
-    const nodes = (media.subtitles ?? []).map((item) => {
-      const track = document.createElement("track");
-      track.kind = "subtitles";
-      track.label = item.label;
-      track.src = item.url;
-      element.appendChild(track);
-      return track;
-    });
-    return () => nodes.forEach((node) => node.remove());
-  }, [media]);
-  useEffect(() => {
-    const element = video.current;
-    if (!element) return;
-    for (let i = 0; i < element.textTracks.length; i++) {
-      const track = element.textTracks[i]!;
-      if (media.subtitles?.some((item) => item.label === track.label))
-        track.mode = track.label === subtitle ? "showing" : "disabled";
-    }
-  }, [subtitle, media]);
   const attemptedAutoplay = useRef(false);
   const cleanup = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 每次会话仅创建一次 Loader 类型，避免普通 React 重渲染重建 HLS 引擎。
   const [hlsConfig] = useState(() => ({
+    enableWebVTT: false,
+    enableIMSC1: false,
+    enableCEA708Captions: false,
     enableWorker: true,
     workerPath: workerUrl,
     maxBufferLength: 30,
@@ -151,24 +130,6 @@ function Media({ media }: { media: PreparedPlayback }) {
       {error && (
         <Alert color="red" className="playback-feedback" role="alert">
           {error}
-        </Alert>
-      )}
-      {!!media.subtitles?.length && (
-        <Select
-          size="xs"
-          aria-label="外挂字幕"
-          style={{ position: "absolute", right: 12, top: 48, zIndex: 3, width: 200 }}
-          value={subtitle}
-          onChange={(value) => setSubtitle(value ?? "off")}
-          data={[
-            { value: "off", label: "关闭外挂字幕" },
-            ...media.subtitles.map((item) => ({ value: item.label, label: item.label })),
-          ]}
-        />
-      )}
-      {media.subtitleWarning && (
-        <Alert color="yellow" className="playback-feedback">
-          {media.subtitleWarning}
         </Alert>
       )}
       {progressError && (

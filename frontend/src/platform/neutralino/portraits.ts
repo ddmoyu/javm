@@ -3,7 +3,7 @@ import type { PortraitPort } from "../../services/catalog/PortraitService";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { gfriendsIndexSources, validPortraitUrl } from "../../services/catalog/portraitUrls";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
-import { findOnPath, runNativeProcess } from "./process";
+import { requestHttp } from "./http";
 import { mediaResourceUrl } from "./playbackResources";
 import { yieldToUi } from "../../services/yieldToUi";
 
@@ -21,8 +21,7 @@ export function createPortraitPort(
   let directory = "",
     mounted = false,
     ready: Promise<void> | undefined;
-  let curl: Promise<string> | undefined,
-    commit = Promise.resolve();
+  let commit = Promise.resolve();
   const assertRelease = () => {
     if (import.meta.env.DEV) throw new Error("开发模式只使用占位头像。");
   };
@@ -85,70 +84,30 @@ export function createPortraitPort(
     }
     await beforeFetch();
     signal.throwIfAborted();
-    const executable = await (curl ??= (async () => {
-      const tool = await findOnPath("curl.exe");
-      if (!tool) throw new Error("系统下载工具不可用。");
-      const result = await runNativeProcess(
-        tool,
-        ["--disable", "--version"],
-        signal,
-        undefined,
-        true,
-      );
-      signal.throwIfAborted();
-      const version = /^curl (\d+)\.(\d+)\./.exec(result.stdOut);
-      // 8.4 起，未知长度响应也受传输大小上限约束。
-      if (
-        result.exitCode ||
-        !version ||
-        Number(version[1]) < 8 ||
-        (Number(version[1]) === 8 && Number(version[2]) < 4)
-      )
-        throw new Error("系统下载工具版本过旧。");
-      return tool;
-    })().catch((error) => {
-      curl = undefined;
-      throw error;
-    }));
     const temporary = `${directory}/download-${crypto.randomUUID()}.part`;
     const cleanup = () => filesystem.remove(temporary).catch(() => {});
     let deferred = false;
     try {
       const proxy = await network.getProxy();
       signal.throwIfAborted();
-      const result = await runNativeProcess(
-        executable,
-        [
-          "--disable",
-          "--globoff",
-          "--silent",
-          "--show-error",
-          "--proto",
-          "=https",
-          "--connect-timeout",
-          "5",
-          "--max-time",
-          "20",
-          "--max-filesize",
-          String(maxBytes),
-          "--proxy",
-          proxy,
-          "--noproxy",
-          proxy ? "" : "*",
-          "--output",
-          temporary,
-          "--write-out",
-          "%{http_code}",
-          "--url",
+      const result = await requestHttp(
+        {
+          purpose: "portrait",
           url,
-        ],
+          proxy,
+          output: temporary,
+          headers: {
+            Accept:
+              maxBytes === INDEX_BYTES ? "application/json" : "image/jpeg,image/*;q=0.9,*/*;q=0.8",
+          },
+          maxBytes,
+          timeoutMs: 20_000,
+          cacheTtlMs: 300_000,
+        },
         signal,
-        undefined,
-        true,
       );
       signal.throwIfAborted();
-      if (result.exitCode || Number(result.stdOut.trim()) !== 200)
-        throw new Error("头像来源暂不可用。");
+      if (result.exitCode || result.status !== 200) throw new Error("头像来源暂不可用。");
       const stat = await filesystem.getStats(temporary);
       if (!stat.isFile || !stat.size || stat.size > maxBytes) throw new Error("头像响应超过限制。");
       return { temporary, bytes: stat.size, cleanup };

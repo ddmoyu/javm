@@ -103,19 +103,41 @@ bool mergeRelations(sqlite3* db,const std::string& id,const std::string& kind,co
 
 Store::Store(fs::path path):path_(std::move(path)) {
     fs::create_directories(path_.parent_path());
+    if(fs::exists(fs::path(path_.wstring()+L".restore-pending"))) {
+        setRecoveryError("上次损坏片库恢复未完成。请在设置中重新选择备份恢复；原文件保留在片库旁的 backups 目录。");
+        return;
+    }
+    try {open();}
+    catch(const std::exception&) {
+        if(recoveryError().empty()) throw;
+        setRecoveryError("片库已损坏。请在设置的片库备份与恢复中选择独立备份。原文件不会删除。");
+    }
+}
+void Store::open() {
+    bool corrupt=false;
     try {
         const auto opened=sqlite3_open_v2(pathText(path_).c_str(),&db_,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_FULLMUTEX,nullptr);
         check(db_,opened);
         check(db_,sqlite3_busy_timeout(db_,5000));
         const auto integrity=rows(db_,"PRAGMA quick_check");
-        if(integrity.size()!=1 || integrity[0]["quick_check"]!="ok")
+        if(integrity.size()!=1 || integrity[0]["quick_check"]!="ok") {
+            corrupt=true;
             throw std::runtime_error("当前片库完整性检查失败（"+pathText(path_)+"）："+integrity.dump());
+        }
         exec(db_,"PRAGMA foreign_keys=ON;");
         migrate();
         exec(db_,"PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
         prepareCatalog();
         exec(db_,"UPDATE directories SET state='interrupted',error='上次扫描中断，可重新扫描' WHERE state='scanning'");
-    } catch(...) { if(db_) sqlite3_close(db_); db_=nullptr; throw; }
+        ready_=true;
+    } catch(...) {
+        if(db_) {
+            const auto code=sqlite3_errcode(db_);
+            if(corrupt || code==SQLITE_CORRUPT || code==SQLITE_NOTADB) setRecoveryError("corrupt");
+            sqlite3_close(db_);
+        }
+        db_=nullptr;ready_=false;throw;
+    }
 }
 Store::~Store() { if(db_) sqlite3_close(db_); if(mainInstance_) CloseHandle(mainInstance_); }
 void Store::migrate() {
@@ -146,6 +168,7 @@ void Store::migrate() {
 #include "store_documents.inc"
 #include "store_artwork.inc"
 #include "store_file_operations.inc"
+#include "store_backup.inc"
 Json Store::playbackPosition(const Json& params) {
     const auto key = params.at("key").get<std::string>();
     if (key.size() != 64 || key.find_first_not_of("0123456789abcdef") != std::string::npos)
@@ -380,16 +403,22 @@ Json Store::catalogAppend(const Json& params) {
         if (value.empty() || value.size() > 512 || value.find('\0') != std::string::npos)
             throw std::runtime_error("名单名称无效");
     }
+    const auto videoCounts = params.value("videoCounts",Json::array());
+    if (!videoCounts.is_array() || (params.contains("videoCounts") && videoCounts.size() != names.size()))
+        throw std::runtime_error("网站影片数量参数无效");
+    for (const auto& count: videoCounts)
+        if (!count.is_null() && (!count.is_number_integer() || count < 0 || count > 100000000))
+            throw std::runtime_error("网站影片数量无效");
     std::lock_guard lock(mutex_);
     QueryDeadline deadline(db_);
     Transaction transaction(db_);
     // 临时索引与本地媒体关系隔离；名字没有关联影片时计数仍为零。
     const auto offset = params.contains("offset") ? params.at("offset").get<int64_t>() :
         rows(db_,"SELECT COALESCE(MAX(position)+1,0) AS next FROM javm_discovery_names WHERE dimension=?",{dimension})[0]["next"].get<int64_t>();
-    const auto insert = "INSERT INTO javm_discovery_names(dimension,name,position) SELECT ?,value,?+MIN(CAST(key AS INTEGER)) FROM json_each(?) GROUP BY value ";
+    const auto insert = "INSERT INTO javm_discovery_names(dimension,name,position,video_count) SELECT ?,n.value,?+MIN(CAST(n.key AS INTEGER)),CASE WHEN COUNT(c.value)=COUNT(*) AND COUNT(DISTINCT c.value)=1 THEN MAX(c.value) ELSE NULL END FROM json_each(?) n LEFT JOIN json_each(?) c ON c.key=n.key GROUP BY n.value ";
     run(db_,insert+std::string(params.contains("offset") ?
-        "ON CONFLICT(dimension,name) DO UPDATE SET position=excluded.position" :
-        "ON CONFLICT(dimension,name) DO NOTHING"),{dimension,offset,names.dump()});
+        "ON CONFLICT(dimension,name) DO UPDATE SET position=excluded.position,video_count=excluded.video_count" :
+        "ON CONFLICT(dimension,name) DO NOTHING"),{dimension,offset,names.dump(),videoCounts.dump()});
     const auto count = rows(db_,"SELECT count(*) AS count FROM javm_discovery_names WHERE dimension=?",{dimension})[0]["count"].get<int64_t>();
     if (count > 100000) throw std::runtime_error("名单数量超过限制");
     transaction.commit();
@@ -438,21 +467,24 @@ Json Store::facets(const Json& params) {
         result["available"] = queryRows(db_,"SELECT count(*) AS count" + source,sourceArgs)[0]["count"];
     }
     const auto sort = requestText(params,"sort","name");
-    if (sort != "name" && sort != "source") throw std::runtime_error("未知维度排序方式");
+    if (sort != "name" && sort != "source" && sort != "videoCount") throw std::runtime_error("未知维度排序方式");
     std::string order = dimension == "years" ? "CAST(name AS INTEGER) DESC" : "name COLLATE JAVM_NATURAL";
     auto orderedSource = source;
-    if (sort == "source" && dimension != "years") {
-        // 别名归并后取最早的来源位置；本地独有条目放到来源名单之后。
-        const auto ranked = canonicalFacet("SELECT name,position AS video_id FROM javm_discovery_names WHERE dimension='"+dimension+"'",dimension);
-        orderedSource = " FROM (SELECT counts.*,r.source_position FROM ("+grouped+") counts LEFT JOIN (SELECT name,MIN(video_id) AS source_position FROM ("+ranked+") GROUP BY name) r ON r.name=counts.name) AS facets";
-        order = "source_position IS NULL,source_position,name COLLATE JAVM_NATURAL";
+    const bool includeVideoCounts=params.value("includeVideoCounts",false);
+    if (sort == "source" || sort == "videoCount" || includeVideoCounts) {
+        // 网站数量与本地 count 独立。别名归并后多个身份的数量不合计，未知数量排在最后。
+        const auto ranked = "SELECT COALESCE(a.canonical,n.name) AS name,n.position,n.video_count FROM javm_discovery_names n LEFT JOIN facet_aliases a ON a.dimension='"+aliasDimension(dimension)+"' AND a.alias=n.name AND a.blocked=0 WHERE n.dimension='"+dimension+"'";
+        const auto metadata = "SELECT name,MIN(position) AS source_position,CASE WHEN COUNT(*)=1 THEN MAX(video_count) ELSE NULL END AS videoCount FROM ("+ranked+") GROUP BY name";
+        orderedSource = " FROM (SELECT counts.*,r.source_position,r.videoCount FROM ("+grouped+") counts LEFT JOIN ("+metadata+") r ON r.name=counts.name) AS facets";
+        if (sort == "source" && dimension != "years") order = "source_position IS NULL,source_position,name COLLATE JAVM_NATURAL";
+        if (sort == "videoCount") order = "videoCount IS NULL,videoCount DESC,source_position IS NULL,source_position,name COLLATE JAVM_NATURAL";
     }
     const auto offset = std::max(0,params.value("offset",0));
     const bool includeFavorites=params.value("includeFavorites",false);
     auto args = Json::array();
     for (const auto& value : filteredArgs) args.push_back(value);
     args.push_back(std::clamp(params.value("limit",100),1,100)); args.push_back(offset);
-    const auto columns=std::string("SELECT name,count")+(includeFavorites ? ","+facetFavoriteSql(dimension)+" AS favorite" : "")+(params.value("includeLabels",false)?",COALESCE((SELECT label FROM facet_names WHERE dimension='"+aliasDimension(dimension)+"' AND name=facets.name),'') AS label":"");
+    const auto columns=std::string("SELECT name,count")+(includeVideoCounts ? ",videoCount" : "")+(includeFavorites ? ","+facetFavoriteSql(dimension)+" AS favorite" : "")+(params.value("includeLabels",false)?",COALESCE((SELECT label FROM facet_names WHERE dimension='"+aliasDimension(dimension)+"' AND name=facets.name),'') AS label":"");
     result["items"] = queryRows(db_,columns + orderedSource + " WHERE " + where.sql + " ORDER BY " + order + " LIMIT ? OFFSET ?",args);
     result["offset"] = offset;
     return result;

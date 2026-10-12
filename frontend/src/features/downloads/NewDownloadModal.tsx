@@ -163,7 +163,7 @@ export function NewDownloadModal({
               <Textarea
                 label="请求头"
                 placeholder={"Referer: https://example.com/\nUser-Agent: ..."}
-                description="按来源要求填写，每行一条；随任务保存在本机。"
+                description="按下载请求要求填写，每行一条；随任务保存在本机。"
                 minRows={2}
                 autosize
                 value={headers}

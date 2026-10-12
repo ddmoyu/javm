@@ -25,17 +25,17 @@ const seed: DiscoverySeed = {
 };
 afterEach(() => vi.useRealTimers());
 
-describe("AVWikiDB 发现分类", () => {
-  it("五个入口按站点顺序排列，未知及冲突的演员不猜测分类，原元数据字段仍可浏览", () => {
+describe("发现分类", () => {
+  it("显示已接入的发现维度，未知及冲突的演员不猜测目录，原元数据字段仍可浏览", () => {
     const { catalogs } = loadDiscovery(seed, null, Date.now());
-    expect(discoverCategories).toEqual(["女演员", "男演员", "导演", "制作商", "系列"]);
+    expect(discoverCategories).toEqual(["女演员", "男演员", "制作商", "发行商", "分类"]);
     expect(categoryForFacet("演员", "合成女演员", catalogs)).toBe("女演员");
     expect(categoryForFacet("演员", "合成男演员", catalogs)).toBe("男演员");
     expect(categoryForFacet("演员", "未分类合成人员", catalogs)).toBeUndefined();
     catalogs.maleActors.names.push("合成女演员");
     expect(categoryForFacet("演员", "合成女演员", catalogs)).toBeUndefined();
-    expect(categoryForFacet("发行商", "合成发行商", catalogs)).toBeUndefined();
-    expect(categoryForFacet("分类", "安全示例分类", catalogs)).toBeUndefined();
+    expect(categoryForFacet("发行商", "合成发行商", catalogs)).toBe("发行商");
+    expect(categoryForFacet("分类", "安全示例分类", catalogs)).toBe("分类");
     expect(facetNames).toContain("发行商");
     expect(facetNames).toContain("分类");
   });

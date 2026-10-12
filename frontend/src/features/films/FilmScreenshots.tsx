@@ -1,9 +1,10 @@
-import { Button, Group, Image, Menu, SimpleGrid, Text, UnstyledButton } from "@mantine/core";
+import { Button, Group, Menu, SimpleGrid, Text, UnstyledButton } from "@mantine/core";
 import type { Film } from "../../contracts/media";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import { useImagePreview } from "../../components/ImagePreview";
 import { ObjectMenu } from "../../components/ObjectMenu";
+import { SourceImage } from "../../components/ImageSources";
 
 export type ScreenshotAction = "capture" | "fetch" | "long" | "clear" | "remove" | "cover";
 export function FilmScreenshots({
@@ -75,10 +76,14 @@ export function FilmScreenshots({
               key={`${image.src}:${index}`}
               className="thumb"
               aria-label={`查看截图 ${index + 1}`}
-              onClick={() => open(images, index)}
+              onClick={() => open(images, index, film.metadata?.homepage)}
             >
-              <Image
-                src={image.src}
+              <SourceImage
+                candidates={[image.src]}
+                referer={film.metadata?.homepage}
+                placeholder={(loading) => (
+                  <span className="poster-empty">{loading ? "读取中…" : "图片暂不可用"}</span>
+                )}
                 alt={image.title || `截图 ${index + 1}`}
                 h="100%"
                 fit="cover"
@@ -94,9 +99,7 @@ export function FilmScreenshots({
         <Empty
           icon="image"
           title="暂无截图"
-          description={
-            onAction ? "可以从视频中截取画面，或获取影片预览图。" : "资料来源未提供预览图。"
-          }
+          description={onAction ? "可以从视频中截取画面，或获取影片预览图。" : "暂无影片预览图。"}
         />
       )}
     </section>

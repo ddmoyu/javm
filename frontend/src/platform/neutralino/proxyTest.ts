@@ -1,42 +1,20 @@
 import type { ProxyProbe } from "../../services/network/NetworkSettingsService";
-import { findOnPath, runNativeProcess } from "./process";
+import { requestHttp } from "./http";
 
 export const testProxyConnection: ProxyProbe = async (proxy, signal) => {
   signal.throwIfAborted();
-  const curl = await findOnPath("curl.exe");
-  signal.throwIfAborted();
-  if (!curl) throw new Error("找不到 curl，无法测试代理，请检查软件包是否完整。");
-  const result = await runNativeProcess(
-    curl,
-    [
-      "--disable",
-      "--silent",
-      "--show-error",
-      "--connect-timeout",
-      "5",
-      "--max-time",
-      "15",
-      "--max-filesize",
-      "1024",
-      "--proto",
-      "=https",
-      "--proxy",
+  const result = await requestHttp(
+    {
+      purpose: "proxy",
+      url: "https://www.gstatic.com/generate_204",
       proxy,
-      "--noproxy",
-      "",
-      "--output",
-      "NUL",
-      "--write-out",
-      "%{http_code}\n%{http_connect}\n%{time_total}",
-      "--url",
-      "https://www.gstatic.com/generate_204",
-    ],
+      maxBytes: 1024,
+      timeoutMs: 15_000,
+    },
     signal,
-    undefined,
-    true,
   );
   signal.throwIfAborted();
-  const [status, tunnelStatus, seconds] = result.stdOut.trim().split(/\r?\n/).map(Number);
+  const { status, tunnelStatus, elapsedMs } = result;
   if (status === 407 || tunnelStatus === 407 || result.exitCode === 67)
     throw new Error("代理认证失败，请检查代理用户名和密码。");
   if (result.exitCode !== 0) {
@@ -52,11 +30,11 @@ export const testProxyConnection: ProxyProbe = async (proxy, signal) => {
     // 原始 curl 错误可能包含带凭据的代理地址，不进入界面或日志。
     throw new Error(reasons[result.exitCode] ?? "代理未能连接测试站点，请检查代理服务后重试。");
   }
-  if (status !== 204 || !Number.isFinite(seconds) || seconds! < 0)
+  if (status !== 204 || !Number.isFinite(elapsedMs) || elapsedMs < 0)
     throw new Error(
       status && status >= 100 && status <= 599
         ? `测试站点返回 HTTP ${status}，代理连通性测试未通过。`
         : "未收到测试站点的有效响应，代理连通性测试未通过。",
     );
-  return { elapsedMs: Math.round(seconds! * 1000) };
+  return { elapsedMs: Math.round(elapsedMs) };
 };

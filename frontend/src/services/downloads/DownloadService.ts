@@ -90,6 +90,7 @@ export class DownloadService {
     this.completedHandler = handler;
     void this.initialize().then(() => this.restoreHandoffs());
   }
+  hasPendingHandoffs() { return this.handoffs.size > 0; }
   private async restoreHandoffs() {
     for (const task of this.snapshot.tasks) {
       if (this.stopping || this.snapshot.error) break;

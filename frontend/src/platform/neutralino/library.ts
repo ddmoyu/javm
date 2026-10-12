@@ -1,6 +1,7 @@
 import { events, extensions, filesystem, server } from "@neutralinojs/lib";
 import type { MediaDirectory } from "../../contracts/library";
 import { LibraryService } from "../../services/library/LibraryService";
+import { LibraryRequestTimeoutError } from "../../services/library/LibraryService";
 import type { DiscoveryCatalogService } from "../../services/catalog/DiscoveryCatalogService";
 import type { LibraryPort } from "../../services/library/LibraryService";
 import type { Runtime } from "./bootstrap";
@@ -48,7 +49,11 @@ export class NativeLibraryPort implements LibraryPort {
         () => {
           this.pending.delete(requestId);
           logEvent("error", "database", "request_timeout", "媒体库请求超时", { method, requestId });
-          reject(new Error("媒体库未响应，请先刷新查看状态；若仍无法连接，请重启桌面应用。"));
+          reject(
+            new LibraryRequestTimeoutError(
+              "媒体库未响应，请先刷新查看状态；若仍无法连接，请重启桌面应用。",
+            ),
+          );
         },
         method.startsWith("library.scrape.") ||
           method.startsWith("library.maintenance.") ||
@@ -72,6 +77,7 @@ export class NativeLibraryPort implements LibraryPort {
     });
   }
   async mount(directories: Pick<MediaDirectory, "id" | "path">[], metadataDirectory?: string) {
+    const normalize = (path: string) => path.replaceAll("\\", "/").replace(/\/+$/, "");
     const roots = [
       ...directories.map(({ id, path }) => ({ id, path })),
       ...(metadataDirectory ? [{ id: "metadata", path: metadataDirectory }] : []),
@@ -89,10 +95,12 @@ export class NativeLibraryPort implements LibraryPort {
     const available: { prefix: string; path: string }[] = [];
     for (const directory of roots) {
       const prefix = `/javm-media/${directory.id}`;
+      const path = normalize(directory.path);
       try {
         if (!(prefix in mounts)) await server.mount(prefix, directory.path);
-        else if (mounts[prefix] !== directory.path) continue;
-        available.push({ prefix, path: directory.path.replaceAll("\\", "/").replace(/\/$/, "") });
+        // Neutralino 返回正斜杠目录；Windows 原始路径不能直接与挂载记录比较。
+        else if (normalize(mounts[prefix]!).toLowerCase() !== path.toLowerCase()) continue;
+        available.push({ prefix, path });
       } catch {
         /* 离线目录仍显示已有资料，封面使用占位图。 */
       }
@@ -165,6 +173,7 @@ export function createLibraryService(runtime: Runtime, catalog?: DiscoveryCatalo
         library,
         {
           create: (path) => filesystem.createWatcher(path),
+          online: async (path) => (await filesystem.getStats(path)).isDirectory,
           remove: (id) => filesystem.removeWatcher(id),
           listen: async (listener) => {
             const handler = (event: CustomEvent<WatchEvent>) => listener(event.detail);
@@ -176,6 +185,7 @@ export function createLibraryService(runtime: Runtime, catalog?: DiscoveryCatalo
         () => {
           const phase = library.maintenance?.getSnapshot().phase;
           return (
+            library.backups?.getSnapshot().state === "running" ||
             phase === "reading" ||
             phase === "cleaning" ||
             !!library.organization?.getSnapshot().pending.length ||

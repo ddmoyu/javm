@@ -11,6 +11,7 @@ export interface WatchEvent {
   filename: string;
 }
 export interface DirectoryWatchPort {
+  online?(path: string): Promise<boolean>;
   create(path: string): Promise<number>;
   remove(id: number): Promise<unknown>;
   listen(listener: (event: WatchEvent) => void): Promise<() => Promise<unknown>>;
@@ -37,6 +38,7 @@ export class DirectoryWatchService {
   private watches = new Map<string, { id: number; path: string }>();
   private pending = new Map<string, { due: number; first: number; attempts: number }>();
   private lastScan = new Map<string, number>();
+  private reconnectScan = new Set<string>();
   private initialized?: Promise<void>;
   private syncing?: Promise<void>;
   private syncDirty = false;
@@ -116,7 +118,10 @@ export class DirectoryWatchService {
       this.observeLibrary();
       await this.settings.write({ enabled });
       this.publish({ enabled, error: "" });
-      if (!enabled) this.pending.clear();
+      if (!enabled) {
+        this.pending.clear();
+        this.reconnectScan.clear();
+      }
       await this.sync();
     } catch (error) {
       this.publish({ error: error instanceof Error ? error.message : "目录监听设置失败。" });
@@ -137,8 +142,16 @@ export class DirectoryWatchService {
         this.syncDirty = false;
         const directories = this.directories();
         const errors: string[] = [];
+        for (const key of this.reconnectScan)
+          if (!directories.some((dir) => dir.id === key)) this.reconnectScan.delete(key);
         for (const [key, watch] of this.watches) {
-          if (directories.some((dir) => dir.id === key && dir.path === watch.path)) continue;
+          const retained = directories.some((dir) => dir.id === key && dir.path === watch.path);
+          if (
+            retained &&
+            (!this.port.online || (await this.port.online(watch.path).catch(() => false)))
+          )
+            continue;
+          if (retained) this.reconnectScan.add(key);
           try {
             await this.port.remove(watch.id);
             this.watches.delete(key);
@@ -154,6 +167,11 @@ export class DirectoryWatchService {
           try {
             const id = await this.port.create(dir.path);
             this.watches.set(dir.id, { id, path: dir.path });
+            if (this.reconnectScan.delete(dir.id)) {
+              const now = Date.now();
+              // Reconcile changes made while the volume was disconnected, even with no new event.
+              this.pending.set(dir.id, { first: now, due: now, attempts: 0 });
+            }
           } catch {
             errors.push(`无法监听 ${dir.path}，请确认目录在线。`);
           }
@@ -161,6 +179,7 @@ export class DirectoryWatchService {
         if (this.snapshot.enabled && this.library.getSnapshot().directories.length > 32)
           errors.push("最多自动监听 32 个目录，其余目录请手动扫描。");
         this.publish({ error: errors.slice(0, 4).join("\n") });
+        this.schedule();
       } while (this.syncDirty);
     })();
     this.syncing = work;
@@ -252,6 +271,7 @@ export class DirectoryWatchService {
     clearTimeout(this.retryTimer);
     this.unsubscribe?.();
     this.pending.clear();
+    this.reconnectScan.clear();
     await this.initialized;
     this.unsubscribe?.();
     await this.pumping;

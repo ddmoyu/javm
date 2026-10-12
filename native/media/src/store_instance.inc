@@ -10,6 +10,8 @@ Json Store::applicationInstance(const std::string& method,const Json& params) {
         const auto name=L"Local\\JAVM.Main."+std::to_wstring(hash);
         const auto handle=CreateMutexW(nullptr,FALSE,name.c_str());const bool primary=GetLastError()!=ERROR_ALREADY_EXISTS;
         if(!handle) throw std::runtime_error("无法创建主实例锁");
+        // A damaged library must still open the recovery UI without executing archived launches.
+        if(!healthy()) {if(primary) mainInstance_=handle;else CloseHandle(handle);return {{"primary",primary}};}
         try {
             Transaction transaction(db_);
             if(primary) run(db_,"DELETE FROM app_launches");else run(db_,"DELETE FROM app_launches WHERE created<unixepoch()-300");
@@ -21,6 +23,7 @@ Json Store::applicationInstance(const std::string& method,const Json& params) {
     }
     if(method=="library.instance.take") {
         if(!mainInstance_) throw std::runtime_error("当前进程不是主实例");
+        if(!healthy()) return Json::array();
         Transaction transaction(db_);run(db_,"DELETE FROM app_launches WHERE created<unixepoch()-300");
         Json result=Json::array();for(const auto& row:rows(db_,"SELECT payload FROM app_launches ORDER BY id LIMIT 32")) result.push_back(Json::parse(row["payload"].get<std::string>()));
         run(db_,"DELETE FROM app_launches");transaction.commit();return result;

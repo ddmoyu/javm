@@ -18,6 +18,7 @@ endif()
 
 add_subdirectory(native/database)
 add_subdirectory(native/media)
+add_subdirectory(native/http)
 if(WIN32)
     add_subdirectory(native/launcher)
 endif()

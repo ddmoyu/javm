@@ -16,21 +16,26 @@ import { serviceError } from "../../services/metadata/shared";
 import { mergeMovieCandidates } from "../../services/metadata/mergeMovieCandidates";
 import type { MovieSearchGroup } from "../../services/metadata/mergeMovieCandidates";
 import { normalizeCode } from "../../services/streamResolution/sources";
+import { requireMovieDetails, searchMovieMetadata } from "../../services/metadata/movieSearch";
+import { StopUnconfirmedError } from "../../services/downloads/ports";
+import { isCatalogCandidate } from "../../services/metadata/MovieMetadataResolver";
 
 export function MetaTubeSearch({
   initialQuery = "",
   onSelect,
   onApply,
   onCollect,
+  onLookupResources,
   allowResourceLookup = false,
 }: {
   initialQuery?: string;
   onSelect: (value: MovieDetails, candidate: MovieCandidate, trigger: HTMLButtonElement) => void;
   onApply?: (candidate: MovieCandidate) => Promise<void>;
-  onCollect?: (candidate: MovieCandidate) => Promise<void>;
+  onCollect?: (candidate: MovieCandidate, details?: MovieDetails) => Promise<void>;
+  onLookupResources?: (code: string, trigger: HTMLButtonElement) => void;
   allowResourceLookup?: boolean;
 }) {
-  const { metatube } = useWorkspace();
+  const { metatube, library } = useWorkspace();
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
   const [query, setQuery] = useState(initialQuery),
     [error, setError] = useState("");
@@ -39,6 +44,9 @@ export function MetaTubeSearch({
   const [page, setPage] = useState(1);
   const [opening, setOpening] = useState<MovieSearchGroup | null>(null);
   const [saving, setSaving] = useState<MovieCandidate | null>(null);
+  const [pending, setPending] = useState(false);
+  const [resourceCode, setResourceCode] = useState<string>();
+  const operation = useRef<AbortController | null>(null);
   const selecting = useRef(false);
   const searching = useRef(false);
   const revision = useRef(0);
@@ -48,53 +56,52 @@ export function MetaTubeSearch({
     () => () => {
       revision.current++;
       cancelled.current = true;
+      operation.current?.abort();
       if (selecting.current || searching.current) metatube.cancel();
     },
     [metatube],
   );
   // 只复用本次搜索中看过的详情，不预取全部候选；新搜索或卸载后释放。
   const detailsCache = useRef(new Map<string, MovieDetails>());
-  const basicDetails = (candidate: MovieCandidate): MovieDetails => ({
-    fields: { code: candidate.code, title: candidate.title },
-    provider: candidate.provider,
-    id: candidate.id,
-    homepage: "",
-  });
+  const lookup = library.catalog?.movieLookup;
+  const candidateKey = (candidate: MovieCandidate) =>
+    JSON.stringify([candidate.provider, candidate.id]);
+  const remember = (candidate: MovieCandidate, details: MovieDetails) => {
+    library.catalog?.movieDetails.remember(details);
+    if (detailsCache.current.size >= 50)
+      detailsCache.current.delete(detailsCache.current.keys().next().value!);
+    detailsCache.current.set(candidateKey(candidate), details);
+  };
   const search = async () => {
     if (selecting.current || searching.current || state.querying || state.busy) return;
     searching.current = true;
+    setPending(true);
     cancelled.current = false;
+    const abort = new AbortController();
+    operation.current = abort;
     const current = ++revision.current;
     setError("");
+    setResourceCode(undefined);
+    setResults([]);
+    setSearched(false);
+    detailsCache.current.clear();
     try {
-      let candidates: MovieCandidate[];
-      try {
-        candidates = await metatube.search(query);
-      } catch (reason) {
-        if (!allowResourceLookup || cancelled.current) throw reason;
-        // 精确番号仍可进入详情获取链接，不强依赖资料服务成功。
-        let code: string;
-        try {
-          code = normalizeCode(query);
-        } catch {
-          throw reason;
-        }
-        candidates = [{ provider: "", id: `code:${code}`, code, title: code }];
-        if (current === revision.current) setError("影片资料暂不可用，可打开详情获取资源链接。");
-      }
-      if (!candidates.length && allowResourceLookup) {
-        try {
-          const code = normalizeCode(query);
-          candidates = [{ provider: "", id: `code:${code}`, code, title: code }];
-        } catch {
-          /* 片名没有结果时不猜测番号。 */
-        }
-      }
+      const found = await searchMovieMetadata(
+        {
+          search: (value) => metatube.search(value),
+          lookupByCode: lookup?.available ? (code, signal) => lookup.read(code, signal) : undefined,
+        },
+        query,
+        abort.signal,
+        allowResourceLookup,
+      );
       if (current !== revision.current || cancelled.current) return;
       setMerging(true);
-      const result = await mergeMovieCandidates(candidates);
+      const result = await mergeMovieCandidates(found.candidates);
       if (current !== revision.current || cancelled.current) return;
-      detailsCache.current.clear();
+      if (found.details) remember(found.candidates[0]!, found.details);
+      setError(found.error);
+      setResourceCode(found.resourceCode);
       setResults(result);
       setPage(1);
       setSearched(true);
@@ -103,30 +110,40 @@ export function MetaTubeSearch({
         setError(cancelled.current ? "已取消搜索。" : serviceError(reason));
     } finally {
       searching.current = false;
-      if (current === revision.current) setMerging(false);
+      if (current === revision.current) {
+        operation.current = null;
+        setMerging(false);
+        setPending(false);
+      }
     }
   };
   const select = async (group: MovieSearchGroup, trigger: HTMLButtonElement) => {
     if (selecting.current || searching.current || state.querying || state.busy) return;
     selecting.current = true;
+    setPending(true);
     cancelled.current = false;
+    const abort = new AbortController();
+    operation.current = abort;
     const current = revision.current;
     setError("");
+    setResourceCode(undefined);
     setOpening(group);
     try {
       let last: unknown;
       for (const candidate of group.candidates.slice(0, 8)) {
         if (cancelled.current || current !== revision.current) return;
         try {
-          const key = JSON.stringify([candidate.provider, candidate.id]);
-          let result = detailsCache.current.get(key);
+          const key = candidateKey(candidate);
+          let result =
+            detailsCache.current.get(key) ?? library.catalog?.movieDetails.candidate(candidate);
           if (!result) {
-            result = candidate.provider
-              ? await metatube.details(candidate)
-              : basicDetails(candidate);
-            if (detailsCache.current.size >= 50)
-              detailsCache.current.delete(detailsCache.current.keys().next().value!);
-            detailsCache.current.set(key, result);
+            result = requireMovieDetails(
+              isCatalogCandidate(candidate) && lookup?.available
+                ? await lookup.read(candidate.code, abort.signal)
+                : await metatube.details(candidate),
+              candidate,
+            );
+            remember(candidate, result);
           }
           if (
             !cancelled.current &&
@@ -137,25 +154,66 @@ export function MetaTubeSearch({
             onSelect(result, candidate, trigger);
           return;
         } catch (reason) {
+          if (reason instanceof StopUnconfirmedError) throw reason;
           last = reason;
         }
       }
       if (cancelled.current || current !== revision.current) return;
-      if (
-        allowResourceLookup &&
-        group.candidate.code &&
-        trigger.isConnected &&
-        trigger.getClientRects().length
-      ) {
-        onSelect(basicDetails(group.candidate), group.candidate, trigger);
-        setError("完整资料暂不可用，仍可在详情中获取资源链接。");
-      } else throw last;
+      let code: string | undefined;
+      try {
+        code = normalizeCode(group.candidate.code);
+      } catch {
+        /* 无番号时不猜测。 */
+      }
+      if (code && lookup?.available) {
+        try {
+          const result = await lookup.read(code, abort.signal);
+          const candidate = {
+            provider: result.provider,
+            id: result.id,
+            code,
+            title: result.fields.title || "",
+          };
+          requireMovieDetails(result, candidate);
+          if (cancelled.current || current !== revision.current) return;
+          remember(candidate, result);
+          setResults((previous) =>
+            previous.map((item) =>
+              item.key === group.key
+                ? {
+                    ...item,
+                    candidate,
+                    candidates: [
+                      candidate,
+                      ...item.candidates.filter(
+                        (value) => candidateKey(value) !== candidateKey(candidate),
+                      ),
+                    ],
+                  }
+                : item,
+            ),
+          );
+          if (trigger.isConnected && trigger.getClientRects().length)
+            onSelect(result, candidate, trigger);
+          return;
+        } catch (reason) {
+          if (reason instanceof StopUnconfirmedError) throw reason;
+          last = reason;
+        }
+      }
+      if (cancelled.current || current !== revision.current) return;
+      setResourceCode(allowResourceLookup ? code : undefined);
+      throw last ?? new Error("尚未取得影片详情，请重试。");
     } catch (reason) {
       if (current === revision.current)
         setError(cancelled.current ? "已取消。" : serviceError(reason));
     } finally {
       selecting.current = false;
-      if (current === revision.current) setOpening(null);
+      if (current === revision.current) {
+        operation.current = null;
+        setOpening(null);
+        setPending(false);
+      }
     }
   };
   return (
@@ -169,25 +227,26 @@ export function MetaTubeSearch({
           onKeyDown={(event) => {
             if (event.key === "Enter") {
               event.preventDefault();
-              if (!state.querying && !state.busy && query.trim()) void search();
+              if (!pending && !state.querying && !state.busy && query.trim()) void search();
             }
           }}
           style={{ flex: 1 }}
-          disabled={state.querying || merging}
+          disabled={pending || state.querying || merging}
         />
         <Button
-          loading={(state.querying && !opening) || merging}
-          aria-busy={(state.querying && !opening) || merging}
-          disabled={state.querying || merging || !query.trim() || state.busy}
+          loading={((pending || state.querying) && !opening) || merging}
+          aria-busy={((pending || state.querying) && !opening) || merging}
+          disabled={pending || state.querying || merging || !query.trim() || state.busy}
           onClick={() => void search()}
         >
           搜索
         </Button>
-        {(state.querying || merging) && (
+        {(pending || state.querying || merging) && (
           <Button
             variant="default"
             onClick={() => {
               cancelled.current = true;
+              operation.current?.abort();
               metatube.cancel();
             }}
           >
@@ -200,7 +259,7 @@ export function MetaTubeSearch({
           {error}
         </Alert>
       )}
-      {(state.querying || merging) && (
+      {(pending || state.querying || merging) && (
         <Text size="sm" component="output" aria-live="polite">
           {state.status === "starting"
             ? "正在准备资料服务…"
@@ -209,8 +268,24 @@ export function MetaTubeSearch({
               : "正在搜索并合并相同结果…"}
         </Text>
       )}
-      {!state.querying && !merging && searched && !results.length && (
-        <Text size="sm">没有找到匹配结果，可修改番号或片名后重试。</Text>
+      {!pending && !state.querying && !merging && searched && !results.length && (
+        <Text size="sm">
+          {error ? "影片资料未能加载，请重试。" : "没有找到匹配结果，可修改番号或片名后重试。"}
+        </Text>
+      )}
+      {!pending && resourceCode && onLookupResources && (
+        <Group>
+          <Text size="sm" c="dimmed">
+            尚未取得影片资料，可仅按番号查找资源链接。
+          </Text>
+          <Button
+            variant="default"
+            size="xs"
+            onClick={(event) => onLookupResources(resourceCode, event.currentTarget)}
+          >
+            按番号查找资源
+          </Button>
+        </Group>
       )}
       {searched && !!results.length && (
         <Text size="xs" c="dimmed">
@@ -226,7 +301,7 @@ export function MetaTubeSearch({
               type="button"
               className="metadata-result"
               aria-label={`打开详情 ${item.code || "未提供番号"} ${item.title || "未提供标题"}`}
-              aria-disabled={state.querying || state.busy || merging}
+              aria-disabled={pending || state.querying || state.busy || merging}
               aria-busy={opening === group}
               data-loading={opening === group || undefined}
               onClick={(event) => void select(group, event.currentTarget)}
@@ -244,12 +319,20 @@ export function MetaTubeSearch({
               <Button
                 size="compact-xs"
                 variant="light"
-                disabled={state.querying || state.busy || merging || saving !== null}
+                disabled={pending || state.querying || state.busy || merging || saving !== null}
                 loading={saving === item}
                 onClick={() => {
                   if (saving) return;
                   setSaving(item);
-                  void (onApply ?? onCollect)!(item)
+                  void (
+                    onApply
+                      ? onApply(item)
+                      : onCollect!(
+                          item,
+                          detailsCache.current.get(candidateKey(item)) ??
+                            library.catalog?.movieDetails.candidate(item),
+                        )
+                  )
                     .catch((reason: unknown) => setError(serviceError(reason)))
                     .finally(() => setSaving(null));
                 }}
@@ -265,7 +348,7 @@ export function MetaTubeSearch({
           total={Math.ceil(results.length / 10)}
           value={page}
           onChange={setPage}
-          disabled={state.querying}
+          disabled={pending || state.querying}
         />
       )}
     </Stack>

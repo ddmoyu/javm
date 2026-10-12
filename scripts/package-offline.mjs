@@ -14,8 +14,11 @@ const dependencies = JSON.parse(
   await readFile(path.join(root, "scripts/offline-dependencies.json"), "utf8"),
 );
 const desktop = path.join(root, "dist/desktop/javm");
-await verifyFfmpegLite(path.join(desktop, "bin/tools"), dependencies.ffmpeg);
-await verifyMediaInfoLite(path.join(desktop, "bin"), dependencies.mediainfo);
+const ffmpegReceipt = await verifyFfmpegLite(path.join(desktop, "bin/tools"), dependencies.ffmpeg);
+const mediaInfoReceipt = await verifyMediaInfoLite(
+  path.join(desktop, "bin"),
+  dependencies.mediainfo,
+);
 const curlVersion = execFileSync(path.join(desktop, "bin/tools/curl.exe"), ["--version"], {
   encoding: "utf8",
   windowsHide: true,
@@ -51,7 +54,6 @@ if (
 // Refuse a package assembled from the development Debug binary.
 for (const [binary, candidate] of [
   ["javm_database.exe", path.join(desktop, "bin/javm_database.exe")],
-  ["JAVM.exe", path.join(root, "bin/JAVM.exe")],
   ["MediaInfo.dll", path.join(desktop, "bin/MediaInfo.dll")],
 ]) {
   if (
@@ -66,9 +68,26 @@ const copy = async (source, target) => {
   await mkdir(path.dirname(path.join(output, target)), { recursive: true });
   await cp(source, path.join(output, target), { recursive: true });
 };
-await copy(path.join(desktop, "javm-win_x64.exe"), "javm-win_x64.exe");
-await copy(path.join(root, "bin/JAVM.exe"), "JAVM.exe");
-for (const file of ["javm_database.exe", "MediaInfo.dll", "mediainfo-lite.json"]) {
+// Notices, build receipts and file hashes stay in the developer-side manifest.
+const licenseDocuments = new Map();
+const buildDocuments = new Map();
+const collectDocument = async (documents, source, label) => {
+  const content = await readFile(source, "utf8");
+  const digest = createHash("sha256").update(content).digest("hex");
+  const entry = documents.get(digest) ?? { content, labels: new Set() };
+  entry.labels.add(label);
+  documents.set(digest, entry);
+};
+const serializeDocuments = (documents) =>
+  [...documents.entries()].map(([sha256, entry]) => ({
+    components: [...entry.labels].sort(),
+    sha256,
+    text: entry.content,
+  }));
+// The official embedded host resolves its own application directory. A separate
+// launcher is unnecessary; expose the host itself as the only root executable.
+await copy(path.join(desktop, "javm-win_x64.exe"), "JAVM.exe");
+for (const file of ["javm_database.exe", "MediaInfo.dll"]) {
   await copy(path.join(desktop, "bin", file), `bin/${file}`);
 }
 for (const file of [
@@ -79,13 +98,34 @@ for (const file of [
   "N_m3u8DL-RE.txt",
   "curl.txt",
 ]) {
-  await copy(path.join(root, "bin/licenses", file), `bin/licenses/${file}`);
+  await collectDocument(licenseDocuments, path.join(root, "bin/licenses", file), file);
 }
-await copy(path.join(root, "bin/licenses/ffmpeg-lite"), "bin/licenses/ffmpeg-lite");
-await copy(path.join(root, "native/media/mediainfo"), "bin/licenses/mediainfo-lite");
+for (const file of ["COPYING.LGPLv2.1", "COPYING.LGPLv3", "LICENSE.md"])
+  await collectDocument(
+    licenseDocuments,
+    path.join(root, "bin/licenses/ffmpeg-lite", file),
+    `FFmpeg / ${file}`,
+  );
+for (const file of [
+  "build-ffmpeg-lite.ps1",
+  "build-ffmpeg-lite.sh",
+  "config.mak",
+  "ffmpeg.exe-version.txt",
+  "reference-video-decoders.txt",
+])
+  await collectDocument(
+    buildDocuments,
+    path.join(root, "bin/licenses/ffmpeg-lite", file),
+    `FFmpeg / ${file}`,
+  );
+for (const file of ["CMakeLists.txt", "write-receipt.cmake"])
+  await collectDocument(
+    buildDocuments,
+    path.join(root, "native/media/mediainfo", file),
+    `MediaInfo / ${file}`,
+  );
 for (const file of [
   "ffmpeg.exe",
-  "ffmpeg-lite.json",
   "curl.exe",
   "N_m3u8DL-RE.exe",
   "metatube/metatube-server.exe",
@@ -94,14 +134,14 @@ for (const file of [
   await copy(path.join(desktop, "bin/tools", file), `bin/tools/${file}`);
 }
 await copy(path.join(root, "resources/icon.png"), "resources/icon.png");
-await copy(path.join(root, "resources/licenses"), "bin/licenses");
-await copy(path.join(root, "scripts/build-curl.ps1"), "bin/licenses/curl-build.ps1");
-await copy(path.join(root, "LICENSE"), "LICENSE");
-await copy(path.join(root, "resources/offline/使用说明.txt"), "使用说明.txt");
-await copy(path.join(root, "resources/offline/Verify-Package.ps1"), "Verify-Package.ps1");
-for (const file of ["Install-JAVM.ps1", "Uninstall-JAVM.ps1"])
-  await copy(path.join(root, "resources/offline", file), file);
-await copy(path.join(root, "resources/offline/Package-Tools.ps1"), "installer/Package-Tools.ps1");
+for (const file of ["MetaTube.txt", "Neutralino.txt", "phosphor-icons-react.txt"])
+  await collectDocument(licenseDocuments, path.join(root, "resources/licenses", file), file);
+await collectDocument(
+  buildDocuments,
+  path.join(root, "scripts/build-curl.ps1"),
+  "curl / build-curl.ps1",
+);
+await collectDocument(licenseDocuments, path.join(root, "LICENSE"), "JAVM / LICENSE");
 // Preserve the original license text for production frontend dependencies.
 const licenses = JSON.parse(
   execFileSync(process.env.ComSpec, ["/d", "/s", "/c", "pnpm licenses list --prod --json"], {
@@ -121,21 +161,19 @@ for (const packages of Object.values(licenses)) {
         /^(license|licence|copying|notice)(\.|$)/i.test(file) &&
         (await stat(path.join(base, file))).isFile()
       ) {
-        await copy(
+        await collectDocument(
+          licenseDocuments,
           path.join(base, file),
-          `bin/licenses/frontend/${entry.name.replaceAll("/", "_")}/${file}`,
+          `${entry.name}@${entry.version} / ${file}`,
         );
       }
     }
   }
 }
-await writeFile(
-  path.join(output, "bin/licenses/frontend/dependencies.json"),
-  JSON.stringify(notices, null, 2),
-);
-await copy(
+await collectDocument(
+  licenseDocuments,
   path.join(root, "build/native/windows-release/_deps/nlohmann_json-src/LICENSE.MIT"),
-  "bin/licenses/nlohmann-json.txt",
+  "nlohmann-json / LICENSE.MIT",
 );
 const files = [];
 async function inventory(relative = "") {
@@ -167,12 +205,20 @@ const manifest = {
   app: "JAVM",
   version: pkg.version,
   platform: "windows-x64",
+  layout: "runtime-only",
+  entryPoint: "JAVM.exe",
   builtAt: new Date().toISOString(),
   dependencies,
+  buildReceipts: { ffmpeg: ffmpegReceipt, mediainfo: mediaInfoReceipt },
+  frontendDependencies: notices,
+  licenseNotices: serializeDocuments(licenseDocuments),
+  buildInformation: serializeDocuments(buildDocuments),
   systemRequirements: { webview2: "Installed Evergreen WebView2 Runtime; not bundled" },
   files,
 };
-await writeFile(path.join(output, "package-manifest.json"), JSON.stringify(manifest, null, 2));
+const manifestPath = path.join(root, "build/offline-manifests", `${name}.json`);
+await mkdir(path.dirname(manifestPath), { recursive: true });
+await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 const archive = `${output}.zip`;
 await new Promise((resolve, reject) => {
   const child = spawn(
@@ -200,7 +246,16 @@ await writeFile(`${archive}.sha256`, `${sha256}  ${path.basename(archive)}\n`);
 await writeFile(
   path.join(root, "dist/offline/latest.json"),
   JSON.stringify(
-    { directory: output, archive, sha256, bytes: (await stat(archive)).size, files: files.length },
+    {
+      directory: output,
+      archive,
+      sha256,
+      bytes: (await stat(archive)).size,
+      files: files.length,
+      entryPoint: "JAVM.exe",
+      manifest: manifestPath,
+      manifestSha256: await hash(manifestPath),
+    },
     null,
     2,
   ),

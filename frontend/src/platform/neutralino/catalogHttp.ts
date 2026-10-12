@@ -1,10 +1,16 @@
 import { filesystem, os } from "@neutralinojs/lib";
 import { CATALOG_BYTES } from "../../services/catalog/catalogData";
 import { isAvwikiWorksUrl } from "../../services/catalog/avwikiWorks";
+import { isJavbusWorksUrl } from "../../services/catalog/javbusWorks";
+import {
+  isJavbusFetchUrl,
+  requestJavbusWithRedirects,
+} from "../../services/catalog/javbusRedirects";
+import type { HttpRequest } from "../../services/network/HttpService";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { logEvent } from "../../services/logging/events";
-import { findOnPath, runNativeProcess } from "./process";
+import { requestHttp } from "./http";
 
 export type CatalogBrowserFetch = (
   url: string,
@@ -17,11 +23,11 @@ export function createCatalogHttp(
   beforeFetch: () => Promise<unknown>,
   browserFetch?: CatalogBrowserFetch,
 ) {
-  let curl: Promise<string> | undefined;
   return async (url: string, signal: AbortSignal) => {
     const parsed = new URL(url);
     const works = isAvwikiWorksUrl(url);
-    const subject = works ? "作品" : "名单";
+    const javbus = isJavbusFetchUrl(url);
+    const subject = works || isJavbusWorksUrl(url) ? "作品" : "名单";
     const actorDirectory =
       parsed.origin === "https://avwikidb.com" &&
       !parsed.username &&
@@ -29,19 +35,7 @@ export function createCatalogHttp(
       /^\/(actor|histrion|director|maker|series)\/$/.test(parsed.pathname) &&
       (!parsed.search || /^\?page=(?:[1-9]\d{0,2}|1000)$/.test(parsed.search)) &&
       !parsed.hash;
-    if (
-      !actorDirectory &&
-      !works &&
-      (parsed.origin !== "https://www.javbus.com" ||
-        parsed.username ||
-        parsed.password ||
-        parsed.search ||
-        parsed.hash ||
-        !/^\/(?:uncensored(?:\/genre|\/page\/[1-9]\d{0,5})?|genre|page\/[1-9]\d{0,5}|[a-z0-9][a-z0-9_-]{2,100})?$/i.test(
-          parsed.pathname,
-        ))
-    )
-      throw new Error(`${subject}来源地址无效。`);
+    if (!actorDirectory && !works && !javbus) throw new Error(`${subject}来源地址无效。`);
     let directory = "",
       deferCleanup = false;
     const cleanup = async () => {
@@ -50,8 +44,6 @@ export function createCatalogHttp(
     try {
       await beforeFetch();
       signal.throwIfAborted();
-      const executable = await (curl ??= findOnPath("curl.exe"));
-      if (!executable) throw new Error(`找不到 curl，无法读取${subject}。`);
       const proxy = await network.getProxy();
       signal.throwIfAborted();
       directory = `${await os.getPath("temp")}/javm-catalog-${crypto.randomUUID()}`;
@@ -69,40 +61,39 @@ export function createCatalogHttp(
             "Sec-Fetch-Site: same-origin",
             "Upgrade-Insecure-Requests: 1",
           ]
-        : ["Accept: text/html", "Accept-Language: zh-CN,zh;q=0.9"];
-      const result = await runNativeProcess(
-        executable,
-        [
-          "--disable",
-          "--silent",
-          "--show-error",
-          "--globoff",
-          "--connect-timeout",
-          "5",
-          "--max-time",
-          "25",
-          "--max-filesize",
-          String(CATALOG_BYTES),
-          "--proto",
-          "=https",
-          "--proxy",
-          proxy,
-          "--noproxy",
-          proxy ? "" : "*",
-          ...headers.flatMap((header) => ["--header", header]),
-          "--output",
-          response,
-          "--write-out",
-          "%{http_code}",
-          "--url",
-          url,
-        ],
-        signal,
-        undefined,
-        true,
-      );
+        : [
+            "Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            "Accept-Language: zh-CN,zh;q=0.9",
+            `Referer: ${parsed.origin}/`,
+          ];
+      const request: HttpRequest = {
+        purpose: "catalog",
+        url,
+        proxy,
+        output: response,
+        headers: Object.fromEntries(
+          headers.map((header) => {
+            const colon = header.indexOf(":");
+            return [header.slice(0, colon), header.slice(colon + 1).trim()];
+          }),
+        ),
+        maxBytes: CATALOG_BYTES,
+        timeoutMs: 25_000,
+        // 目录与作品服务已有缓存；手动刷新必须真实读取，403 不缓存。
+      };
+      const result = javbus
+        ? await requestJavbusWithRedirects(request, signal, requestHttp, (diagnostic) => {
+            logEvent(
+              diagnostic.reason === "follow" ? "info" : "warn",
+              "catalog",
+              "javbus_redirect",
+              diagnostic.reason === "follow" ? "JavBus 正在跟随站内跳转" : "JavBus 跳转已结束",
+              { source: "javbus", subject, ...diagnostic },
+            );
+          })
+        : await requestHttp(request, signal);
       signal.throwIfAborted();
-      const status = /^\d{3}$/.test(result.stdOut.trim()) ? Number(result.stdOut.trim()) : 0;
+      const status = result.status;
       // 不输出 stderr、网页、URL、Cookie 或代理地址，只记录固定阶段和数字状态。
       const diagnostic = {
         source: avwiki ? "avwikidb" : "javbus",

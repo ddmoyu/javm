@@ -16,5 +16,5 @@ FROM (SELECT w.*,w.code AS local_id,w.provenance AS nfo_data,
 FROM works w
 LEFT JOIN media_files m ON m.id=(SELECT f.id FROM media_files f WHERE f.work_id=w.id ORDER BY f.missing,f.created_at,f.id LIMIT 1)
 LEFT JOIN nfo_documents n ON n.work_id=w.id AND n.canonical=1) b;
-CREATE TEMP TABLE javm_discovery_names(dimension TEXT NOT NULL,name TEXT NOT NULL,position INTEGER NOT NULL,PRIMARY KEY(dimension,name)) WITHOUT ROWID;
+CREATE TEMP TABLE javm_discovery_names(dimension TEXT NOT NULL,name TEXT NOT NULL,position INTEGER NOT NULL,video_count INTEGER,PRIMARY KEY(dimension,name)) WITHOUT ROWID;
 )SQL"

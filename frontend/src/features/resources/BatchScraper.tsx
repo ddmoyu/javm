@@ -18,6 +18,7 @@ import { activeScrape, scrapeLabels, scrapePhaseLabels } from "../../contracts/s
 import type { ScrapeTask } from "../../contracts/scraping";
 import { enqueueLibraryScrapes } from "../../platform/neutralino/scraping";
 import { serviceError } from "../../services/metadata/shared";
+import { publicMessage } from "../../services/publicMessage";
 const empty = {
   tasks: [] as ScrapeTask[],
   ready: true,
@@ -86,7 +87,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
       </Group>
       {(error || state.error) && (
         <Alert color="red" role="alert" mb="sm">
-          {error || state.error}
+          {publicMessage(error || state.error)}
         </Alert>
       )}
       {state.paused && (
@@ -99,7 +100,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
           <Table.Thead>
             <Table.Tr>
               <Table.Th w="31%">影片</Table.Th>
-              <Table.Th w="15%">资料来源</Table.Th>
+              <Table.Th w="15%">番号</Table.Th>
               <Table.Th w="30%">状态</Table.Th>
               <Table.Th w="24%">操作</Table.Th>
             </Table.Tr>
@@ -116,7 +117,6 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                   </Text>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="xs">{task.candidate?.provider || "MetaTube"}</Text>
                   <Text size="xs" c="dimmed">
                     {task.candidate?.code || task.query}
                   </Text>
@@ -134,7 +134,9 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                     {scrapeLabels[task.status]}
                   </Pill>
                   <Text size="xs" c="dimmed" mt={4} style={{ overflowWrap: "anywhere" }}>
-                    {task.status === "running" ? scrapePhaseLabels[task.phase] : task.error}
+                    {task.status === "running"
+                      ? scrapePhaseLabels[task.phase]
+                      : publicMessage(task.error)}
                   </Text>
                 </Table.Td>
                 <Table.Td>

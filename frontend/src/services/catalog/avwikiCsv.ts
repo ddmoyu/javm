@@ -30,7 +30,7 @@ export const hasControlCharacters = (value: string) => {
   return false;
 };
 // 在 Worker 中运行；保留引号、逗号与换行，不把 CSV 当成 HTML。
-export function parseAvwikiCsv(csv: string, dimension: AvwikiDimension): AvwikiEntry[] {
+export function parseCatalogCsvRows(csv: string): string[][] {
   const fail = () => {
     throw new Error("内置目录 CSV 无效，请重新安装。");
   };
@@ -69,6 +69,13 @@ export function parseAvwikiCsv(csv: string, dimension: AvwikiDimension): AvwikiE
   }
   if (quoted) fail();
   if (field || row.length || closed) rows.push([...row, field]);
+  return rows;
+}
+export function parseAvwikiCsv(csv: string, dimension: AvwikiDimension): AvwikiEntry[] {
+  const fail = () => {
+    throw new Error("内置目录 CSV 无效，请重新安装。");
+  };
+  const rows = parseCatalogCsvRows(csv);
   if (rows.shift()?.join(",") !== csvColumns.join(",") || !rows.length) fail();
   const kind = new URL(avwikiSources[dimension]).pathname.split("/")[1]!;
   const ids = new Set<string>();

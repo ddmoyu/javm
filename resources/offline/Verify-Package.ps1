@@ -1,6 +1,10 @@
+param(
+    [string]$PackageDirectory = $PSScriptRoot,
+    [string]$ManifestPath = (Join-Path $PackageDirectory 'package-manifest.json')
+)
 $ErrorActionPreference = 'Stop'
-$root = [IO.Path]::GetFullPath($PSScriptRoot)
-$manifest = Get-Content -LiteralPath (Join-Path $root 'package-manifest.json') -Encoding UTF8 -Raw | ConvertFrom-Json
+$root = [IO.Path]::GetFullPath($PackageDirectory).TrimEnd('\','/')
+$manifest = Get-Content -LiteralPath $ManifestPath -Encoding UTF8 -Raw | ConvertFrom-Json
 $checked = 0
 foreach ($entry in $manifest.files) {
     $file = [IO.Path]::GetFullPath((Join-Path $root $entry.path))

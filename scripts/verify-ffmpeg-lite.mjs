@@ -5,8 +5,9 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 // A release must never silently fall back to a full development FFmpeg build.
-export async function verifyFfmpegLite(directory, expected, env = process.env) {
-  const receipt = JSON.parse(await readFile(path.join(directory, "ffmpeg-lite.json"), "utf8"));
+export async function verifyFfmpegLite(directory, expected, env = process.env, buildReceipt) {
+  const receipt =
+    buildReceipt ?? JSON.parse(await readFile(path.join(directory, "ffmpeg-lite.json"), "utf8"));
   if (receipt.profile !== expected.profile || receipt.source.sha256 !== expected.sha256)
     throw new Error("FFmpeg lite source/profile mismatch; run pnpm offline:setup.");
   if (

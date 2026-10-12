@@ -10,17 +10,31 @@ import {
   SimpleGrid,
   Text,
 } from "@mantine/core";
-import type { FacetDimension } from "../../contracts/library";
+import type { FacetDimension, LibraryQuery } from "../../contracts/library";
 import { useWorkspace } from "../../app/state";
 import { usePagedQuery } from "../../services/library/usePagedQuery";
-import { durationOptions, emptyLibraryFilters, metadataOptions, sizeOptions } from "./libraryQuery";
+import {
+  availabilityOptions,
+  durationOptions,
+  emptyLibraryFilters,
+  metadataOptions,
+  sizeOptions,
+} from "./libraryQuery";
 import type { LibraryFilters } from "./libraryQuery";
 import { Icon } from "../../components/icons";
 
 export function libraryFilterLabels(
   filters: LibraryFilters,
-): { key: keyof LibraryFilters; value: string; label: string }[] {
+  availability: NonNullable<LibraryQuery["availability"]>,
+): { key: keyof LibraryFilters | "availability"; value: string; label: string }[] {
   return [
+    ...availabilityOptions
+      .filter((option) => option.value === availability && option.value !== "all")
+      .map((option) => ({
+        key: "availability" as const,
+        value: option.value,
+        label: `本地视频：${option.label}`,
+      })),
     ...filters.actors.map((value) => ({ key: "actors" as const, value, label: value })),
     ...filters.genres.map((value) => ({ key: "genres" as const, value, label: `分类：${value}` })),
     ...filters.years.map((value) => ({ key: "years" as const, value, label: `${value} 年` })),
@@ -44,14 +58,18 @@ export function libraryFilterLabels(
 export function LibraryFilterButton({
   filters,
   onChange,
+  availability,
+  onAvailabilityChange,
   resultCount,
 }: {
   filters: LibraryFilters;
   onChange: (filters: LibraryFilters) => void;
+  availability: NonNullable<LibraryQuery["availability"]>;
+  onAvailabilityChange: (availability: NonNullable<LibraryQuery["availability"]>) => void;
   resultCount: number;
 }) {
   const [opened, setOpened] = useState(false);
-  const count = libraryFilterLabels(filters).length;
+  const count = libraryFilterLabels(filters, availability).length;
   const comboboxProps = { withinPortal: false };
   return (
     <Popover
@@ -102,7 +120,10 @@ export function LibraryFilterButton({
             size="sm"
             disabled={!count}
             c={count ? "rouge.4" : "dimmed"}
-            onClick={() => onChange(emptyLibraryFilters())}
+            onClick={() => {
+              onChange(emptyLibraryFilters());
+              onAvailabilityChange("all");
+            }}
           >
             重置条件
           </Anchor>
@@ -155,6 +176,16 @@ export function LibraryFilterButton({
             comboboxProps={comboboxProps}
             allowDeselect={false}
             onChange={(size) => onChange({ ...filters, size: size ?? "all" })}
+          />
+          <Select
+            label="本地视频状态"
+            data={availabilityOptions}
+            value={availability}
+            comboboxProps={comboboxProps}
+            allowDeselect={false}
+            onChange={(value) =>
+              onAvailabilityChange((value ?? "all") as NonNullable<LibraryQuery["availability"]>)
+            }
           />
           <Select
             label="资料状态"

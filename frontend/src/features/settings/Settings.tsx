@@ -27,6 +27,8 @@ import { LogsPanel } from "./LogsPanel";
 import { LegacyImportSettingsPanel } from "./LegacyImportSettingsPanel";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
 import { ApplicationUpdatePanel } from "./ApplicationUpdatePanel";
+import { LibraryBackupPanel } from "./LibraryBackupPanel";
+import { SystemIntegrationPanel } from "./SystemIntegrationPanel";
 
 const contactLinks = [
   { title: "Telegram 群", label: "点击加入", url: "https://t.me/+5VEFnb2U_xgyNWY1" },
@@ -124,12 +126,13 @@ function AppearanceSettings() {
         </SettingRow>
       </SettingCard>
       <BackgroundSettingsPanel />
+      <SystemIntegrationPanel />
     </Stack>
   );
 }
 
 export function Settings() {
-  const { runtime, notice, legacyImport } = useWorkspace();
+  const { runtime, notice, legacyImport, library } = useWorkspace();
   const [section, setSection] = useState<Section>("appearance");
   const contentRef = useRef<HTMLDivElement>(null);
   const current = sections.find((item) => item.id === section)!;
@@ -143,12 +146,11 @@ export function Settings() {
     appearance: <AppearanceSettings />,
     downloads: <DownloadSettingsPanel key={runtime} />,
     player: <PlaybackSettingsPanel />,
-    library: legacyImport ? (
-      <LegacyImportSettingsPanel service={legacyImport} />
-    ) : (
-      <Text size="sm" c="dimmed">
-        请在桌面应用中导入旧版片库。
-      </Text>
+    library: (
+      <Stack gap="lg">
+        {library.backups && <LibraryBackupPanel service={library.backups} />}
+        {legacyImport && <LegacyImportSettingsPanel service={legacyImport} />}
+      </Stack>
     ),
     scrape: <MetaTubeSettingsPanel />,
     network: <NetworkSettingsPanel />,

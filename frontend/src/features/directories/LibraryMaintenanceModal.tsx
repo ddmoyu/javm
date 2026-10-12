@@ -396,7 +396,7 @@ export function LibraryMaintenanceModal({
             已选择 {state.selected} 个视频。
             {metadataOnly
               ? "将删除这些视频的 NFO、独占封面和刮削资料，保留原视频及片库记录。"
-              : "将永久删除所选视频及其独占字幕。作品资料、NFO、封面和收藏会保留；最后一个视频移除后，作品显示为未下载。"}
+              : "将永久删除所选视频。作品资料、NFO、封面、收藏和旁边的其他文件会保留；最后一个视频移除后，作品显示为未下载。"}
           </Text>
           <Text size="xs" c="dimmed">
             {metadataOnly

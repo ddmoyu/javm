@@ -235,17 +235,19 @@ if (offlinePackage) {
 }
 const hostEnv = { ...process.env };
 if (offlinePackage) delete hostEnv.WEBVIEW2_BROWSER_EXECUTABLE_FOLDER;
-const host = spawn(
-  offlinePackage
-    ? path.join(offlinePackage, "javm-win_x64.exe")
-    : path.join(project, "bin/neutralino-win_x64.exe"),
-  ["--res-mode=directory", `--path=${root.replaceAll("\\", "/")}`],
-  {
-    windowsHide: true,
-    stdio: "ignore",
-    env: hostEnv,
-  },
-);
+const hostBinary = offlinePackage
+  ? path.join(
+      offlinePackage,
+      (await fs.stat(path.join(offlinePackage, "javm-win_x64.exe")).catch(() => null))?.isFile()
+        ? "javm-win_x64.exe"
+        : "JAVM.exe",
+    )
+  : path.join(project, "bin/neutralino-win_x64.exe");
+const host = spawn(hostBinary, ["--res-mode=directory", `--path=${root.replaceAll("\\", "/")}`], {
+  windowsHide: true,
+  stdio: "ignore",
+  env: hostEnv,
+});
 // window.create 的子宿主是后台进程；测试失败或中断也只清理本次隔离目录的窗口。
 function stopTestWindows() {
   const literal = (value) => `'${value.replaceAll("'", "''")}'`;
@@ -257,7 +259,7 @@ function stopTestWindows() {
       "-WindowStyle",
       "Hidden",
       "-Command",
-      `Get-CimInstance Win32_Process -Filter "Name = '${offlinePackage ? "javm-win_x64.exe" : "neutralino-win_x64.exe"}'" | Where-Object { $_.CommandLine -and $_.CommandLine.Replace('\\','/').Contains(${literal(root.replaceAll("\\", "/"))}) } | ForEach-Object { Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }`,
+      `Get-CimInstance Win32_Process -Filter "Name = '${path.basename(hostBinary)}'" | Where-Object { $_.CommandLine -and $_.CommandLine.Replace('\\','/').Contains(${literal(root.replaceAll("\\", "/"))}) } | ForEach-Object { Stop-Process -Id $_.ProcessId -ErrorAction SilentlyContinue }`,
     ],
     { windowsHide: true, stdio: "ignore", timeout: 10000 },
   );

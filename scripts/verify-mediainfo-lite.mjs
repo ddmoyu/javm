@@ -4,8 +4,9 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import path from "node:path";
 
-export async function verifyMediaInfoLite(directory, expected) {
-  const receipt = JSON.parse(await readFile(path.join(directory, "mediainfo-lite.json"), "utf8"));
+export async function verifyMediaInfoLite(directory, expected, buildReceipt) {
+  const receipt =
+    buildReceipt ?? JSON.parse(await readFile(path.join(directory, "mediainfo-lite.json"), "utf8"));
   if (!isDeepStrictEqual(receipt.source, expected) || receipt.buildType !== "Release")
     throw new Error("MediaInfo source/profile/Release mismatch. Run pnpm desktop:build.");
   const binary = path.join(directory, "MediaInfo.dll");

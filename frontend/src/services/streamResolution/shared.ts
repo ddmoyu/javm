@@ -9,8 +9,8 @@ const messages: Record<ResolutionFailure, string> = {
   not_found: "未找到资源。",
   parse_failed: "未获取到有效的 HLS 资源。",
   network_error: "资源请求失败。",
-  rate_limited: "来源请求过于频繁。",
-  interaction_required: "来源需要人工操作，已结束获取。",
+  rate_limited: "请求过于频繁。",
+  interaction_required: "页面需要人工操作，已结束获取。",
   session_required: "资源需要当前传输无法复现的会话。",
   unsupported_stream: "暂不支持此流格式或直播。",
   limit_exceeded: "取流超过大小、数量或排队限制。",
@@ -44,12 +44,19 @@ export const bounds = {
   requests: 32,
   redirects: 3,
   queue: 32,
-  active: 4,
+  active: 10,
+  // 隐藏取流实例并行上限：按逻辑处理器留出余量，最少 2 个，最多 8 个。
+  webviews: Math.max(
+    2,
+    Math.min(8, (globalThis.navigator?.hardwareConcurrency ?? 4) - 2),
+  ),
   perSource: 2,
   queueMs: 120_000,
   httpMs: 30_000,
   webviewMs: 20_000,
   requestMs: 10_000,
+  // 低于该时长的点播视为预告或广告，不作为影片资源。
+  featureSeconds: 600,
 };
 export function webUrl(raw: string, base?: string) {
   try {

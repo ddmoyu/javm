@@ -1,3 +1,5 @@
+import { publicMessage } from "../publicMessage";
+
 export interface Store<T> {
   read(): Promise<unknown>;
   write(value: T): Promise<void>;
@@ -83,7 +85,7 @@ export class JsonHttpError extends Error {
 }
 export function serviceError(error: unknown) {
   if (error instanceof Error && error.name === "AbortError") return "已取消";
-  return error instanceof Error ? error.message : "服务操作失败，请重试。";
+  return error instanceof Error ? publicMessage(error.message) : "服务操作失败，请重试。";
 }
 export function serviceUrl(value: unknown) {
   if (typeof value !== "string" || value.length > 2048) throw new Error("请输入有效服务地址。");

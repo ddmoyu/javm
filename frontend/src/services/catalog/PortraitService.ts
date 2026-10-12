@@ -56,19 +56,42 @@ export class PortraitService {
     signal: AbortSignal,
     progress?: (completed: number, total: number, images: Record<string, string>) => void,
   ): Promise<Record<string, string>> {
-    if (this.stopped || names.length > 50 || this.controllers.size >= 2) return Promise.resolve({});
+    if (this.stopped || names.length > 100 || this.controllers.size >= 2)
+      return Promise.resolve({});
     const abort = new AbortController();
     const cancel = () => abort.abort();
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) cancel();
     this.controllers.add(abort);
-    const task = this.run(dimension, names, abort.signal, progress).finally(() => {
+    const task = this.runPage(dimension, names, abort.signal, progress).finally(() => {
       signal.removeEventListener("abort", cancel);
       this.controllers.delete(abort);
       this.tasks.delete(task);
     });
     this.tasks.add(task);
     return task;
+  }
+  private async runPage(
+    dimension: ActorDirectoryDimension,
+    names: string[],
+    signal: AbortSignal,
+    progress?: (completed: number, total: number, images: Record<string, string>) => void,
+  ) {
+    const result: Record<string, string> = Object.create(null);
+    // 当前页最多一百项，串行拆成五十项的 Worker 查询；图片下载仍共用四个并发槽。
+    for (let offset = 0; offset < names.length; offset += 50) {
+      signal.throwIfAborted();
+      const images = await this.run(
+        dimension,
+        names.slice(offset, offset + 50),
+        signal,
+        (completed, _total, images) =>
+          progress?.(offset + completed, names.length, { ...result, ...images }),
+      );
+      signal.throwIfAborted();
+      Object.assign(result, images);
+    }
+    return result;
   }
   private async run(
     dimension: ActorDirectoryDimension,

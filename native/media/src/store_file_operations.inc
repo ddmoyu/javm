@@ -23,6 +23,7 @@ void sameOperationFile(const fs::path& file,const std::string& identity,const st
 }
 bool Store::pendingFileOperations() {
     std::lock_guard lock(mutex_);
+    if(!db_) return false;
     return !rows(db_,"SELECT id FROM file_operations WHERE state IN ('copying','ready','committed') LIMIT 1").empty();
 }
 Json Store::fileOperations(const std::string& method,const Json& params) {

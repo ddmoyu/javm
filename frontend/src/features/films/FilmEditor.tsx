@@ -123,7 +123,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
               disabled={saving || assisting}
               onClick={() => setLookupOpened(true)}
             >
-              MetaTube 查找
+              查找资料
             </Button>
             <Button
               type="button"
@@ -314,7 +314,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
       {lookupOpened && (
         <Modal
           opened
-          title="查找 MetaTube 资料"
+          title="查找影片资料"
           size={760}
           zIndex={450}
           centered
@@ -329,7 +329,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
             onSelect={(result) => {
               setLookupOpened(false);
               setCandidate({
-                title: `确认 MetaTube 资料 · ${result.provider}`,
+                title: "确认影片资料",
                 fields: result.fields,
               });
             }}

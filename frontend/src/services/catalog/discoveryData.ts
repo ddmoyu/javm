@@ -3,6 +3,16 @@ import type { GenreEntry, GenreLane } from "./catalogData";
 import { avwikiSources, hasControlCharacters, isAvwikiDimension } from "./avwikiCsv";
 import type { AvwikiDimension, AvwikiEntry } from "./avwikiCsv";
 import { validPortraitUrl } from "./portraitUrls";
+import {
+  javbusEntryKey,
+  javbusNameIndex,
+  matchJavbusName,
+  mergeJavbusEntries,
+  parseJavbusGenres,
+  validJavbusEntry,
+} from "./javbusCatalog";
+import type { JavbusCatalogEntry } from "./javbusCatalog";
+import { JAVBUS_ACTRESSES_PAGE_LIMIT } from "./javbusWorks";
 
 export const catalogDimensions = [
   "actors",
@@ -41,6 +51,8 @@ export interface CatalogList {
   updatedAt: number | null;
   labels?: Record<string, string>;
   seedAt?: number;
+  videoCounts?: Record<string, number>;
+  coverage?: { counts: number; labels: number };
 }
 export interface CrawlCursor {
   page: string;
@@ -56,6 +68,10 @@ export interface DiscoveryData {
   cursors: Record<GenreLane, CrawlCursor>;
   lane: GenreLane;
   genreCache: string;
+  javbusEntries?: JavbusCatalogEntry[];
+  javbusPages?: Record<GenreLane, number>;
+  javbusLane?: GenreLane;
+  javbusOrderSize?: Partial<Record<GenreLane, number>>;
   cache: string;
 }
 export interface DiscoverySeed {
@@ -64,10 +80,13 @@ export interface DiscoverySeed {
   actorDirectories?: Partial<Record<ActorDirectoryDimension, string[]>>;
   avwikiDirectories?: Record<AvwikiDimension, AvwikiEntry[]>;
   avwikiCollectedAt?: number;
+  javbusEntries?: JavbusCatalogEntry[];
   entities: { dimension: string; name: string }[];
 }
 export type Additions = Partial<Record<CatalogDimension, string[]>>;
 export interface DiscoveryUpdate {
+  javbusDirectory?: { lane: GenreLane; entries: JavbusCatalogEntry[]; nextPage: number | null };
+  javbusRecords?: JavbusCatalogEntry[];
   directory?: {
     dimension: AvwikiDimension;
     names: string[];
@@ -114,8 +133,95 @@ const cursorValid = (value: CrawlCursor, lane: GenreLane) =>
   Array.isArray(value.pending) &&
   value.pending.length <= 100 &&
   value.pending.every((path) => typeof path === "string" && moviePath(path));
-function encode(data: Omit<DiscoveryData, "cache">): DiscoveryData {
-  return { ...data, cache: JSON.stringify({ version: 5, ...data }) };
+function applyJavbusCatalogs(data: Omit<DiscoveryData, "cache">, seed: DiscoverySeed) {
+  for (const dimension of catalogDimensions) {
+    const index = javbusNameIndex(
+      isAvwikiDimension(dimension) ? seed.avwikiDirectories?.[dimension] : [],
+    );
+    const grouped = new Map<string, JavbusCatalogEntry[]>();
+    const sourceRows = (data.javbusEntries ?? []).filter((entry) => entry.dimension === dimension);
+    const rows = [
+      ...sourceRows.filter((entry) => entry.lane === "censored"),
+      ...sourceRows.filter((entry) => entry.lane === "uncensored"),
+    ];
+    for (const row of rows) {
+      const name = matchJavbusName(row, index),
+        entries = grouped.get(name) ?? [];
+      entries.push(row);
+      grouped.set(name, entries);
+    }
+    const old = data.catalogs[dimension],
+      labels: Record<string, string> = Object.assign(Object.create(null), old.labels),
+      originalLabels = isAvwikiDimension(dimension)
+        ? new Set(
+            (seed.avwikiDirectories?.[dimension] ?? [])
+              .filter((entry) => entry.label !== entry.name)
+              .map((entry) => entry.name),
+          )
+        : new Set<string>(),
+      videoCounts: Record<string, number> = Object.create(null);
+    for (const [name, entries] of grouped) {
+      const translated = entries.find((entry) => entry.label !== entry.name);
+      if (translated && !originalLabels.has(name)) labels[name] = translated.label;
+      // 同一 ID 的两个分区分别保存；只有每个分区均有明确数量才合计。
+      // 同名多 ID 不推断是同一实体，也不把局部数量冒充总数。
+      if (
+        new Set(entries.map((entry) => entry.id)).size !== 1 ||
+        entries.some((entry) => entry.videoCount === undefined)
+      )
+        continue;
+      const count = entries.reduce((total, entry) => total + entry.videoCount!, 0);
+      if (count <= 100_000_000) videoCounts[name] = count;
+    }
+    const names = uniqueNames([...grouped.keys(), ...old.names]);
+    if (names.length > DISCOVERY_LIMIT) throw new Error("名单数量超过限制，已保留原名单。");
+    const coverage = { counts: 0, labels: 0 };
+    for (const name of names) {
+      if (Object.hasOwn(videoCounts, name)) coverage.counts++;
+      if (Object.hasOwn(labels, name) && labels[name] !== name) coverage.labels++;
+    }
+    data.catalogs[dimension] = { ...old, names, labels, videoCounts, coverage };
+  }
+}
+function encode(data: Omit<DiscoveryData, "cache">, seed?: DiscoverySeed): DiscoveryData {
+  if (seed) applyJavbusCatalogs(data, seed);
+  const baseline = new Map(
+    (seed?.javbusEntries ?? []).map((entry) => [javbusEntryKey(entry), entry]),
+  );
+  // 内置快照可在启动时恢复，缓存只保留身份新增、人工字段或数量的改动。
+  const changed: JavbusCatalogEntry[] = [];
+  const countUpdates: [string, string, string, number, number][] = [];
+  for (const entry of data.javbusEntries ?? []) {
+    const old = baseline.get(javbusEntryKey(entry));
+    const metadataChanged =
+      !old ||
+      entry.name !== old.name ||
+      entry.label !== old.label ||
+      entry.translationStatus !== old.translationStatus ||
+      entry.category !== old.category ||
+      entry.aliases.length !== old.aliases.length ||
+      entry.aliases.some((alias, index) => alias !== old.aliases[index]);
+    if (metadataChanged) changed.push(entry);
+    else if (entry.videoCount !== old!.videoCount || entry.countUpdatedAt !== old!.countUpdatedAt) {
+      if (entry.videoCount === undefined) changed.push(entry);
+      else
+        countUpdates.push([
+          entry.dimension,
+          entry.lane,
+          entry.id,
+          entry.videoCount,
+          entry.countUpdatedAt!,
+        ]);
+    }
+  }
+  const cache = JSON.stringify({
+    version: 6,
+    ...data,
+    javbusEntries: changed,
+    ...(countUpdates.length ? { javbusCountUpdates: countUpdates } : {}),
+  });
+  if (cache.length > DISCOVERY_BYTES) throw new Error("名单缓存超过大小限制，已保留原名单。");
+  return { ...data, cache };
 }
 export function loadDiscovery(
   seed: DiscoverySeed,
@@ -168,13 +274,17 @@ export function loadDiscovery(
     directoryOrderSize: {},
     directoryPortraits: { actresses: {}, maleActors: {} },
     genreCache: genres.cache,
+    javbusEntries: mergeJavbusEntries([], seed.javbusEntries ?? [], now),
+    javbusPages: { censored: 1, uncensored: 1 },
+    javbusLane: "censored",
+    javbusOrderSize: {},
     lane: "censored",
     cursors: {
       censored: { page: "/", pending: [] },
       uncensored: { page: "/uncensored", pending: [] },
     },
   };
-  if (!cache) return encode(data);
+  if (!cache) return encode(data, seed);
   try {
     if (cache.length > DISCOVERY_BYTES) throw new Error();
     const value = JSON.parse(cache);
@@ -183,10 +293,10 @@ export function loadDiscovery(
       const old = loadCatalog(seed.genres, cache, now);
       data.catalogs.genres = { names: old.names, updatedAt: old.updatedAt };
       data.genreCache = old.cache;
-      return encode(data);
+      return encode(data, seed);
     }
     if (
-      ![2, 3, 4, 5].includes(value.version) ||
+      ![2, 3, 4, 5, 6].includes(value.version) ||
       typeof value.genreCache !== "string" ||
       !["censored", "uncensored"].includes(value.lane) ||
       !cursorValid(value.cursors?.censored, "censored") ||
@@ -269,6 +379,58 @@ export function loadDiscovery(
         data.directoryPortraits[dimension] = images;
       }
     }
+    if (value.version >= 6) {
+      if (
+        !Array.isArray(value.javbusEntries) ||
+        value.javbusEntries.length > DISCOVERY_LIMIT ||
+        !value.javbusEntries.every((entry: JavbusCatalogEntry) => validJavbusEntry(entry, now)) ||
+        new Set(value.javbusEntries.map(javbusEntryKey)).size !== value.javbusEntries.length ||
+        !["censored", "uncensored"].includes(value.javbusLane)
+      )
+        throw new Error();
+      data.javbusEntries = mergeJavbusEntries(data.javbusEntries!, value.javbusEntries, now);
+      if (value.javbusCountUpdates !== undefined) {
+        if (
+          !Array.isArray(value.javbusCountUpdates) ||
+          value.javbusCountUpdates.length > DISCOVERY_LIMIT
+        )
+          throw new Error();
+        const entries = new Map(data.javbusEntries.map((entry) => [javbusEntryKey(entry), entry]));
+        const changes: JavbusCatalogEntry[] = [];
+        const seen = new Set<string>();
+        for (const update of value.javbusCountUpdates) {
+          if (!Array.isArray(update) || update.length !== 5) throw new Error();
+          const [dimension, lane, id, videoCount, countUpdatedAt] = update;
+          const key = `${dimension}:${lane}:${id}`;
+          const old = entries.get(key);
+          if (!old || seen.has(key)) throw new Error();
+          const entry = { ...old, videoCount, countUpdatedAt };
+          if (!validJavbusEntry(entry, now)) throw new Error();
+          seen.add(key);
+          changes.push(entry);
+        }
+        data.javbusEntries = mergeJavbusEntries(data.javbusEntries, changes, now);
+      }
+      data.javbusLane = value.javbusLane;
+      for (const lane of ["censored", "uncensored"] as const) {
+        const page = value.javbusPages?.[lane],
+          size = value.javbusOrderSize?.[lane] ?? 0;
+        if (
+          !Number.isInteger(page) ||
+          page < 1 ||
+          page > JAVBUS_ACTRESSES_PAGE_LIMIT ||
+          !Number.isInteger(size) ||
+          size < 0 ||
+          size >
+            data.javbusEntries.filter(
+              (entry) => entry.dimension === "actresses" && entry.lane === lane,
+            ).length
+        )
+          throw new Error();
+        data.javbusPages![lane] = page;
+        data.javbusOrderSize![lane] = size;
+      }
+    }
     data = {
       ...data,
       catalogs,
@@ -276,7 +438,7 @@ export function loadDiscovery(
       lane: value.lane,
       cursors: value.cursors,
     };
-    return encode(data);
+    return encode(data, seed);
   } catch {
     throw new Error("名单缓存无效，继续使用内置名单。");
   }
@@ -349,7 +511,44 @@ export function mergeDiscovery(
     const value = refreshCatalog(seed.genres, data.genreCache, update.genrePages, now);
     data.catalogs.genres = { names: value.names, updatedAt: value.updatedAt };
     data.genreCache = value.cache;
+    const entries = (["censored", "uncensored"] as const).flatMap((lane) =>
+      parseJavbusGenres(update.genrePages![lane], lane, seed.genres, now),
+    );
+    data.javbusEntries = mergeJavbusEntries(data.javbusEntries ?? [], entries, now);
   }
+  if (update.javbusDirectory) {
+    const { lane, entries, nextPage } = update.javbusDirectory;
+    if (
+      !["censored", "uncensored"].includes(lane) ||
+      entries.length > 800 ||
+      entries.some((entry) => entry.dimension !== "actresses" || entry.lane !== lane) ||
+      (nextPage !== null &&
+        (!Number.isInteger(nextPage) ||
+          nextPage <= data.javbusPages![lane] ||
+          nextPage > JAVBUS_ACTRESSES_PAGE_LIMIT))
+    )
+      throw new Error("JavBus 演员目录更新无效，已保留原名单。");
+    const old = (data.javbusEntries ?? []).filter(
+      (entry) => entry.dimension === "actresses" && entry.lane === lane,
+    );
+    const size = data.javbusPages![lane] === 1 ? 0 : (data.javbusOrderSize?.[lane] ?? 0);
+    const prefix = mergeJavbusEntries(old.slice(0, size), entries, now);
+    const merged = mergeJavbusEntries(old, entries, now);
+    const keys = new Set(prefix.map(javbusEntryKey));
+    data.javbusEntries = [
+      ...(data.javbusEntries ?? []).filter(
+        (entry) => entry.dimension !== "actresses" || entry.lane !== lane,
+      ),
+      ...prefix,
+      ...merged.filter((entry) => !keys.has(javbusEntryKey(entry))),
+    ];
+    data.javbusPages![lane] = nextPage ?? 1;
+    data.javbusOrderSize![lane] = nextPage === null ? 0 : prefix.length;
+    data.javbusLane = nextPage === null ? (lane === "censored" ? "uncensored" : "censored") : lane;
+    data.catalogs.actresses.updatedAt = now;
+  }
+  if (update.javbusRecords)
+    data.javbusEntries = mergeJavbusEntries(data.javbusEntries ?? [], update.javbusRecords, now);
   if (update.entities) {
     const { names, cursor, lane } = update.entities;
     if (!cursorValid(cursor, lane)) throw new Error("目录更新位置无效，已保留原名单。");
@@ -375,7 +574,7 @@ export function mergeDiscovery(
     if (data.catalogs[dimension].names.length > DISCOVERY_LIMIT)
       throw new Error("名单数量超过限制，已保留原名单。");
   const { cache: _cache, ...value } = data;
-  return encode(value);
+  return encode(value, seed);
 }
 function text(value: string) {
   const named: Record<string, string> = {

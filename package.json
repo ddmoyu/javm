@@ -16,6 +16,7 @@
     "check:fix": "vp check --fix",
     "typecheck": "vp check --no-fmt --no-lint",
     "format": "vp fmt",
+    "catalog:collect": "node --use-env-proxy scripts/collect-javbus-catalog.mjs",
     "icons:generate": "node scripts/generate-icon-assets.mjs",
     "test": "vp test run --passWithNoTests",
     "desktop:setup": "neu update",

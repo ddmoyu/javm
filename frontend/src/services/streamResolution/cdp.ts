@@ -86,7 +86,12 @@ export class CdpConnection {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
-  send(method: string, params: Record<string, unknown> = {}, sessionId?: string) {
+  send(
+    method: string,
+    params: Record<string, unknown> = {},
+    sessionId?: string,
+    timeoutMs = 3000,
+  ) {
     if (this.closed || this.signal.aborted)
       return Promise.reject(new ResolutionError(this.signal.aborted ? "cancelled" : "unavailable"));
     if (this.pending.size >= 64) return Promise.reject(new ResolutionError("limit_exceeded"));
@@ -95,7 +100,7 @@ export class CdpConnection {
       const timer = setTimeout(() => {
         this.pending.delete(id);
         reject(new ResolutionError("timeout"));
-      }, 3000);
+      }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try {
         this.socket.send(JSON.stringify({ id, method, params, sessionId }));

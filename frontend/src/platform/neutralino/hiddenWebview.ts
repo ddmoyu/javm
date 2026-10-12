@@ -48,6 +48,7 @@ export function hiddenWebviewConfig(origin: string, proxy: string) {
         injectClientLibrary: false,
         exitProcessOnClose: true,
         newWindowPolicy: "custom",
+        // 0 仅为启动模板；hiddenProcess 在创建进程前分配非零端口，核对所属 Job 后发布端点。
         webviewArgs: `--remote-debugging-port=0 --remote-debugging-address=127.0.0.1 --remote-allow-origins=${origin} --mute-audio --blink-settings=imagesEnabled=false --autoplay-policy=no-user-gesture-required ${proxy ? `--proxy-server=${proxy} --proxy-bypass-list=localhost;127.0.0.1` : "--no-proxy-server"}`,
       },
     },

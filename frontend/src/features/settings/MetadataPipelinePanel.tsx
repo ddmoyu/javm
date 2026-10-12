@@ -5,6 +5,7 @@ import type {
   MetadataPipelineSettings,
 } from "../../services/scraping/MetadataPipeline";
 import { SettingCard } from "./SettingsPrimitives";
+import { publicMessage } from "../../services/publicMessage";
 export function MetadataPipelinePanel({ service }: { service: MetadataPipeline }) {
   const state = useSyncExternalStore(service.settings.subscribe, service.settings.getSnapshot);
   const [edited, setEdited] = useState<MetadataPipelineSettings | null>(null),
@@ -22,11 +23,11 @@ export function MetadataPipelinePanel({ service }: { service: MetadataPipeline }
         <Checkbox
           checked={draft.fusion}
           disabled={busy}
-          label="使用其他 MetaTube 来源补全缺失资料"
+          label="自动补全缺失资料"
           onChange={(e) => patch({ fusion: e.currentTarget.checked })}
         />
         <Text size="xs" c="dimmed">
-          以选中的来源为准。仅从最多两个番号一致的来源补空字段，已有资料和人工修改保留。
+          仅采用番号一致的查询结果补全空字段，保留已有资料和人工修改。
         </Text>
         <NumberInput
           label="网络失败重试次数"
@@ -36,7 +37,7 @@ export function MetadataPipelinePanel({ service }: { service: MetadataPipeline }
           disabled={busy}
           onChange={(v) => patch({ retries: Number(v) })}
         />
-        {(error || state.error) && <Alert color="red">{error || state.error}</Alert>}
+        {(error || state.error) && <Alert color="red">{publicMessage(error || state.error)}</Alert>}
         {saved && <Text size="sm">设置已保存</Text>}
         <Button
           disabled={busy || !edited}

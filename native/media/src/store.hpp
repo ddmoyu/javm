@@ -11,6 +11,11 @@ class Store {
     fs::path path_;
     std::mutex mutex_;
     void* mainInstance_ = nullptr;
+    std::atomic_bool ready_{false};
+    mutable std::mutex recoveryMutex_;
+    std::string recoveryError_;
+    void setRecoveryError(std::string value) { std::lock_guard lock(recoveryMutex_); recoveryError_=std::move(value); }
+    void open();
     void migrate();
     void prepareCatalog();
     std::string matchWork(const Json& nfo, const std::string& requested = "");
@@ -59,6 +64,9 @@ public:
     void savePlaybackPositions(const Json& params, bool importing);
     Json legacyCandidate();
     Json importLegacy(const std::atomic_bool& cancelled, const legacy::Progress& progress);
+    Json backup(const std::string& operation, const Json& params, const std::atomic_bool& cancelled, const legacy::Progress& progress);
     const fs::path& path() const { return path_; }
+    bool healthy() const { return ready_; }
+    std::string recoveryError() const { std::lock_guard lock(recoveryMutex_); return recoveryError_; }
 };
 }

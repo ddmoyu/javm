@@ -10,6 +10,7 @@ export function movieDetailsToFilm(details: MovieDetails, candidate: MovieCandid
     [details.thumbUrl, "缩略图"],
     [details.bigCoverUrl, "高清封面"],
     [details.coverUrl, "封面"],
+    ...(details.coverCandidates ?? []).map((src) => [src, "备用封面"] as const),
   ] as const) {
     if (src && !artwork.some((image) => image.src === src)) artwork.push({ src, title });
   }

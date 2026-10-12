@@ -81,11 +81,11 @@ describe.runIf(enabled)("片库清理：仅隔离合成文件与数据库", () =
     }
     await host.request("library.maintenance.complete", { token: plan.token });
   };
-  it("删除实体视频与独占字幕，保留作品、NFO、封面并更新目录计数", async () => {
+  it("删除实体视频，保留旁路文件、作品、NFO、封面并更新目录计数", async () => {
     const before = await host.request<LibraryStatus>("library.status");
     const plan = await prepare();
     expect(plan.files.map((file) => path.basename(file.path))).toEqual(
-      expect.arrayContaining(["a.mp4", "a.srt"]),
+      ["a.mp4"],
     );
     expect(plan.files.some((file) => file.path.endsWith("shared.jpg"))).toBe(false);
     await expect(host.request("library.scan", { id: "directory" })).rejects.toThrow("正在清理");
@@ -95,7 +95,7 @@ describe.runIf(enabled)("片库清理：仅隔离合成文件与数据库", () =
     expect(database.prepare("SELECT id FROM media_files WHERE id='a'").get()).toBeTruthy();
     await execute(plan);
     expect(database.prepare("SELECT id FROM media_files ORDER BY id").all()).toEqual([{ id: "b" }]);
-    for (const name of ["b.mp4", "a.nfo", "a-poster.jpg", "shared.jpg", "unrelated.txt"])
+    for (const name of ["b.mp4", "a.srt", "a.nfo", "a-poster.jpg", "shared.jpg", "unrelated.txt"])
       expect(await fs.readFile(path.join(media, name), "utf8")).not.toBe("");
     expect((await host.request<LibraryStatus>("library.status")).directories[0]?.video_count).toBe(
       1,

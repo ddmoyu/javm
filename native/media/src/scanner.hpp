@@ -19,6 +19,9 @@ class LibraryService {
     std::mutex startMutex_, progressMutex_;
     Json progress_ = nullptr;
     Json legacy_ = {{"state","unchecked"}};
+    Json backup_ = {{"state","idle"}};
+    std::atomic_bool recovering_{false};
+    Json backup(const std::string& method,const Json& params);
     std::atomic_bool importing_{false};
     Json directories_ = Json::array();
     Json assetRoots_ = Json::array();
@@ -29,7 +32,7 @@ class LibraryService {
     void notice(const fs::path& path, const std::string& message);
     Json start(const Json& directory, unsigned concurrency);
 public:
-    explicit LibraryService(const fs::path& path): store_(path) { refreshDirectories(); }
+    explicit LibraryService(const fs::path& path): store_(path) { if(store_.healthy()) refreshDirectories(); }
     ~LibraryService();
     LibraryService(const LibraryService&) = delete;
     LibraryService& operator=(const LibraryService&) = delete;

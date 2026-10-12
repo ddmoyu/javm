@@ -32,7 +32,7 @@ function Read-JavmManifest([string]$Root) {
         $file = Get-JavmChild $Root $entry.path
         if (!$seen.Add($file) -or $entry.sha256 -notmatch '^[a-fA-F0-9]{64}$' -or $entry.bytes -lt 0 -or $entry.bytes -gt 1GB) { throw 'Invalid package manifest entry' }
     }
-    foreach ($required in @('JAVM.exe','javm-win_x64.exe','bin/javm_database.exe')) { if (!$seen.Contains((Get-JavmChild $Root $required))) { throw "Missing package entry: $required" } }
+    foreach ($required in @('JAVM.exe','bin/javm_database.exe')) { if (!$seen.Contains((Get-JavmChild $Root $required))) { throw "Missing package entry: $required" } }
     return $manifest
 }
 function Test-JavmPackage([string]$Root) {

@@ -10,7 +10,7 @@ import type {
   QueryPage,
 } from "../../contracts/library";
 import type { Film } from "../../contracts/media";
-import { PagedQuery } from "./PagedQuery";
+import { LIBRARY_CACHE_PAGES, PagedQuery } from "./PagedQuery";
 import type { LibraryMaintenanceService } from "./LibraryMaintenanceService";
 import type { EditableMetadata } from "../../contracts/metadata";
 import type { DiscoveryCatalogService } from "../catalog/DiscoveryCatalogService";
@@ -20,9 +20,11 @@ import type { ResourceRecord, SavedResource } from "../streamResolution/archive"
 import type { DirectoryWatchService } from "./DirectoryWatchService";
 import type { LibraryDocumentsService } from "./LibraryDocumentsService";
 import type { ArtworkService } from "./ArtworkService";
+import { artworkSources } from "./ArtworkService";
 import type { FileOrganizationService } from "./FileOrganizationService";
 import type { MovieDetails } from "../metadata/MetaTubeService";
 import type { ScrapeTarget } from "../scraping/ScrapeService";
+import { publicMessage } from "../publicMessage";
 
 export interface LibraryPort {
   request<T>(method: string, params?: unknown): Promise<T>;
@@ -40,7 +42,7 @@ export interface LibrarySnapshot extends LibraryStatus {
   selectedFilm: Film | null;
 }
 export function libraryError(error: unknown) {
-  return error instanceof Error ? error.message : "媒体库操作失败，请重试。";
+  return error instanceof Error ? publicMessage(error.message) : "媒体库操作失败，请重试。";
 }
 function nativeMetadata(value: Partial<EditableMetadata>) {
   if (value.rating === undefined) return value;
@@ -144,7 +146,6 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
         streamUrl: file.stream_url ?? undefined,
         part: file.part,
         parts: file.parts,
-        subtitles: file.subtitles,
         name: file.path.split(/[\\/]/).at(-1) ?? "视频",
         path: file.path,
         kind: "video" as const,
@@ -169,7 +170,10 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
   };
 }
 
+export class LibraryRequestTimeoutError extends Error {}
+
 export class LibraryService {
+  backups?: import("./LibraryBackupService").LibraryBackupService;
   maintenance?: LibraryMaintenanceService;
   watcher?: DirectoryWatchService;
   documents?: LibraryDocumentsService;
@@ -188,7 +192,7 @@ export class LibraryService {
   private unsubscribeCatalog?: () => void;
   private catalogSync = new Map<
     CatalogDimension,
-    { revision: number; names: string[]; work: Promise<void> }
+    { revision: number; names: string[]; videoCounts?: Record<string, number>; work: Promise<void> }
   >();
   private views = new Set<{
     invalidate(): void;
@@ -223,6 +227,15 @@ export class LibraryService {
     }
   }
   getSnapshot = () => this.snapshot;
+  hasPendingWrites() {
+    return !!this.collecting || this.favoritePending.size > 0;
+  }
+  async refreshAfterRestore() {
+    this.catalogSync.clear();
+    this.publish({ selectedFilm: null });
+    await this.organization?.initialize();
+    await this.refreshAfterImport();
+  }
   attach(view: { invalidate(): void; setActive(active: boolean): void; isActive(): boolean }) {
     this.views.add(view);
     return () => {
@@ -242,31 +255,35 @@ export class LibraryService {
     });
   }
   createFacetQuery(includeCatalog = false) {
-    const view = new PagedQuery<FacetValue, FacetQuery>(async (query, page) => {
-      if (includeCatalog && isCatalogDimension(query.dimension) && this.catalog) {
-        await this.catalog.ready();
-        if (!this.port || !this.snapshot.ready || this.snapshot.error) {
-          if (query.favoritesOnly) throw new Error("无法读取收藏，请恢复媒体库连接后重试。");
-          return this.catalog.query(query, page);
+    const view = new PagedQuery<FacetValue, FacetQuery>(
+      async (query, page) => {
+        if (includeCatalog && isCatalogDimension(query.dimension) && this.catalog) {
+          await this.catalog.ready();
+          if (!this.port || !this.snapshot.ready || this.snapshot.error) {
+            if (query.favoritesOnly) throw new Error("无法读取收藏，请恢复媒体库连接后重试。");
+            return this.catalog.query(query, page);
+          }
+          await this.syncCatalog(query.dimension);
+          return this.port.request<QueryPage<FacetValue>>("library.facets", {
+            ...query,
+            ...page,
+            includeCatalog: true,
+            includeFavorites: true,
+            includeLabels: true,
+            includeVideoCounts: true,
+          });
         }
-        await this.syncCatalog(query.dimension);
+        if (!this.port) return { items: [], total: 0, available: 0, offset: page.offset };
+        await this.initialize();
         return this.port.request<QueryPage<FacetValue>>("library.facets", {
           ...query,
           ...page,
-          includeCatalog: true,
           includeFavorites: true,
           includeLabels: true,
         });
-      }
-      if (!this.port) return { items: [], total: 0, available: 0, offset: page.offset };
-      await this.initialize();
-      return this.port.request<QueryPage<FacetValue>>("library.facets", {
-        ...query,
-        ...page,
-        includeFavorites: true,
-        includeLabels: true,
-      });
-    });
+      },
+      includeCatalog ? 1 : LIBRARY_CACHE_PAGES,
+    );
     if (includeCatalog) this.catalogViews.add(view);
     return view;
   }
@@ -274,12 +291,8 @@ export class LibraryService {
     const current = this.catalog!.getSnapshot();
     const previous = this.catalogSync.get(dimension);
     if (previous?.revision === current.revision) return previous.work;
-    const names = current.catalogs[dimension].names;
-    if (
-      previous &&
-      previous.names.length === names.length &&
-      previous.names.every((name, index) => name === names[index])
-    ) {
+    const { names, videoCounts } = current.catalogs[dimension];
+    if (previous && previous.names === names && previous.videoCounts === videoCounts) {
       previous.revision = current.revision;
       return previous.work;
     }
@@ -292,10 +305,15 @@ export class LibraryService {
           dimension,
           offset,
           names: names.slice(offset, offset + 500),
+          videoCounts: names
+            .slice(offset, offset + 500)
+            .map((name) =>
+              videoCounts && Object.hasOwn(videoCounts, name) ? videoCounts[name] : null,
+            ),
         });
       }
     })();
-    const entry = { revision: current.revision, names, work };
+    const entry = { revision: current.revision, names, videoCounts, work };
     this.catalogSync.set(dimension, entry);
     try {
       await work;
@@ -341,6 +359,14 @@ export class LibraryService {
     if (this.timer) clearTimeout(this.timer);
     try {
       const status = await this.port!.request<LibraryStatus>("library.status");
+      if (status.recoveryError) {
+        this.publish({
+          ready: true,
+          databasePath: status.databasePath,
+          error: status.recoveryError,
+        });
+        return;
+      }
       const change: Partial<LibrarySnapshot> = { ...status, ready: true, error: "" };
       const changed = this.loadedRevision !== status.revision;
       if (changed) {
@@ -461,7 +487,7 @@ export class LibraryService {
     await this.initialize();
     return this.requirePort().request<SavedResource[]>("library.resources.read", { code, workId });
   }
-  async relatedMedia<T>(operation: "save" | "discover", params: unknown): Promise<T> {
+  async relatedMedia<T>(operation: "save", params: unknown): Promise<T> {
     const result = await this.requirePort().request<T>(`library.related.${operation}`, params);
     if (operation === "save") await this.refreshAfterMutation();
     return result;
@@ -471,18 +497,23 @@ export class LibraryService {
     if (!video) throw new Error("链接对应的作品已不存在。");
     this.selectFilm(toFilm(video, this.asset));
   }
-  collectMetadata(details: MovieDetails): Promise<Film> {
+  collectMetadata(
+    details: MovieDetails,
+    onArtworkWarning?: (warning: string) => void,
+  ): Promise<Film> {
     if (this.stopped || this.collecting)
       return Promise.reject(new Error("请等待当前资料保存完成。"));
     if (!details.fields.code || !details.fields.title)
       return Promise.reject(new Error("来源没有完整的番号和标题。"));
     const operation = async () => {
+      this.catalog?.movieDetails.remember(details);
       await this.initialize();
       const port = this.requirePort();
       const jobId = crypto.randomUUID();
+      let target: ScrapeTarget;
       try {
         // 复用现有身份去重、只补空字段、NFO 安全写入及本地视频关联逻辑。
-        const target = await port.request<ScrapeTarget>("library.scrape.prepare", {
+        target = await port.request<ScrapeTarget>("library.scrape.prepare", {
           jobId,
           collect: true,
           candidate: {
@@ -501,12 +532,39 @@ export class LibraryService {
           details,
           image: "",
         });
-        const video = await port.request<NativeVideo | null>("library.video", { id: target.id });
-        if (!video) throw new Error("已保存的作品暂时无法读取，请刷新片库。");
-        return toFilm(video, this.asset);
+        const sources = artworkSources(details);
+        if (sources.cover.length || sources.screenshots.length) {
+          const existing = await port.request<NativeVideo | null>("library.video", {
+            id: target.id,
+          });
+          if (!existing) throw new Error("已保存的作品暂时无法读取，请刷新片库。");
+          const cover =
+            !existing.poster && !existing.thumb && !existing.fanart && sources.cover.length > 0;
+          const screenshots = !existing.screenshots?.length && sources.screenshots.length > 0;
+          if (cover || screenshots) {
+            let warning = "";
+            if (!this.artwork) warning = "图片服务暂不可用。";
+            else {
+              try {
+                // 直接采用已经校验的来源详情，不再通过 MetaTube 重查。
+                await this.artwork.fetch(target.id, cover, screenshots, details);
+                warning = this.artwork.getSnapshot().warning;
+              } catch (error) {
+                const state = this.artwork.getSnapshot();
+                warning = state.busy ? libraryError(error) : state.error || libraryError(error);
+              }
+            }
+            if (warning)
+              onArtworkWarning?.(`资料已收藏，${warning}可在详情中使用“获取封面与截图”重试。`);
+          }
+        }
       } finally {
         await this.refreshAfterMutation();
       }
+      // 图片提交和挂载刷新完成后，再返回包含本地封面与预览图的作品。
+      const video = await port.request<NativeVideo | null>("library.video", { id: target.id });
+      if (!video) throw new Error("已保存的作品暂时无法读取，请刷新片库。");
+      return toFilm(video, this.asset);
     };
     this.collecting = operation().finally(() => {
       this.collecting = undefined;
@@ -545,11 +603,13 @@ export class LibraryService {
     await this.refreshAfterMutation();
   }
   async shutdown() {
+    await this.backups?.shutdown();
+    // 先关闭图片服务，正在保存文字的收藏也不能在退出期间启动新图片请求。
+    await this.artwork?.shutdown();
     await this.collecting?.catch(() => {});
     await this.watcher?.shutdown();
     await this.organization?.shutdown();
     await this.documents?.shutdown();
-    await this.artwork?.shutdown();
     await this.maintenance?.shutdown();
     this.stopped = true;
     const activeViews = [...this.views].filter((view) => view.isActive());

@@ -3,6 +3,22 @@ import type { MovieDetails } from "../metadata/MetaTubeService";
 import type { LibraryPort } from "./LibraryService";
 import { StopUnconfirmedError } from "../downloads/ports";
 import { normalizeCode } from "../scraping/identity";
+import { imageCandidates } from "../images/ImageSourceService";
+
+export function artworkSources(details: MovieDetails) {
+  return {
+    cover: imageCandidates([
+      details.bigCoverUrl,
+      details.coverUrl,
+      details.bigThumbUrl,
+      details.thumbUrl,
+      ...(details.coverCandidates ?? []),
+    ]),
+    screenshots: [...new Set((details.previewImages ?? []).slice(0, 100))]
+      .filter((url) => !!url.trim())
+      .slice(0, 24),
+  };
+}
 
 export interface CropArea {
   left: number;
@@ -15,7 +31,7 @@ export interface ArtworkTarget {
   poster: string;
   code: string;
   title: string;
-  source: { provider?: string; id?: string };
+  source: { provider?: string; id?: string; homepage?: string };
   videos: { id: string; path: string; file_stamp: string; duration_ms: number }[];
 }
 export interface ArtworkTools {
@@ -31,6 +47,7 @@ export interface ArtworkTools {
     signal: AbortSignal,
   ): Promise<ArrayBuffer>;
   download(url: string, referer: string, path: string, signal: AbortSignal): Promise<void>;
+  copyCached?(urls: string[], referer: string, path: string, signal: AbortSignal): Promise<boolean>;
   details(target: ArtworkTarget, signal: AbortSignal): Promise<MovieDetails>;
 }
 type ImageRecord = { path: string; kind: "poster" | "screenshot" | "sheet"; seconds?: number };
@@ -89,14 +106,19 @@ export class ArtworkService extends Observable<{
     operation: (
       target: ArtworkTarget,
       temporary: string,
-      add: (bytes: ArrayBuffer, kind: ImageRecord["kind"], seconds?: number) => Promise<void>,
+      add: (
+        bytes: ArrayBuffer,
+        kind: ImageRecord["kind"],
+        seconds?: number,
+        order?: number,
+      ) => Promise<void>,
     ) => Promise<ArtworkTarget["videos"][number] | void>,
   ) {
     const target = await this.port.request<ArtworkTarget>("library.artwork.prepare", { id });
     signal.throwIfAborted();
     const temporary = `${target.directory}/.work-${crypto.randomUUID()}`;
     await this.tools.mkdir(temporary);
-    const images: ImageRecord[] = [];
+    const images: (ImageRecord & { order: number })[] = [];
     let committed = false;
     let commitStarted = false;
     const clean = async () => {
@@ -106,20 +128,26 @@ export class ArtworkService extends Observable<{
       await this.tools.remove(temporary);
     };
     try {
-      const video = await operation(target, temporary, async (bytes, kind, seconds) => {
-        signal.throwIfAborted();
-        if (images.length >= 24 || bytes.byteLength > 20 * 1024 * 1024)
-          throw new Error("图片数量或大小超过限制。");
-        const path = `${target.directory}/${crypto.randomUUID()}.jpg`;
-        images.push({ path, kind, seconds });
-        await this.tools.write(path, bytes);
-      });
+      const video = await operation(
+        target,
+        temporary,
+        async (bytes, kind, seconds, order = images.length) => {
+          signal.throwIfAborted();
+          if (images.length >= 24 || bytes.byteLength > 20 * 1024 * 1024)
+            throw new Error("图片数量或大小超过限制。");
+          const path = `${target.directory}/${crypto.randomUUID()}.jpg`;
+          images.push({ path, kind, seconds, order });
+          await this.tools.write(path, bytes);
+        },
+      );
       signal.throwIfAborted();
       if (!images.length) throw new Error("未获得有效图片。");
       commitStarted = true;
       const result = await this.port.request<{ retired: string[] }>("library.artwork.commit", {
         id,
-        images,
+        images: images
+          .sort((a, b) => a.order - b.order)
+          .map(({ order: _order, ...image }) => image),
         expectedPoster: target.poster,
         video,
       });
@@ -187,44 +215,98 @@ export class ArtworkService extends Observable<{
       }),
     );
   }
-  fetch(id: string, cover: boolean, screenshots: boolean) {
+  fetch(id: string, cover: boolean, screenshots: boolean, suppliedDetails?: MovieDetails) {
     return this.run("获取图片", (signal) =>
       this.batch(id, signal, async (target, temporary, add) => {
         if (!cover && !screenshots) throw new Error("请至少选择一种图片。");
-        const details = await this.tools.details(target, signal);
+        const details = suppliedDetails ?? (await this.tools.details(target, signal));
         if (!target.code || normalizeCode(details.fields.code ?? "") !== normalizeCode(target.code))
           throw new Error("图片来源番号与作品不一致，请先刮削并确认资料。");
-        const coverUrl =
-          details.bigCoverUrl ?? details.coverUrl ?? details.bigThumbUrl ?? details.thumbUrl;
-        const images: { url: string; kind: ImageRecord["kind"] }[] = [
-          ...(cover && coverUrl ? [{ url: coverUrl, kind: "poster" as const }] : []),
+        const sources = artworkSources(details);
+        const hasCover = cover && sources.cover.length > 0;
+        const images: { urls: string[]; kind: ImageRecord["kind"] }[] = [
+          ...(hasCover ? [{ urls: sources.cover, kind: "poster" as const }] : []),
           ...(screenshots
-            ? (details.previewImages ?? [])
-                .slice(0, 23)
-                .map((url) => ({ url, kind: "screenshot" as const }))
+            ? sources.screenshots
+                .slice(0, hasCover ? 23 : 24)
+                .map((url) => ({ urls: [url], kind: "screenshot" as const }))
             : []),
         ];
         this.publish({ total: images.length });
-        let failures = 0;
-        for (const [index, image] of images.entries()) {
-          signal.throwIfAborted();
-          const path = `${temporary}/download-${index}`;
+        let failures = 0,
+          processed = 0,
+          next = 0;
+        const stop = new AbortController();
+        const active = AbortSignal.any([signal, stop.signal]);
+        const worker = async () => {
           try {
-            await this.tools.download(image.url, details.homepage, path, signal);
-            await add(
-              await this.tools.transform([await this.tools.read(path)], false, undefined, signal),
-              image.kind,
-            );
+            while (next < images.length) {
+              active.throwIfAborted();
+              const index = next++,
+                image = images[index]!;
+              const path = `${temporary}/download-${index}`;
+              const transform = async () =>
+                this.tools.transform([await this.tools.read(path)], false, undefined, active);
+              let bytes: ArrayBuffer | undefined;
+              try {
+                // 先检查全部候选缓存，避免重新请求已失败的主图或已显示的备用图。
+                if (await this.tools.copyCached?.(image.urls, details.homepage, path, active))
+                  bytes = await transform();
+              } catch (error) {
+                if (error instanceof StopUnconfirmedError) throw error;
+                active.throwIfAborted();
+              }
+              if (!bytes)
+                for (const url of image.urls) {
+                  active.throwIfAborted();
+                  try {
+                    await this.tools.download(url, details.homepage, path, active);
+                    bytes = await transform();
+                    break;
+                  } catch (error) {
+                    if (error instanceof StopUnconfirmedError) throw error;
+                    active.throwIfAborted();
+                  }
+                }
+              active.throwIfAborted();
+              if (bytes) await add(bytes, image.kind, undefined, index);
+              else failures++;
+              this.publish({
+                processed: ++processed,
+                warning: failures ? `${failures} 张图片获取失败，已保留其余结果。` : "",
+              });
+            }
           } catch (error) {
-            signal.throwIfAborted();
-            if (error instanceof StopUnconfirmedError) throw error;
-            failures++;
+            stop.abort(error);
+            throw error;
           }
-          this.publish({
-            processed: index + 1,
-            warning: failures ? `${failures} 张图片获取失败，已保留其余结果。` : "",
+        };
+        // 至多 4 张图片在途；等待所有任务收尾后，batch 才能提交或清理目录。
+        const results = await Promise.allSettled(
+          Array.from({ length: Math.min(4, images.length) }, worker),
+        );
+        const errors = results.filter(
+          (result): result is PromiseRejectedResult => result.status === "rejected",
+        );
+        const pendingStops = new Set(
+          errors
+            .map(({ reason }) => reason)
+            .filter(
+              (error): error is StopUnconfirmedError => error instanceof StopUnconfirmedError,
+            ),
+        );
+        if (pendingStops.size)
+          throw new StopUnconfirmedError(async () => {
+            const stopped = await Promise.allSettled(
+              [...pendingStops].map(async (error) => {
+                await error.retry();
+                pendingStops.delete(error);
+              }),
+            );
+            const failed = stopped.find((result) => result.status === "rejected");
+            if (failed?.status === "rejected") throw failed.reason;
           });
-        }
+        if (errors[0]) throw errors[0].reason;
       }),
     );
   }

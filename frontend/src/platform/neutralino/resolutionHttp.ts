@@ -7,7 +7,7 @@ import {
   ResolutionError,
 } from "../../services/streamResolution/shared";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
-import { findOnPath, runNativeProcess } from "./process";
+import { requestHttp } from "./http";
 
 async function readBounded(path: string, max: number, signal: AbortSignal) {
   check(signal);
@@ -26,34 +26,7 @@ async function readBounded(path: string, max: number, signal: AbortSignal) {
   check(signal);
   return bytes.buffer;
 }
-function responseHeaders(body: ArrayBuffer, expectedStatus: number) {
-  const blocks = new TextDecoder()
-    .decode(body)
-    .trim()
-    .split(/\r?\n\r?\n/);
-  const block = blocks.filter((item) => /^HTTP\/\S+ \d{3}\b/.test(item)).at(-1);
-  if (!block || Number(/^HTTP\/\S+ (\d{3})/.exec(block)?.[1]) !== expectedStatus)
-    throw new ResolutionError("network_error");
-  const headers: Record<string, string> = {};
-  for (const line of block.split(/\r?\n/).slice(1)) {
-    const index = line.indexOf(":");
-    if (index < 1) continue;
-    const name = line.slice(0, index).toLowerCase();
-    // 不将 Set-Cookie、服务器诊断或其他无关文本交给解析层。
-    if (
-      !["location", "content-type", "content-range", "content-length", "content-encoding"].includes(
-        name,
-      )
-    )
-      continue;
-    if (name in headers) throw new ResolutionError("parse_failed", true);
-    headers[name] = line.slice(index + 1).trim();
-  }
-  return headers;
-}
-
 export function createResolutionHttp(): ResolutionHttpPort {
-  let verifiedCurl = "";
   return async (request, signal) => {
     check(signal);
     const normalized = normalizeRequest({
@@ -85,29 +58,6 @@ export function createResolutionHttp(): ResolutionHttpPort {
         !Number.isSafeInteger(range.start + range.length))
     )
       throw new ResolutionError("invalid_input");
-    if (!verifiedCurl) {
-      const curl = await findOnPath("curl.exe");
-      check(signal);
-      if (!curl) throw new ResolutionError("unavailable");
-      const version = await runNativeProcess(
-        curl,
-        ["--disable", "--version"],
-        signal,
-        undefined,
-        true,
-      );
-      check(signal);
-      const parts = /^curl (\d+)\.(\d+)\./.exec(version.stdOut);
-      // 8.4.0 起 --max-filesize 对未知长度响应也会在传输中中断。
-      if (
-        version.exitCode ||
-        !parts ||
-        Number(parts[1]) < 8 ||
-        (Number(parts[1]) === 8 && Number(parts[2]) < 4)
-      )
-        throw new ResolutionError("unavailable");
-      verifiedCurl = curl;
-    }
     const directory = `${await os.getPath("temp")}/javm-resolution-${crypto.randomUUID()}`;
     check(signal);
     await filesystem.createDirectory(directory);
@@ -122,44 +72,23 @@ export function createResolutionHttp(): ResolutionHttpPort {
     };
     try {
       check(signal);
-      await filesystem.writeFile(
-        `${directory}/request-headers`,
-        Object.entries(normalized.headers ?? {})
-          .map(([name, value]) => `${name}: ${value}`)
-          .join("\n"),
+      // 每一跳、每次重试均由有预算的会话控制。
+      const result = await requestHttp(
+        {
+          purpose: "resolution",
+          url: normalized.url,
+          proxy: request.proxy,
+          output: `${directory}/body`,
+          maxBytes: request.maxBytes,
+          timeoutMs: request.timeoutMs,
+          headers: {
+            ...normalized.headers,
+            "Accept-Encoding": "identity",
+            ...(range ? { Range: `bytes=${range.start}-${range.start + range.length - 1}` } : {}),
+          },
+        },
+        signal,
       );
-      const args = [
-        "--disable",
-        "--globoff",
-        "--silent",
-        "--show-error",
-        "--proto",
-        "=http,https",
-        "--connect-timeout",
-        String(Math.min(5, request.timeoutMs / 1000)),
-        "--max-time",
-        String(request.timeoutMs / 1000),
-        "--max-filesize",
-        String(request.maxBytes),
-        "--proxy",
-        request.proxy,
-        "--noproxy",
-        request.proxy ? "" : "*",
-        "--header",
-        `@${directory}/request-headers`,
-        "--header",
-        "Accept-Encoding: identity",
-        "--dump-header",
-        `${directory}/response-headers`,
-        "--output",
-        `${directory}/body`,
-        "--write-out",
-        "%{http_code}",
-      ];
-      if (range) args.push("--range", `${range.start}-${range.start + range.length - 1}`);
-      args.push("--url", normalized.url);
-      // 无 --location 或 --retry：每一跳、每次重试均由有预算的会话控制。
-      const result = await runNativeProcess(verifiedCurl, args, signal, undefined, true);
       check(signal);
       if (result.exitCode)
         throw new ResolutionError(
@@ -169,10 +98,18 @@ export function createResolutionHttp(): ResolutionHttpPort {
               ? "timeout"
               : "network_error",
         );
-      const status = Number(result.stdOut.trim());
-      const headers = responseHeaders(
-        await readBounded(`${directory}/response-headers`, 64 * 1024, signal),
-        status,
+      const status = result.status;
+      if (result.ambiguousHeaders) throw new ResolutionError("parse_failed", true);
+      const headers = Object.fromEntries(
+        Object.entries(result.headers).filter(([name]) =>
+          [
+            "location",
+            "content-type",
+            "content-range",
+            "content-length",
+            "content-encoding",
+          ].includes(name),
+        ),
       );
       const body = await readBounded(`${directory}/body`, request.maxBytes, signal);
       return { status, headers, body };

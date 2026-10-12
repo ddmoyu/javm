@@ -112,7 +112,13 @@ describe("隐藏作品无响应定位（安全 mock）", () => {
     const browser = new BrowserMock();
     browser.challenge = true;
     await expect(timedRead(browser)).rejects.toMatchObject({ code: "timeout" });
-    expect(browser.send.mock.calls.some(([method]) => method === "Runtime.evaluate")).toBe(false);
+    expect(browser.world.__javmCatalogPage).toBeUndefined();
+    expect(
+      browser.send.mock.calls.some(
+        ([method, params]) =>
+          method === "Runtime.evaluate" && String(params?.expression).startsWith("globalThis."),
+      ),
+    ).toBe(false);
   });
   it.each([
     ["launch", "启动超时"],

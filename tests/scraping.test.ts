@@ -34,9 +34,9 @@ function fixture(restored: ScrapeTask[] = []) {
     remove: async (task) => {
       records.delete(task.id);
     },
-    prepare: vi.fn(async () => ({
-      id: "video-1",
-      path: "C:/fixture/TEST-001.mp4",
+    prepare: vi.fn(async (task) => ({
+      id: task.workId || "video-1",
+      path: task.path || "",
       fileStamp: "stamp",
       code: "",
       title: "TEST-001",

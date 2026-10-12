@@ -26,7 +26,9 @@ execFileSync(
   { windowsHide: true, timeout: 120000 },
 );
 const root = path.join(base, (await readdir(base))[0]);
-const manifest = JSON.parse(await readFile(path.join(root, "package-manifest.json"), "utf8"));
+const hostName = bundle.entryPoint ?? "javm-win_x64.exe";
+const manifestPath = bundle.manifest ?? path.join(root, "package-manifest.json");
+const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 if (
   manifest.dependencies.webview2 ||
   manifest.files.some(
@@ -39,7 +41,17 @@ if (manifest.files.some((file) => /(^|\/)ffprobe\.exe$/i.test(file.path)))
   throw new Error("Package unexpectedly includes ffprobe");
 execFileSync(
   "powershell.exe",
-  ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(root, "Verify-Package.ps1")],
+  [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-File",
+    path.join(project, "resources/offline/Verify-Package.ps1"),
+    "-PackageDirectory",
+    root,
+    "-ManifestPath",
+    manifestPath,
+  ],
   { windowsHide: true, timeout: 120000, stdio: "inherit" },
 );
 const data = path.join(root, "smoke-data");
@@ -65,12 +77,17 @@ const env = {
 };
 delete env.WEBVIEW2_BROWSER_EXECUTABLE_FOLDER;
 const results = [];
-await verifyMediaInfoLite(path.join(root, "bin"), manifest.dependencies.mediainfo);
+await verifyMediaInfoLite(
+  path.join(root, "bin"),
+  manifest.dependencies.mediainfo,
+  manifest.buildReceipts?.mediainfo,
+);
 results.push({ name: "Packaged MediaInfo matches the trimmed Release build receipt", ok: true });
 const ffmpeg = await verifyFfmpegLite(
   path.join(root, "bin/tools"),
   manifest.dependencies.ffmpeg,
   env,
+  manifest.buildReceipts?.ffmpeg,
 );
 results.push({
   name: "Verified lightweight FFmpeg without ffprobe with system-only PATH",
@@ -178,7 +195,7 @@ try {
   const systemWebView = await wait(async () => {
     const running = JSON.parse(
       ps(
-        `$hosts = @(Get-CimInstance Win32_Process -Filter "Name = 'javm-win_x64.exe'" | Where-Object { $_.ExecutablePath -eq ${literal(path.join(root, "javm-win_x64.exe"))} }).ProcessId; ConvertTo-Json -InputObject @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" | Where-Object { $_.ParentProcessId -in $hosts } | Select-Object ExecutablePath,ProcessId,ParentProcessId)`,
+        `$hosts = @(Get-CimInstance Win32_Process -Filter "Name = '${hostName}'" | Where-Object { $_.ExecutablePath -eq ${literal(path.join(root, hostName))} }).ProcessId; ConvertTo-Json -InputObject @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" | Where-Object { $_.ParentProcessId -in $hosts } | Select-Object ExecutablePath,ProcessId,ParentProcessId)`,
       ),
     );
     return running.find(
@@ -189,7 +206,7 @@ try {
     );
   }, 60000);
   results.push({
-    name: "Launcher and embedded application use system WebView2 with no bundled runtime and system-only PATH",
+    name: "Embedded application uses system WebView2 with no bundled runtime and system-only PATH",
     ok: true,
     executable: systemWebView.ExecutablePath,
   });
@@ -297,7 +314,7 @@ try {
   await writeFile(
     path.join(base, "failure-processes.json"),
     ps(
-      "Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe' OR Name = 'javm-win_x64.exe'\" | Select-Object Name,ProcessId,ParentProcessId,ExecutablePath | ConvertTo-Json",
+      `Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe' OR Name = '${hostName}'" | Select-Object Name,ProcessId,ParentProcessId,ExecutablePath | ConvertTo-Json`,
     ),
   );
   throw error;

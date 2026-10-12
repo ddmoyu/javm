@@ -1,24 +1,28 @@
 import { filesystem, os } from "@neutralinojs/lib";
 import type { Runtime } from "./bootstrap";
 import { NativeLibraryPort } from "./library";
-import { findOnPath, runNativeProcess } from "./process";
+import { requestHttp } from "./http";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import type { LibraryService } from "../../services/library/LibraryService";
-import type { MetaTubeService } from "../../services/metadata/MetaTubeService";
 import type { AiService } from "../../services/metadata/AiService";
 import { ScrapeService } from "../../services/scraping/ScrapeService";
-import type { ScrapePort, ScrapeTarget } from "../../services/scraping/ScrapeService";
+import type {
+  ScrapePort,
+  ScrapeTarget,
+  ScrapeProvider,
+} from "../../services/scraping/ScrapeService";
 import type { ScrapeTask } from "../../contracts/scraping";
 import type { NativeVideo } from "../../contracts/library";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { createMetadataPipeline } from "./metadataPipeline";
+import { MovieMetadataResolver } from "../../services/metadata/MovieMetadataResolver";
 
 // 应用级共享端口，批量添加不会重复注册 Extension 事件监听器。
 const port = new NativeLibraryPort();
 
 export function createScrapeService(
   runtime: Runtime,
-  metatube: MetaTubeService,
+  metatube: ScrapeProvider,
   network: NetworkSettingsService,
   library: LibraryService,
   prepare: () => Promise<void>,
@@ -67,8 +71,6 @@ export function createScrapeService(
         ),
       ];
       if (!urls.length) throw new Error("来源未提供封面。");
-      const curl = await findOnPath("curl.exe");
-      if (!curl) throw new Error("找不到系统 curl。");
       const directory = `${await os.getPath("temp")}/javm-scrape-${crypto.randomUUID()}`;
       await filesystem.createDirectory(directory);
       const dispose = () => filesystem.remove(directory);
@@ -84,41 +86,23 @@ export function createScrapeService(
           )
             continue;
           const path = `${directory}/artwork`;
-          const result = await runNativeProcess(
-            curl,
-            [
-              "--disable",
-              "--silent",
-              "--show-error",
-              "--fail",
-              "--location",
-              "--max-redirs",
-              "5",
-              "--proto",
-              "=http,https",
-              "--proto-redir",
-              "=http,https",
-              "--connect-timeout",
-              "8",
-              "--max-time",
-              "45",
-              "--max-filesize",
-              "20971520",
-              "--proxy",
-              proxy,
-              "--referer",
-              details.homepage,
-              "--output",
-              path,
-              "--url",
+          const result = await requestHttp(
+            {
+              purpose: "artwork",
               url,
-            ],
+              proxy,
+              output: path,
+              headers: details.homepage ? { Referer: details.homepage } : {},
+              maxBytes: 20 * 1024 * 1024,
+              timeoutMs: 45_000,
+              connectTimeoutMs: 8000,
+              maxRedirects: 5,
+              cacheTtlMs: 60_000,
+            },
             signal,
-            undefined,
-            true,
           );
           signal.throwIfAborted();
-          if (result.exitCode === 0) {
+          if (result.exitCode === 0 && result.status >= 200 && result.status < 300) {
             const stat = await filesystem.getStats(path);
             if (stat.isFile && stat.size > 0 && stat.size <= 20 * 1024 * 1024)
               return { path, dispose };
@@ -150,7 +134,12 @@ export function createScrapeService(
     },
     refresh: () => library.refreshAfterImport(),
   };
-  const pipeline = createMetadataPipeline(metatube, available);
+  const sources = new MovieMetadataResolver(
+    metatube,
+    library.catalog?.movieDetails,
+    library.catalog?.scrapeLookup,
+  );
+  const pipeline = createMetadataPipeline(sources, available);
   const service = new ScrapeService(adapter, pipeline, available, ai?.recognizeForScrape);
   service.pipeline = pipeline;
   void service.initialize();

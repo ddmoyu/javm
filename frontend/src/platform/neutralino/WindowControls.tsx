@@ -1,11 +1,12 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useEffectEvent, useRef, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { Group, UnstyledButton } from "@mantine/core";
 import { window as nativeWindow } from "@neutralinojs/lib";
 import { closeMainWindow } from "./lifecycle";
 import { Icon } from "../../components/icons";
 import type { Runtime } from "./bootstrap";
-import { getWindowState, refreshWindowState, subscribeWindowState } from "./windowFrame";
+import { getWindowState, subscribeWindowState, toggleWindowMaximize } from "./windowFrame";
+import { bindWindowDragRegion } from "./windowDrag";
 
 export function WindowDragRegion({
   runtime,
@@ -16,16 +17,14 @@ export function WindowDragRegion({
   notice: (message: string) => void;
   children: ReactNode;
 }) {
+  const region = useRef<HTMLDivElement>(null);
+  const report = useEffectEvent(notice);
+  useEffect(() => {
+    if (runtime === "desktop" && region.current)
+      return bindWindowDragRegion(region.current, (message) => report(message));
+  }, [runtime]);
   return (
-    <div
-      className="titlebar-drag"
-      id="window-drag-region"
-      onPointerDown={(event) => {
-        if (runtime === "desktop" && event.button === 0) {
-          void nativeWindow.beginDrag().catch(() => notice("窗口拖动失败，请重试"));
-        }
-      }}
-    >
+    <div className="titlebar-drag" id="window-drag-region" ref={region}>
       {children}
     </div>
   );
@@ -44,11 +43,7 @@ export function WindowControls({
     try {
       if (action === "close") await closeMainWindow();
       else if (action === "minimize") await nativeWindow.minimize();
-      else {
-        const current = await nativeWindow.isMaximized();
-        await (current ? nativeWindow.unmaximize() : nativeWindow.maximize());
-        await refreshWindowState();
-      }
+      else await toggleWindowMaximize();
     } catch {
       notice(
         action === "close"

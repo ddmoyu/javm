@@ -23,6 +23,7 @@ import {
   resourceVideoTrack as videoTrack,
 } from "../../services/streamResolution/resourceLinks";
 import type { ResourceLinkRow } from "../../services/streamResolution/resourceLinks";
+import { publicMessage } from "../../services/publicMessage";
 
 interface LookupProps {
   service: ResourceSearchService;
@@ -227,7 +228,7 @@ export function ResourceSearchPanel({
         )}
         {current && state.error && (
           <Alert color="red" role="alert">
-            {state.error}
+            {publicMessage(state.error)}
           </Alert>
         )}
         {!!state.cleanupPending && (
@@ -260,7 +261,7 @@ export function ResourceSearchPanel({
         )}
         {error && (
           <Alert color="red" role="alert">
-            {error}
+            {publicMessage(error)}
           </Alert>
         )}
         {feedback && (

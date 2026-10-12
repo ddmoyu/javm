@@ -11,6 +11,7 @@ import {
   resourceVideoTrack,
 } from "../frontend/src/services/streamResolution/resourceLinks";
 import { parsePlaylist } from "../frontend/src/services/streamResolution/parsers";
+import { bounds } from "../frontend/src/services/streamResolution/shared";
 import type {
   ResourceArchive,
   ResourcePreferences,
@@ -119,15 +120,17 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
     ).toEqual(["b", "a", "c"]);
   });
 
-  it("找到后立即发布并继续查找，相同链接去重且保留分辨率及内部来源", async () => {
+  it("各来源并行查找，找到即发布，相同链接去重且保留分辨率及内部来源", async () => {
     const f = fixture();
     try {
       await f.service.initialize();
       f.service.search("SAFE-001");
-      expect(f.jobs).toHaveLength(1);
+      // 并行提交到隐藏实例上限，不必等前一个来源结束。
+      expect(f.jobs).toHaveLength(Math.min(sources.length, bounds.webviews));
       f.jobs[0]!.finish(success);
-      await vi.waitFor(() => expect(f.jobs).toHaveLength(2));
-      expect(f.service.getSnapshot()).toMatchObject({ searching: true, completed: 1 });
+      await vi.waitFor(() =>
+        expect(f.service.getSnapshot()).toMatchObject({ searching: true, completed: 1 }),
+      );
       expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream);
       f.jobs[1]!.finish(success);
       await vi.waitFor(() => expect(f.jobs).toHaveLength(3));
@@ -159,14 +162,15 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
     try {
       await f.service.initialize();
       f.service.search("SAFE-001");
+      const started = f.jobs.length;
       f.jobs[0]!.finish(success);
-      await vi.waitFor(() => expect(f.jobs).toHaveLength(2));
+      await vi.waitFor(() => expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream));
       const copy = f.service.copyResult("a");
       f.service.cancel();
-      f.jobs[2]!.finish(success);
+      f.jobs.at(-1)!.finish(success);
       expect(await copy).toBe(stream.manifestUrl);
       await vi.waitFor(() => expect(f.service.getSnapshot().busy).toBe(false));
-      expect(f.jobs.filter((job) => job.request.provider === "webview")).toHaveLength(2);
+      expect(f.jobs.filter((job) => job.request.provider === "webview")).toHaveLength(started);
       expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream);
       expect(f.service.getSnapshot().sourcePerformance.b).toBeUndefined();
       expect(f.service.getSnapshot().sourcePerformance.c).toBeUndefined();
@@ -185,7 +189,6 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
       message: "安全样例不存在",
       fallbackEligible: false,
     });
-    await vi.waitFor(() => expect(f.jobs).toHaveLength(2));
     f.jobs[1]!.finish(success);
     await vi.waitFor(() => expect(f.jobs).toHaveLength(3));
     await f.service.shutdown();
@@ -227,10 +230,10 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
       await f.service.initialize();
       f.service.search("SAFE-001");
       f.jobs[0]!.finish(success);
-      await vi.waitFor(() => expect(f.jobs).toHaveLength(2));
+      await vi.waitFor(() => expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream));
       const download = f.service.addDownload("a");
-      expect(f.jobs[2]?.request.provider).toBe("direct-hls");
-      f.jobs[2]!.finish(success);
+      expect(f.jobs.at(-1)?.request.provider).toBe("direct-hls");
+      f.jobs.at(-1)!.finish(success);
       await download;
       expect(f.add).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -243,12 +246,36 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
       await f.service.addDownload("a");
       expect(f.add).toHaveBeenCalledTimes(1);
       const copy = f.service.copyResult("a");
-      f.jobs[3]!.finish(success);
+      f.jobs.at(-1)!.finish(success);
       expect(await copy).toBe(stream.manifestUrl);
       expect(f.service.getSnapshot().sourcePerformance.a).toMatchObject({
         attempts: 1,
         successes: 1,
       });
+    } finally {
+      await f.service.shutdown();
+    }
+  });
+
+  it("详情关闭后取消该番号的查找，StrictMode 式卸载再挂载及其他番号不受影响", async () => {
+    const f = fixture();
+    try {
+      await f.service.initialize();
+      f.service.search("SAFE-001", "1");
+      const release = f.service.holdView("SAFE-001", "1");
+      // 卸载后立即重新挂载（StrictMode、切换标签）不能取消。
+      release();
+      const again = f.service.holdView("safe-001", "1");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(f.service.getSnapshot().searching).toBe(true);
+      // 关闭其他影片的详情不影响当前查找。
+      f.service.holdView("SAFE-002", "2")();
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      expect(f.service.getSnapshot().searching).toBe(true);
+      again();
+      await vi.waitFor(() => expect(f.service.getSnapshot().searching).toBe(false));
+      expect(f.service.getSnapshot().cancelled).toBe(true);
+      expect(f.service.getSnapshot().sourcePerformance).toEqual({});
     } finally {
       await f.service.shutdown();
     }
