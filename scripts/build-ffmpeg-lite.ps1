@@ -18,7 +18,7 @@ $installation = & $vswhere -latest -prerelease -products '*' -requires Microsoft
 if (!$installation) { throw 'Visual Studio C++ tools not found' }
 $vcvars = Join-Path $installation.Trim() 'VC/Auxiliary/Build/vcvars64.bat'
 $compiler = Get-ChildItem -Path (Join-Path $installation.Trim() 'VC/Tools/MSVC/*/bin/Hostx64/x64/cl.exe') |
-    Sort-Object { [version]$_.VersionInfo.FileVersion } -Descending | Select-Object -First 1
+    Sort-Object { [version]$_.Directory.Parent.Parent.Parent.Name } -Descending | Select-Object -First 1
 $bash = if ($env:JAVM_GIT_BASH) { $env:JAVM_GIT_BASH } else { (Get-Command bash.exe -ErrorAction Stop).Source }
 if (!(Test-Path -LiteralPath (Join-Path (Split-Path -Parent $bash) 'cygpath.exe'))) {
     throw 'Git Bash is required. Set JAVM_GIT_BASH to Git/usr/bin/bash.exe (not WSL bash).'

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.25)
 project(JAVM_MediaInfo LANGUAGES C CXX)
 get_filename_component(JAVM_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
-add_subdirectory("${JAVM_REPOSITORY_ROOT}/native/media/mediainfo" mediainfo)
+add_subdirectory("${JAVM_REPOSITORY_ROOT}/native/media/mediainfo" mediainfo EXCLUDE_FROM_ALL)
 install(TARGETS mediainfo RUNTIME DESTINATION runtime LIBRARY DESTINATION runtime)
 install(DIRECTORY "${JAVM_MEDIAINFO_SOURCE_DIR}/MediaInfoLib/Source/MediaInfoDLL"
     DESTINATION sdk/include FILES_MATCHING PATTERN "*.h")

@@ -236,7 +236,6 @@ if (command === "plan") {
     }
     if (release.target_commitish && release.tag_name !== spec.tag) throw new Error("发布标签异常");
     gh(["release", "upload", spec.tag, ...assets, "--repo", repository, "--clobber"]);
-    gh(["release", "edit", spec.tag, "--repo", repository, "--draft=false", "--latest=false"]);
     const published = await releaseFor(spec.tag);
     for (const file of assets) {
       const asset = published.assets.find((entry) => entry.name === path.basename(file));
@@ -256,6 +255,7 @@ if (command === "plan") {
       if (sha256(await readFile(path.join(check, asset.name))) !== sha256(await readFile(file)))
         throw new Error("远端附件回读哈希不一致");
     }
+    gh(["release", "edit", spec.tag, "--repo", repository, "--draft=false", "--latest=false"]);
     console.log(published.html_url);
   }
 } else {
