@@ -1,6 +1,6 @@
 {
   "name": "javm",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha.1",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -24,6 +24,8 @@
     "desktop:build": "pnpm native:build --Release && vp build && node scripts/build-desktop.mjs",
     "desktop:offline": "pnpm offline:setup && pnpm desktop:build && node scripts/package-offline.mjs",
     "offline:setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-offline-tools.ps1",
+    "dependencies:restore": "node scripts/install-dependencies.mjs",
+    "release:package": "node scripts/package-offline.mjs && powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-installer.ps1 && node scripts/release-assets.mjs",
     "downloads:setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-download-tools.ps1",
     "test:downloads": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-downloads.ps1",
     "test:downloads:public": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-public-downloads.ps1",

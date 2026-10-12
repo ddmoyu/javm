@@ -4,10 +4,12 @@ export interface AvailableRelease {
   url: string;
 }
 export function newerVersion(a: string, b: string) {
-  const aa = a.split(".").map(Number),
-    bb = b.split(".").map(Number);
+  const [aCore, aPreview] = a.split("-"),
+    [bCore, bPreview] = b.split("-");
+  const aa = aCore!.split(".").map(Number),
+    bb = bCore!.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (aa[i] !== bb[i]) return aa[i]! > bb[i]!;
-  return false;
+  return !aPreview && Boolean(bPreview);
 }
 export function compatibleRelease(raw: unknown, current: string): AvailableRelease | null {
   if (!raw || typeof raw !== "object") throw new Error("官方发布信息格式无效。");
@@ -18,13 +20,14 @@ export function compatibleRelease(raw: unknown, current: string): AvailableRelea
     html_url?: unknown;
     assets?: { name?: unknown }[];
   };
+  if (release.draft || release.prerelease) return null;
   if (
     typeof release.tag_name !== "string" ||
     !/^v?\d{1,5}\.\d{1,5}\.\d{1,5}$/.test(release.tag_name)
   )
     throw new Error("官方发布版本格式无效。");
   const version = release.tag_name.replace(/^v/, "");
-  if (release.draft || release.prerelease || !newerVersion(version, current)) return null;
+  if (!newerVersion(version, current)) return null;
   if (
     !Array.isArray(release.assets) ||
     !release.assets.some(

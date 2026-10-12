@@ -3,7 +3,7 @@
   "applicationId": "net.ddmoyu.javm.dev",
   "applicationName": "JAVM",
   "applicationIcon": "resources/icon.png",
-  "version": "1.0.0",
+  "version": "1.0.0-alpha.1",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/dist/frontend/",

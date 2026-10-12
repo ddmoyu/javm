@@ -32,6 +32,23 @@ const copy = async (relative) => {
 try {
   await copy("dist/frontend");
   await copy("bin/neutralino-win_x64.exe");
+  const versionStamp = spawnSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      path.join(root, "scripts/stamp-host-version.ps1"),
+      "-HostFile",
+      path.join(stage, "bin/neutralino-win_x64.exe"),
+      "-VersionSource",
+      path.join(root, "build/native/windows-release/bin/JAVM.exe"),
+    ],
+    { stdio: "inherit", windowsHide: true },
+  );
+  if (versionStamp.error) throw versionStamp.error;
+  if (versionStamp.status !== 0) throw new Error("Host version stamping failed");
   for (const item of config.cli.copyItems || []) await copy(item);
   await writeFile(path.join(stage, "neutralino.config.json"), JSON.stringify(config, null, 2));
   const cli = require.resolve("@neutralinojs/neu/bin/neu.js");

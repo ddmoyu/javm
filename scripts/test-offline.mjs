@@ -173,10 +173,11 @@ function cleanup() {
   );
 }
 try {
-  // First start the unmodified embedded application, with user databases disabled.
+  // Cloud mode checks embedded resources without running production JavaScript.
   spawn(
     path.join(root, "JAVM.exe"),
     [
+      "--mode=cloud",
       "--enable-extensions=false",
       "--data-location=app",
       "--storage-location=app",
@@ -192,6 +193,44 @@ try {
   const html = await (await fetch(`http://127.0.0.1:${info.nlPort}/`)).text();
   if (!html.includes('id="root"') || !html.includes("/assets/"))
     throw new Error("Embedded frontend missing");
+  results.push({
+    name: "Embedded frontend resources are readable in cloud mode without execution",
+    ok: true,
+  });
+  await call(info, "app.exit").catch(() => {});
+  socket.close();
+  await pause(1200);
+  cleanup();
+
+  // Only an inert safe page runs in WebView2. Native checks use a new database.
+  await mkdir(path.join(root, "smoke-app"));
+  await writeFile(
+    path.join(root, "smoke-app/index.html"),
+    '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'none\'"><title>JAVM native smoke test</title>',
+  );
+  const config = JSON.parse(await readFile(path.join(project, "neutralino.config.json"), "utf8"));
+  Object.assign(config, {
+    applicationId: `net.ddmoyu.javm.offlinetest.${crypto.randomUUID()}`,
+    documentRoot: "/smoke-app/",
+    dataLocation: "app",
+    storageLocation: "app",
+    exportAuthInfo: true,
+  });
+  config.extensions[0].commandWindows = `"${forward(path.join(root, "bin/javm_database.exe"))}" --database "${forward(path.join(data, "downloads.sqlite3"))}"`;
+  config.modes.window.hidden = true;
+  config.modes.window.useSavedState = false;
+  await writeFile(path.join(root, "neutralino.config.json"), JSON.stringify(config));
+  const priorToken = info.nlToken;
+  spawn(path.join(root, "JAVM.exe"), ["--res-mode=directory"], {
+    env,
+    windowsHide: true,
+    stdio: "ignore",
+  });
+  info = await wait(async () => {
+    const next = await auth();
+    return next.nlToken !== priorToken ? next : null;
+  });
+  await connect(info);
   const systemWebView = await wait(async () => {
     const running = JSON.parse(
       ps(
@@ -206,47 +245,10 @@ try {
     );
   }, 60000);
   results.push({
-    name: "Embedded application uses system WebView2 with no bundled runtime and system-only PATH",
+    name: "Safe inert page uses system WebView2 with no bundled runtime and system-only PATH",
     ok: true,
     executable: systemWebView.ExecutablePath,
   });
-  await call(info, "app.exit").catch(() => {});
-  socket.close();
-  await pause(1200);
-  cleanup();
-
-  // Use the same production assets and binaries with only isolated data paths changed.
-  // The embedded production frontend was checked above. Use an inert page for
-  // isolated native RPC checks, never frontend files from a newer working tree.
-  await mkdir(path.join(root, "smoke-app"));
-  await writeFile(
-    path.join(root, "smoke-app/index.html"),
-    "<!doctype html><title>JAVM native smoke test</title>",
-  );
-  const config = JSON.parse(await readFile(path.join(project, "neutralino.config.json"), "utf8"));
-  Object.assign(config, {
-    applicationId: `net.ddmoyu.javm.offlinetest.${crypto.randomUUID()}`,
-    documentRoot: "/smoke-app/",
-    dataLocation: "app",
-    storageLocation: "app",
-    exportAuthInfo: true,
-  });
-  config.extensions[0].commandWindows = `"${forward(path.join(root, "bin/javm_database.exe"))}" --database "${forward(path.join(data, "downloads.sqlite3"))}"`;
-  config.modes.window.hidden = true;
-  config.modes.window.useSavedState = false;
-  await writeFile(path.join(root, "neutralino.config.json"), JSON.stringify(config));
-  // The prior auth file is retained but ignored until a new port/token is written.
-  const priorToken = info.nlToken;
-  spawn(path.join(root, "JAVM.exe"), ["--res-mode=directory"], {
-    env,
-    windowsHide: true,
-    stdio: "ignore",
-  });
-  info = await wait(async () => {
-    const next = await auth();
-    return next.nlToken !== priorToken ? next : null;
-  });
-  await connect(info);
   const status = await wait(() =>
     database(info, "library.status").catch((error) => {
       if (String(error).includes("NE_EX_EXTNOTC")) return null;

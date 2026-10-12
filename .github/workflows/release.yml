@@ -1,0 +1,99 @@
+name: 发布 Windows 版本
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 目标版本标签，例如 v1.0.0-alpha.1
+        required: true
+        type: string
+      publish:
+        description: 验证通过后发布 Release（必须已有版本标签）
+        type: boolean
+        default: false
+      source_commit:
+        description: 仅验证时使用的完整 40 位源码提交 SHA
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_PUBLISH: ${{ inputs.publish }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
+    steps:
+      - name: 校验标签输入
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[1-9][0-9]*)?$') { throw '无效版本标签' }
+          if ($env:RELEASE_PUBLISH -ne 'true' -and $env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$') { throw '仅验证必须指定完整源码提交 SHA' }
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.publish && inputs.tag || inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: 校验发布版本与来源
+        run: |
+          node scripts/validate-release.mjs
+          if ($LASTEXITCODE -ne 0) { throw '版本校验失败' }
+          "RELEASE_COMMIT=$(git rev-parse HEAD)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - run: pnpm install --frozen-lockfile
+      - name: 下载并校验锁定精简依赖
+        run: pnpm dependencies:restore
+      - name: 准备 Neutralino 宿主
+        run: pnpm desktop:setup
+      - name: 类型检查
+        run: pnpm typecheck
+      - name: 完整单元测试
+        run: |
+          New-Item -ItemType Directory -Force -Path .tmp, frontend/.tmp | Out-Null
+          pnpm test
+      - name: Release 原生与前端构建
+        run: pnpm desktop:build
+      - name: 原生 HTTP 与备份恢复验证
+        env:
+          JAVM_MEDIA_INTEGRATION: "1"
+          JAVM_HTTP_INTEGRATION: "1"
+        run: pnpm test tests/http-native.integration.test.ts tests/library-backup-native.integration.test.ts tests/storage-recovery-native.integration.test.ts
+      - name: 构建便携包和安装包
+        run: pnpm release:package
+      - name: 验证打包与安全启动入口
+        run: |
+          pnpm test:offline
+          if ($LASTEXITCODE -ne 0) { throw '便携包验证失败' }
+          node scripts/verify-portable-entry.mjs
+      - name: 安装升级和卸载验证
+        run: ./scripts/test-installer.ps1
+      - name: 保存已验证产物
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: JAVM-${{ inputs.tag }}-windows-x64
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: 发布全部资产
+        if: inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $existing = gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) { throw '该版本已存在，拒绝覆盖发布资产' }
+          $flags = @('--verify-tag', '--title', "JAVM $env:RELEASE_TAG", '--notes-file', "docs/releases/$env:RELEASE_TAG.md")
+          if ($env:RELEASE_TAG.Contains('-')) { $flags += @('--prerelease', '--latest=false') }
+          $assets = @(Get-ChildItem -LiteralPath dist/release -File | ForEach-Object FullName)
+          gh release create $env:RELEASE_TAG @assets @flags --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release 发布失败' }
