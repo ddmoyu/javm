@@ -3,6 +3,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { createServer } from "node:http";
 import { verifyFfmpegLite } from "./verify-ffmpeg-lite.mjs";
 import { verifyMediaInfoLite } from "./verify-mediainfo-lite.mjs";
 
@@ -172,12 +173,22 @@ function cleanup() {
     `Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith(${literal(root + path.sep)}) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`,
   );
 }
+// Exercise the shipped host without starting production catalog/network services.
+// The embedded HTML is checked through the host's static server below.
+const safePage = createServer((_request, response) => {
+  response.setHeader("Content-Type", "text/html; charset=utf-8");
+  response.setHeader("Content-Security-Policy", "default-src 'none'");
+  response.end("<!doctype html><title>JAVM safe package verification</title>");
+});
+await new Promise((resolve) => safePage.listen(0, "127.0.0.1", resolve));
+const safeUrl = "http://127.0.0.1:" + safePage.address().port;
 try {
-  // First start the unmodified embedded application, with user databases disabled.
+  // First start the embedded host on a local inert page, with user databases disabled.
   spawn(
     path.join(root, "JAVM.exe"),
     [
       "--enable-extensions=false",
+      "--url=" + safeUrl,
       "--data-location=app",
       "--storage-location=app",
       "--export-auth-info=true",
@@ -206,7 +217,7 @@ try {
     );
   }, 60000);
   results.push({
-    name: "Embedded application uses system WebView2 with no bundled runtime and system-only PATH",
+    name: "Packaged host uses system WebView2 on a safe local page; embedded frontend assets are present",
     ok: true,
     executable: systemWebView.ExecutablePath,
   });
@@ -216,7 +227,7 @@ try {
   cleanup();
 
   // Use the same production assets and binaries with only isolated data paths changed.
-  // The embedded production frontend was checked above. Use an inert page for
+  // The embedded production assets were checked above. Use an inert page for
   // isolated native RPC checks, never frontend files from a newer working tree.
   await mkdir(path.join(root, "smoke-app"));
   await writeFile(
@@ -320,4 +331,5 @@ try {
   throw error;
 } finally {
   cleanup();
+  await new Promise((resolve) => safePage.close(resolve));
 }
