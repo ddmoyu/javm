@@ -48,7 +48,7 @@ const cancelled: ResolutionOutcome = {
   fallbackEligible: false,
 };
 
-function fixture(initial: ResourcePreferences | null = null) {
+function fixture(initial: ResourcePreferences | null = null, sourceList = sources) {
   let preferences = initial;
   const jobs: { request: ResolutionRequest; finish: (value: ResolutionOutcome) => void }[] = [];
   const submit = (request: ResolutionRequest): ResolutionHandle => {
@@ -78,7 +78,7 @@ function fixture(initial: ResourcePreferences | null = null) {
   const service = new ResourceSearchService(
     resolution,
     { add, directory: () => "safe-downloads" },
-    sources,
+    sourceList,
     archive,
   );
   return { service, jobs, archive, add, preferences: () => preferences };
@@ -157,27 +157,40 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
     }
   });
 
-  it("取消清空剩余队列，保留链接和已开始的复制且不记为来源失败", async () => {
-    const f = fixture();
-    try {
-      await f.service.initialize();
-      f.service.search("SAFE-001");
-      const started = f.jobs.length;
-      f.jobs[0]!.finish(success);
-      await vi.waitFor(() => expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream));
-      const copy = f.service.copyResult("a");
-      f.service.cancel();
-      f.jobs.at(-1)!.finish(success);
-      expect(await copy).toBe(stream.manifestUrl);
-      await vi.waitFor(() => expect(f.service.getSnapshot().busy).toBe(false));
-      expect(f.jobs.filter((job) => job.request.provider === "webview")).toHaveLength(started);
-      expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream);
-      expect(f.service.getSnapshot().sourcePerformance.b).toBeUndefined();
-      expect(f.service.getSnapshot().sourcePerformance.c).toBeUndefined();
-    } finally {
-      await f.service.shutdown();
-    }
-  });
+  it.each([2, 8])(
+    "并发上限为 %i 时取消清空剩余队列，保留链接和已开始的复制且不记为来源失败",
+    async (concurrency) => {
+      const previousLimit = bounds.webviews;
+      bounds.webviews = concurrency;
+      const queuedSources = Array.from({ length: concurrency + 2 }, (_, index) => {
+        const id = String.fromCharCode(97 + index);
+        return { id, name: "虚构来源 " + id, template: base + "/" + id + "/{code}" };
+      });
+      const f = fixture(null, queuedSources);
+      try {
+        await f.service.initialize();
+        f.service.search("SAFE-001");
+        expect(f.jobs).toHaveLength(concurrency);
+        f.jobs[0]!.finish(success);
+        await vi.waitFor(() => expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream));
+        // 完成一项会补充下一来源；取消时仍有一项未开始。
+        const started = concurrency + 1;
+        expect(f.jobs).toHaveLength(started);
+        expect(started).toBeLessThan(queuedSources.length);
+        const copy = f.service.copyResult("a");
+        f.service.cancel();
+        f.jobs.at(-1)!.finish(success);
+        expect(await copy).toBe(stream.manifestUrl);
+        await vi.waitFor(() => expect(f.service.getSnapshot().busy).toBe(false));
+        expect(f.jobs.filter((job) => job.request.provider === "webview")).toHaveLength(started);
+        expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream);
+        expect(Object.keys(f.service.getSnapshot().sourcePerformance)).toEqual(["a"]);
+      } finally {
+        await f.service.shutdown();
+        bounds.webviews = previousLimit;
+      }
+    },
+  );
 
   it("保存成功及失败次数，重开后优先历史表现好的来源且恢复全部来源", async () => {
     const f = fixture();
