@@ -60,7 +60,7 @@ export async function specification(component) {
     ...recipe.files,
     "scripts/third-party/components.mjs",
     "scripts/third-party/build.ps1",
-    "scripts/third-party/release.mjs",
+    "scripts/third-party/package.mjs",
     "scripts/third-party/verify.mjs",
   ]) {
     files[name] = sha256((await readFile(path.join(root, name), "utf8")).replaceAll("\r\n", "\n"));

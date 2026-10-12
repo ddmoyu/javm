@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { copyFile, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { root, repository, readJson, sha256 } from "./third-party/components.mjs";
+import { findRelease } from "./third-party/github.mjs";
 
 const command = process.argv[2];
 const pkg = await readJson(path.join(root, "package.json"));
@@ -112,12 +113,7 @@ if (command === "verify-source") {
       throw new Error("发布附件校验失败：" + file.name);
     assets.push(absolute);
   }
-  let release;
-  try {
-    release = api("/releases/tags/" + tag);
-  } catch (error) {
-    if (!String(error.stderr).includes("HTTP 404")) throw error;
-  }
+  let release = findRelease(gh, repository, tag);
   if (release && !release.draft) throw new Error("拒绝覆盖已发布的 Alpha 版本");
   if (!release) {
     const notes = path.join(directory, "notes.md");
@@ -152,7 +148,7 @@ if (command === "verify-source") {
     ]);
   }
   gh(["release", "upload", tag, ...assets, "--repo", repository, "--clobber"]);
-  release = api("/releases/tags/" + tag);
+  release = findRelease(gh, repository, tag);
   const readback = await mkdtemp(path.join(directory, "readback-"));
   for (const file of record.files) {
     const asset = release.assets.find((entry) => entry.name === file.name);
