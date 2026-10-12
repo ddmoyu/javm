@@ -1,0 +1,55 @@
+name: 构建精简依赖
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: ddmoyu/javm 的完整源码提交号
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: dependencies-${{ inputs.source_commit }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: 校验源码引用
+        env:
+          SOURCE_COMMIT: ${{ inputs.source_commit }}
+        run: |
+          if ($env:SOURCE_COMMIT -notmatch '^[0-9a-f]{40}$') { throw '必须填写完整提交号' }
+      - uses: actions/checkout@v7.0.1
+        with:
+          repository: ddmoyu/javm
+          ref: ${{ inputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: 准备汇编和构建工具
+        run: |
+          choco install nasm --version=2.16.03 --no-progress --yes
+          if ($LASTEXITCODE -ne 0) { throw 'NASM 安装失败' }
+          "C:\Program Files\NASM" | Out-File $env:GITHUB_PATH -Append -Encoding utf8
+          $gitRoot = Split-Path (Split-Path (Get-Command git.exe).Source)
+          "JAVM_GIT_BASH=$(Join-Path $gitRoot 'usr/bin/bash.exe')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: 源码构建并校验依赖
+        id: bundle
+        run: ./scripts/build-dependencies.ps1
+      - name: 发布固定依赖资产
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.bundle.outputs.tag }}
+          BUNDLE: ${{ steps.bundle.outputs.archive }}
+          SOURCES: ${{ steps.bundle.outputs.sources }}
+        run: |
+          gh release create $env:RELEASE_TAG $env:BUNDLE "$env:BUNDLE.sha256" $env:SOURCES "$env:SOURCES.sha256" --repo $env:GITHUB_REPOSITORY --target main --latest=false --title "JAVM 精简依赖 $env:RELEASE_TAG" --notes-file dist/dependencies/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw '依赖发布失败' }
