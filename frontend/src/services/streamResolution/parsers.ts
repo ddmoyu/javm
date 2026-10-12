@@ -135,7 +135,7 @@ export function parsePage(
   }
   return { candidates: [...candidates], next };
 }
-function attrs(line: string): Record<string, string> {
+export function attrs(line: string): Record<string, string> {
   const values: Record<string, string> = {};
   const pattern = /([A-Z0-9-]+)=("[^"]*"|[^,]*)(?:,|$)/gy;
   let cursor = 0;

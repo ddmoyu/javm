@@ -12,7 +12,7 @@ import {
 } from "../frontend/src/services/metadata/MovieDetailsCache";
 import { searchMovieMetadata } from "../frontend/src/services/metadata/movieSearch";
 import { StopUnconfirmedError } from "../frontend/src/services/downloads/ports";
-import { AvwikiWorksService } from "../frontend/src/services/catalog/AvwikiWorksService";
+import { OnlineWorksService } from "../frontend/src/services/catalog/OnlineWorksService";
 import { JavbusMovieLookup } from "../frontend/src/services/catalog/JavbusMovieLookup";
 import { parseJavbusWorkDetails } from "../frontend/src/services/catalog/javbusWorks";
 import type {
@@ -105,11 +105,10 @@ describe("发现、搜索与刮削资料来源衔接", () => {
   it("发现读取的完整详情直接用于后台刮削，资料服务离线也不再搜索或读取详情", async () => {
     const { cache, primary, lookup, port, service } = fixture();
     const fetch = vi.fn(async () => html());
-    const works = new AvwikiWorksService(
+    const works = new OnlineWorksService(
       processor,
       fetch,
       async () => {},
-      "JavBus",
       undefined,
       (value) => cache.remember(value),
     );

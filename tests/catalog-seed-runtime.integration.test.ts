@@ -19,12 +19,9 @@ async function safeWorker() {
             return `\0safe:${source}`;
           if (source.includes("builtin-") && source.endsWith(".json"))
             return "\0safe:empty-catalog";
-          if (source.endsWith("/manifest.json")) return "\0safe:manifest";
         },
         load(id) {
           if (id === "\0safe:empty-catalog") return "export default {entries:[]}";
-          if (id === "\0safe:manifest")
-            return 'export const collected_at = "2026-10-10T00:00:00.000Z"';
           if (id.startsWith("\0safe:")) {
             const file = id.slice(id.indexOf("/catalogs/") + 10).replace("?url", "");
             return `export default ${JSON.stringify(`https://safe.example.invalid/${file}`)}`;
@@ -52,22 +49,10 @@ async function safeWorker() {
 describe.runIf(process.platform === "win32" && process.env.JAVM_WEBVIEW_INTEGRATION === "1")(
   "大名单内置快照加载（隐藏 WebView2、安全合成数据）",
   () => {
-    it("正式 Worker 可读取 75,303 条演员 CSV 并返回目录", async () => {
+    it("正式 Worker 可分批接收 7,804 条 SQLite 演员记录并返回目录", async () => {
       const code = await safeWorker();
       const fixture = `
-        const header = 'source,kind,lane,source_id,name_original,name_zh,aliases,translation_status,source_url,category,video_count,count_updated_at\\r\\n';
-        const rows = Array.from({length:75303}, (_, index) =>
-          'javbus,star,censored,safe-' + index + ',安全演员' + index + ',,,pending,https://www.javbus.com/star/safe-' + index + ',,,\\r\\n');
-        const actors = header + rows.join('');
-        self.fetch = async input => {
-          const url = new URL(input);
-          if (url.hostname !== 'safe.example.invalid') throw new Error('Unexpected fixture request');
-          if (url.pathname.startsWith('/javbus/')) return new Response(url.pathname.endsWith('/actresses.csv') ? actors : header);
-          const kinds = {'actresses.csv':'actor','male-actors.csv':'histrion','directors.csv':'director','makers.csv':'maker','series.csv':'series'};
-          const kind = kinds[url.pathname.split('/').pop()];
-          if (!kind) throw new Error('Unknown fixture CSV');
-          return new Response('source,kind,source_id,name_original,name_zh,aliases,translation_status,source_url\\r\\navwikidb,' + kind + ',1,安全演员0,,,pending,https://avwikidb.com/' + kind + '/1/\\r\\n');
-        };
+        self.fetch = async () => { throw new Error('Fixture must not make network requests'); };
       `;
       const result = await withSafeCatalogBrowser(
         () => {
@@ -92,8 +77,17 @@ describe.runIf(process.platform === "win32" && process.env.JAVM_WEBVIEW_INTEGRAT
                 const finish = result => {clearTimeout(timer);worker.terminate();URL.revokeObjectURL(workerUrl);resolve(result)};
                 const timer = setTimeout(() => finish({error:'Worker timed out'}), 10000);
                 worker.onerror = () => finish({error:'Worker startup failed'});
-                worker.onmessage = ({data}) => finish(data.error ? {error:data.error} : {count:data.value.catalogs.actresses.names.length});
-                worker.postMessage({id:1,operation:'discoveryLoad',payload:{cache:null}});
+                let cursor=0, sequence=0, loading=false;
+                const next=()=>{
+                  if(cursor===7804) {loading=true;worker.postMessage({id:++sequence,operation:'discoveryLoad',payload:{cache:null}});return;}
+                  const reset=cursor===0, count=Math.min(500,7804-cursor);
+                  const entries=Array.from({length:count},(_,offset)=>({dimension:'actresses',lane:'censored',id:'safe-'+(cursor+offset),
+                    name:'安全演员'+(cursor+offset),label:'安全演员'+(cursor+offset),aliases:[],translationStatus:'pending',category:'',videoCount:10,countUpdatedAt:1}));
+                  cursor+=count;
+                  worker.postMessage({id:++sequence,operation:'javbusSeedAppend',payload:{entries,reset,done:cursor===7804}});
+                };
+                worker.onmessage=({data})=>data.error ? finish({error:data.error}) : loading ? finish({count:data.value.catalogs.actresses.names.length}) : next();
+                next();
               })`,
               awaitPromise: true,
               returnByValue: true,
@@ -103,7 +97,7 @@ describe.runIf(process.platform === "win32" && process.env.JAVM_WEBVIEW_INTEGRAT
           return (response.result as { value: unknown }).value;
         },
       );
-      expect(result).toEqual({ count: 75303 });
+      expect(result).toEqual({ count: 7804 });
     }, 30000);
   },
 );

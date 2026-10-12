@@ -38,5 +38,7 @@ export interface DownloadEngine {
     stage: (phase: DownloadTask["phase"], inputs?: string[]) => Promise<void>,
   ): Promise<void>;
   open(path: string): Promise<void>;
+  /** 删除未完成任务的临时文件；不删除任务目录中的其他文件。 */
+  discard?(task: DownloadTask): Promise<void>;
   checkTools(settings: DownloadSettings): Promise<string[]>;
 }

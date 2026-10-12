@@ -33,6 +33,9 @@ export const nativeDownloadHost: DownloadHost = {
     },
     read: filesystem.readFile,
     write: filesystem.writeFile,
+    async writeBinary(path, value) {
+      await filesystem.writeBinaryFile(path, value.slice().buffer);
+    },
     async list(path) {
       return (await filesystem.readDirectory(path))
         .filter((entry) => entry.type === "FILE")
@@ -41,6 +44,12 @@ export const nativeDownloadHost: DownloadHost = {
     move: filesystem.move,
     async remove(path) {
       if (await stat(path)) await filesystem.remove(path);
+    },
+    async removeEmptyDirectory(path) {
+      if (!(await stat(path))?.isDirectory) return;
+      const entries = await filesystem.readDirectory(path);
+      if (!entries.some((entry) => entry.entry !== "." && entry.entry !== ".."))
+        await filesystem.remove(path);
     },
   },
   run: runNativeProcess,
@@ -59,6 +68,10 @@ export const nativeDownloadHost: DownloadHost = {
     throw new Error(`下载组件 ${name} 缺失，请检查软件包是否完整。`);
   },
   defaultDirectory: () => os.getPath("downloads"),
+  hlsWorker: () =>
+    new Worker(new URL("../../services/downloads/hlsWorker.ts", import.meta.url), {
+      type: "module",
+    }),
   async open(path) {
     if (!(await stat(path))) throw new Error("文件或目录不存在。");
     await os.open(path);

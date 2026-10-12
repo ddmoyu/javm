@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { readFileSync } from "node:fs";
 import { defaultDownloadSettings } from "../frontend/src/contracts/downloads";
 import type {
   DownloadSettings,
@@ -25,11 +24,8 @@ import { keepTextTail } from "../frontend/src/services/downloads/text";
 import {
   byteValue,
   formatDownloadSize,
-  HlsOutput,
-  HlsProgress,
   OutputLines,
   parseCurlProgress,
-  parseHlsProgress,
 } from "../frontend/src/services/downloads/progress";
 import { processCommand, quoteWindowsArgument } from "../frontend/src/platform/neutralino/process";
 
@@ -157,116 +153,11 @@ describe("real tool output parsing", () => {
     expect(
       redactLog("😀" + "x".repeat(1499), { url: "https://example.com/video", headers: {} }),
     ).toBe("x".repeat(1499));
-    const output = new HlsOutput();
+    const output = new OutputLines();
     output.push("😀" + "x".repeat(8191));
     expect(output.finish()[0]).toBe("x".repeat(8191));
   });
-  it("keeps video progress when the real Tears of Steel audio row has no size yet", () => {
-    const raw = readFileSync(
-      new URL("./fixtures/downloads/nm3u8dl-tos-queued-audio.stdout.txt", import.meta.url),
-      "utf8",
-    );
-    const output = new HlsOutput();
-    const parser = new HlsProgress();
-    let update: DownloadProgress | undefined;
-    for (const row of output.push(raw)) update = parser.push(row) ?? update;
-    expect(update).toMatchObject({ total: 0, downloaded: 48.84 * 1024, totalIsEstimate: true });
-    expect(update!.progress).toBeCloseTo(0.81 / 2, 4);
-  });
-  it("rejects invalid counters and numeric values and waits for all segments before 100%", () => {
-    for (const line of [
-      "Vid 1/0 50.00% 1MB/2MB 1MBps",
-      "Vid 11/10 100.00% 1MB -",
-      "Vid 1/10 101.00% 1MB/2MB 1MBps",
-      "Vid 1/10 1..00% 1MB/2MB 1MBps",
-      "Vid 1/10 10.00% 1..2MB/2MB 1MBps",
-      "Vid 1/10 10.00% " + "9".repeat(400) + "TB/2TB 1MBps",
-    ])
-      expect(parseHlsProgress(line)).toBeUndefined();
-    expect(parseHlsProgress("Vid 99999/100000 100.00% 10MB/10MB 1MBps")).toMatchObject({
-      progress: 99.99,
-      totalIsEstimate: true,
-    });
-    const parser = new HlsProgress();
-    expect(parser.push("Vid 99999/100000 100.00% 10MB/10MB 1MBps")!.progress).toBe(99.99);
-  });
-  it("flushes the final row without a newline or ETA and keeps bounded diagnostic tails", () => {
-    const output = new HlsOutput();
-    output.push("说明".repeat(10000));
-    expect(output.finish()[0]!.length).toBeLessThanOrEqual(8192);
-    expect(output.push("\x1b[32mVid ━━━━━ 12/12 100.00% 532.97KB -\x1b[0m")).toEqual([]);
-    expect(parseHlsProgress(output.finish()[0]!)).toMatchObject({
-      progress: 100,
-      total: 532.97 * 1024,
-      speed: 0,
-    });
-    expect(output.finish()).toEqual([]);
-  });
-  it.each([
-    ["ts", 532.97],
-    ["tracks", 377.34 + 118.23],
-    ["angel-one", (10.32 + 2.73) * 1024],
-  ])(
-    "replays captured %s stdout without relying on newlines or chunk boundaries",
-    (name, kilobytes) => {
-      const captured = readFileSync(
-        new URL(`./fixtures/downloads/nm3u8dl-${name}.stdout.txt`, import.meta.url),
-        "utf8",
-      );
-      for (const chunkSize of [1, 17, 256, 4096, captured.length]) {
-        const output = new HlsOutput();
-        const progress = new HlsProgress();
-        const updates: DownloadProgress[] = [];
-        const consume = (lines: string[]) => {
-          for (const line of lines) {
-            const update = progress.push(line);
-            if (update) updates.push(update);
-          }
-        };
-        for (let offset = 0; offset < captured.length; offset += chunkSize)
-          consume(output.push(captured.slice(offset, offset + chunkSize)));
-        // Sizes must arrive during push, not only when the process ends.
-        expect(
-          updates.some(
-            (update) => update.total! > 0 && update.progress! > 0 && update.progress! < 100,
-          ),
-        ).toBe(true);
-        consume(output.finish());
-        expect(updates.at(-1)).toMatchObject({ progress: 100, totalIsEstimate: false, speed: 0 });
-        expect(updates.at(-1)!.downloaded).toBeCloseTo(Number(kilobytes) * 1024, 4);
-        expect(updates.at(-1)!.total).toBe(updates.at(-1)!.downloaded);
-      }
-    },
-  );
-  it("keeps incomplete rows until the ETA arrives and handles split ANSI sequences", () => {
-    const output = new HlsOutput();
-    expect(output.push("\x1b[3")).toEqual([]);
-    expect(output.push("2mVid Kbps --- 9/12 75.00% 421.25KB/561.67KB67.39KBps00:")).toEqual([]);
-    expect(output.push("00:02\x1b[0m")).toEqual([
-      "Vid Kbps --- 9/12 75.00% 421.25KB/561.67KB67.39KBps00:00:02",
-    ]);
-    expect(parseHlsProgress("Vid Kbps ---12/12 100.00%532.97KB - 00:00:00")).toMatchObject({
-      progress: 100,
-      downloaded: 532.97 * 1024,
-      total: 532.97 * 1024,
-      totalIsEstimate: false,
-    });
-  });
-  it("adds HLS video/audio sizes and distinguishes estimates, unknown totals and output size", () => {
-    const parser = new HlsProgress();
-    parser.push("Vid 1920x1080 5/10 50.00% 50MB/100MB 2MBps 00:25");
-    expect(parser.push("Aud 5/10 50.00% 5MB/10MB 1MBps 00:05")).toMatchObject({
-      downloaded: 55 * 1024 ** 2,
-      total: 110 * 1024 ** 2,
-      totalIsEstimate: true,
-      progress: 50,
-      speed: 3 * 1024 ** 2,
-    });
-    expect(parser.push("Vid 1920x1080 10/10 100.00% 100MB - 00:00")).toMatchObject({
-      downloaded: 105 * 1024 ** 2,
-      total: 110 * 1024 ** 2,
-    });
-    expect(parseHlsProgress("Vid 5/10 50.00% 50MB 2MBps 00:25")).toMatchObject({ total: 0 });
+  it("distinguishes estimates, unknown totals and output size", () => {
     const task = createDownloadTasks(input(), [])[0]!;
     expect(formatDownloadSize(task)).toBe("大小未知");
     expect(formatDownloadSize({ ...task, downloaded: 1024 })).toBe("1.0 KB / 总大小未知");
@@ -290,14 +181,7 @@ describe("real tool output parsing", () => {
     expect(parser.push("2 50%\x1b[0m\rnext\nlast")).toEqual(["Vid 1/2 50%", "next"]);
     expect(parser.finish()).toEqual(["last"]);
   });
-  it("reads the old downloader's active and completed output", () => {
-    expect(
-      parseHlsProgress("Vid 1920x1080 80/81 98.77% 57.08MB/57.80MB 32.00KBps 00:04"),
-    ).toMatchObject({ progress: 98.77, speed: 32768 });
-    expect(parseHlsProgress("Vid 81/81 100.00% 57.58MB - 00:00")).toMatchObject({
-      progress: 100,
-      speed: 0,
-    });
+  it("reads curl progress", () => {
     expect(byteValue("100")).toBe(100);
     expect(byteValue("1.5M")).toBe(1572864);
     expect(

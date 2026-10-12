@@ -67,7 +67,6 @@ describe.runIf(enabled)("user supplied public HLS streams", () => {
         const tools: Record<string, string> = {
           ffmpeg: process.env.JAVM_FFMPEG || locate("ffmpeg"),
           curl: locate("curl"),
-          "N_m3u8DL-RE": path.join(workspace, "bin", "tools", "N_m3u8DL-RE.exe"),
         };
         const media = new MediaHost();
         await media.start(path.join(capture, "probe.sqlite3"));

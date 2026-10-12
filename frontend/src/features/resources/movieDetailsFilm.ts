@@ -1,5 +1,6 @@
-import type { Film, MediaImage, MediaTrailer } from "../../contracts/media";
+import type { Film, MediaImage } from "../../contracts/media";
 import type { MovieCandidate, MovieDetails } from "../../services/metadata/MetaTubeService";
+import { movieTrailers } from "../../services/metadata/movieTrailers";
 
 export function movieDetailsToFilm(details: MovieDetails, candidate: MovieCandidate): Film {
   const { fields } = details;
@@ -14,14 +15,6 @@ export function movieDetailsToFilm(details: MovieDetails, candidate: MovieCandid
   ] as const) {
     if (src && !artwork.some((image) => image.src === src)) artwork.push({ src, title });
   }
-  const trailers: MediaTrailer[] = [];
-  if (details.previewVideoUrl)
-    trailers.push({
-      src: details.previewVideoUrl,
-      format: details.previewVideoUrl === details.previewVideoHlsUrl ? "hls" : undefined,
-    });
-  if (details.previewVideoHlsUrl && details.previewVideoHlsUrl !== details.previewVideoUrl)
-    trailers.push({ src: details.previewVideoHlsUrl, format: "hls" });
   return {
     id: `metatube:${provider}:${details.id || candidate.id}`,
     code: fields.code || candidate.code,
@@ -37,7 +30,7 @@ export function movieDetailsToFilm(details: MovieDetails, candidate: MovieCandid
     missing: false,
     coverUrl: artwork[0]?.src,
     artwork,
-    trailers,
+    trailers: movieTrailers(details),
     screenshots: details.previewImages?.map((src, index) => ({
       src,
       title: `预览图 ${index + 1}`,

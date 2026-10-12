@@ -90,7 +90,9 @@ export class DownloadService {
     this.completedHandler = handler;
     void this.initialize().then(() => this.restoreHandoffs());
   }
-  hasPendingHandoffs() { return this.handoffs.size > 0; }
+  hasPendingHandoffs() {
+    return this.handoffs.size > 0;
+  }
   private async restoreHandoffs() {
     for (const task of this.snapshot.tasks) {
       if (this.stopping || this.snapshot.error) break;
@@ -228,7 +230,11 @@ export class DownloadService {
   }
   private async restoreTasks() {
     const { tasks, settings } = await this.repository.load();
-    const resolved = { ...defaultDownloadSettings, ...settings };
+    // 旧版设置里的 hlsPath 已随 HLS 改用 curl 而停用，不再带入新设置。
+    const { hlsPath: _retired, ...stored } = settings as Partial<DownloadSettings> & {
+      hlsPath?: string;
+    };
+    const resolved = { ...defaultDownloadSettings, ...stored };
     if (!resolved.directory) resolved.directory = await this.engine.defaultDirectory();
     this.publish({ tasks, settings: validateSettings(resolved) });
     // 只在所属进程确认停止后调用；以数据库实际 revision 为准，不重放旧写入。
@@ -515,10 +521,17 @@ export class DownloadService {
     });
     this.pump();
   }
-  async remove(id: string) {
+  async remove(id: string, deleteFiles = false) {
+    if (deleteFiles && this.find(id).status === "completed")
+      throw new Error("已完成的视频请在片库中管理，此处只移除记录。");
     await this.cancel(id);
     await this.exclusive(async () => {
       const task = this.find(id);
+      if (deleteFiles) {
+        if (!this.engine.discard) throw new Error("当前环境无法删除下载文件。");
+        // 先删文件再删记录，失败时保留记录以便重试。
+        await this.engine.discard(task);
+      }
       await this.repository.remove(id, task.revision);
       this.publish({ tasks: this.snapshot.tasks.filter((item) => item.id !== id) });
     });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { OnlineActorSearchService } from "../frontend/src/services/catalog/OnlineActorSearchService";
-import { AvwikiWorksService } from "../frontend/src/services/catalog/AvwikiWorksService";
+import { OnlineWorksService } from "../frontend/src/services/catalog/OnlineWorksService";
 import {
   javbusSearchUrl,
   parseJavbusActorSearch,
@@ -151,7 +151,7 @@ describe("在线演员搜索", () => {
     const prepare = vi.fn(async () => {
       throw new Error("不应读取 CSV");
     });
-    const service = new AvwikiWorksService(processor(), fetch, prepare, "JavBus");
+    const service = new OnlineWorksService(processor(), fetch, prepare);
     services.push(service);
     service.selectEntity("actresses", {
       id: "star:unlisted",

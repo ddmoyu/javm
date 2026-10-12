@@ -12,7 +12,7 @@ await fs.mkdir(path.join(project, ".tmp"), { recursive: true });
 const root = await fs.mkdtemp(path.join(project, ".tmp/workflow-"));
 for (const dir of ["media", "output", "backups", "temp", "data", "bin/tools"])
   await fs.mkdir(path.join(root, dir), { recursive: true });
-for (const file of ["curl.exe", "ffmpeg.exe", "N_m3u8DL-RE.exe"])
+for (const file of ["curl.exe", "ffmpeg.exe"])
   await fs.copyFile(path.join(project, "bin/tools", file), path.join(root, "bin/tools", file));
 const ffmpeg = process.env.JAVM_FIXTURE_FFMPEG || "ffmpeg.exe";
 const run = (...args) =>

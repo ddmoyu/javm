@@ -44,9 +44,8 @@ function fixture(kind: "http" | "hls" = "http") {
     data.set(`${directory}/download.part`, bytes);
     data.set(`${directory}/response.headers`, headers);
   };
-  let download: ProcessRunner = async (file, args) => {
-    if (file === "curl") writeHttp();
-    else data.set(`${args[args.indexOf("--save-dir") + 1]}/media.ts`, "video");
+  let download: ProcessRunner = async () => {
+    writeHttp();
     return result();
   };
   let mergeResult = result();
@@ -244,42 +243,88 @@ describe("download direct-first proxy fallback", () => {
     await expect(f.start()).rejects.toMatchObject({ name: "AbortError" });
     expect(transfer).toHaveBeenCalledTimes(1);
   });
-  it("explicitly disables system proxy for HLS and uses the configured proxy only after manifest failure", async () => {
+  /** 模拟 curl：按生成的配置写出播放列表或分片，并像真实进程那样逐行报告分片结果。 */
+  const hlsCurl =
+    (
+      f: ReturnType<typeof fixture>,
+      decide: (kind: "playlist" | "segments", config: string) => ProcessResult | number | void,
+    ): ProcessRunner =>
+    async (_file, args, _signal, output) => {
+      const config = f.data.get(args[args.indexOf("--config") + 1]!)!;
+      const outputs = [...config.matchAll(/^output = "(.*)"$/gm)].map((match) => match[1]!);
+      const kind = outputs[0]!.endsWith("fetch.m3u8") ? "playlist" : "segments";
+      const decision = decide(kind, config);
+      if (typeof decision === "object") return decision;
+      const failure = typeof decision === "number" ? decision : 0;
+      if (kind === "playlist") {
+        if (failure) return result(failure, `curl: (${failure}) failed`);
+        f.data.set(
+          outputs[0]!,
+          "#EXTM3U\n#EXT-X-TARGETDURATION:5\n#EXTINF:5,\na.ts\n#EXTINF:5,\nb.ts\n#EXT-X-ENDLIST\n",
+        );
+        return result(0, "", f.task.url);
+      }
+      for (const path of outputs) {
+        if (!failure) f.data.set(path, "segment-bytes");
+        output?.(
+          `javm-transfer\t${failure}\t${failure ? 0 : 200}\t${failure ? 0 : 13}\tvideo/mp2t\t${path}\n`,
+          "stderr",
+        );
+      }
+      return result(failure);
+    };
+  it("disables system proxy for HLS and uses the configured proxy only after a network failure", async () => {
     const f = fixture("hls");
-    const argsSeen: string[][] = [];
-    f.setDownload(async (_file, args) => {
-      argsSeen.push(args);
-      if (argsSeen.length === 1)
-        return result(1, "", `20:04:37 INFO : Loading URL: ${f.task.url}\n`);
-      f.data.set(`${args[args.indexOf("--save-dir") + 1]}/media.ts`, "video");
-      return result();
-    });
+    const playlists: string[] = [];
+    f.setDownload(
+      hlsCurl(f, (kind, config) => {
+        if (kind === "playlist") playlists.push(config);
+        if (kind === "playlist" && playlists.length === 1) return 7;
+      }),
+    );
     await f.start();
-    expect(argsSeen).toHaveLength(2);
-    expect(argsSeen[0]).toContain("--use-system-proxy");
-    expect(argsSeen[0]![argsSeen[0]!.indexOf("--use-system-proxy") + 1]).toBe("false");
-    expect(argsSeen[0]).not.toContain("--custom-proxy");
-    expect(argsSeen[1]!.slice(-2)).toEqual(["--custom-proxy", proxy]);
+    expect(playlists).toHaveLength(2);
+    expect(playlists[0]).toContain('proxy = ""\nnoproxy = "*"');
+    expect(playlists[1]).toContain(`proxy = "${proxy}"\nnoproxy = ""`);
+    expect(playlists[1]).toContain("Referer: https://example.test/");
+    expect(f.getProxy).toHaveBeenCalledTimes(1);
     expect(f.data.has(f.task.output)).toBe(true);
   });
-  it("does not retry HLS disk errors or failures without network evidence", async () => {
-    for (const error of ["IOException: disk full", "invalid command line", "decryption failed"]) {
-      const f = fixture("hls");
-      f.setDownload(async () => result(1, error));
-      await expect(f.start()).rejects.toThrow("直连下载失败");
-      expect(f.getProxy).not.toHaveBeenCalled();
-    }
-  });
-  it("recognizes HLS transport I/O as a network failure", async () => {
+  it.each([
+    ["segment disk write failure", 23],
+    ["invalid local output path", 26],
+  ])("does not retry HLS %s through the proxy", async (_name, code) => {
     const f = fixture("hls");
-    f.setDownload(async () =>
-      result(
-        1,
-        "HttpRequestException: connection reset; IOException: Unable to read data from the transport connection",
-      ),
+    f.setDownload(hlsCurl(f, (kind) => (kind === "segments" ? code : undefined)));
+    await expect(f.start()).rejects.toThrow("直连下载失败");
+    expect(f.getProxy).not.toHaveBeenCalled();
+    expect(f.data.has(f.task.output)).toBe(false);
+  });
+  it("does not retry an invalid playlist through the proxy", async () => {
+    const f = fixture("hls");
+    f.setDownload(async (_file, args) => {
+      const config = f.data.get(args[args.indexOf("--config") + 1]!)!;
+      f.data.set(/^output = "(.*)"$/m.exec(config)![1]!, "<html>not a playlist</html>");
+      return result(0, "", f.task.url);
+    });
+    await expect(f.start()).rejects.toThrow("不是 HLS");
+    expect(f.getProxy).not.toHaveBeenCalled();
+  });
+  it("retries HLS segments through the proxy after a transport reset and keeps finished ones", async () => {
+    const f = fixture("hls");
+    const segmentConfigs: string[] = [];
+    f.setDownload(
+      hlsCurl(f, (kind, config) => {
+        if (kind !== "segments") return;
+        segmentConfigs.push(config);
+        if (segmentConfigs.length === 1) return 56;
+      }),
     );
-    await expect(f.start()).rejects.toThrow("代理下载失败");
+    await f.start();
     expect(f.getProxy).toHaveBeenCalledTimes(1);
+    expect(segmentConfigs).toHaveLength(2);
+    expect(segmentConfigs[1]).toContain(`proxy = "${proxy}"`);
+    expect(f.data.has(f.task.output)).toBe(true);
   });
   it("redacts authenticated proxy URLs from persisted/displayed logs", () => {
     const f = fixture();

@@ -3,21 +3,17 @@ import entities from "./builtin-entities.json";
 import {
   loadDiscovery,
   mergeDiscovery,
-  parseActorDirectory,
-  parseAvwikiDirectory,
   parseEntities,
   parseListing,
+  retainLegacyJavbusEntries,
+  nativeCatalogOverrides,
 } from "./discoveryData";
 import { catalogEntries, queryCatalog } from "./catalogData";
 import type { GenreEntry } from "./catalogData";
 import type { CatalogRequest } from "./workerClient";
 import type { DiscoveryData } from "./discoveryData";
-import { collected_at as collectedAt } from "../../../../data/catalogs/avwikidb/manifest.json";
-import { loadAvwikiSeed } from "./avwikiSeed";
-import { loadJavbusSeed } from "./javbusSeed";
-import { loadGfriendsIndex, resolveAvwikiPortraits } from "./avwikiPortraits";
-import { parseAvwikiWorkDetails, parseAvwikiWorks, resolveAvwikiEntities } from "./avwikiWorks";
-import { isAvwikiDimension } from "./avwikiCsv";
+import { appendJavbusSeed, loadJavbusSeed } from "./javbusSeed";
+import { loadGfriendsIndex, resolvePortraits } from "./portraits";
 import {
   javbusKinds,
   parseJavbusActresses,
@@ -39,6 +35,7 @@ import {
 // 请求顺序有界，由客户端限制为八个；避免异步初始化交错覆盖状态。
 let queue = Promise.resolve();
 let current: DiscoveryData | undefined;
+let baseline: DiscoveryData | undefined;
 self.onmessage = (event: MessageEvent<CatalogRequest>) => {
   queue = queue.then(() => process(event.data));
 };
@@ -47,9 +44,14 @@ async function process(request: CatalogRequest) {
   try {
     const entries = seed.entries as GenreEntry[];
     let value;
-    if (operation === "query")
+    if (operation === "javbusSeedAppend") {
+      appendJavbusSeed(payload.entries, payload.reset, payload.done);
+      baseline = undefined;
+      value = true;
+    } else if (operation === "query")
       value = queryCatalog(payload.names, payload.query, payload.page, payload.videoCounts);
-    else if (operation === "javbusActorSearch") value = parseJavbusActorSearch(payload.html,payload.url,payload.page);
+    else if (operation === "javbusActorSearch")
+      value = parseJavbusActorSearch(payload.html, payload.url, payload.page);
     else if (operation === "javbusImportCsv") {
       const files = Object.entries(payload.files) as [JavbusCatalogDimension, string][];
       if (
@@ -61,6 +63,7 @@ async function process(request: CatalogRequest) {
         throw new Error("JavBus CSV 总量超过限制。");
       value = files.flatMap(([dimension, csv]) => parseJavbusCsv(csv, dimension, Date.now()));
       if (value.length > 100_000) throw new Error("JavBus CSV 名单超过限制。");
+      value = retainLegacyJavbusEntries(value, await loadJavbusSeed());
     } else if (operation === "javbusExportCsv")
       value = serializeJavbusCsv(
         (current?.javbusEntries ?? []).filter((entry) => entry.dimension === payload.dimension),
@@ -72,26 +75,10 @@ async function process(request: CatalogRequest) {
       value = parseJavbusRelations(payload.html, Date.now());
     else if (operation === "listing") value = parseListing(payload.html, payload.lane);
     else if (operation === "entities") value = parseEntities(payload.html);
-    else if (operation === "actorDirectory")
-      value = parseActorDirectory(payload.html, payload.dimension, payload.page);
-    else if (operation === "directory")
-      value = parseAvwikiDirectory(payload.html, payload.dimension, payload.page);
-    else if (operation === "workEntities")
-      value = resolveAvwikiEntities(
-        (await loadAvwikiSeed())[payload.dimension],
-        payload.dimension,
-        payload.name,
-        current?.directoryEntries?.[payload.dimension],
-      );
-    else if (operation === "works")
-      value = parseAvwikiWorks(payload.html, payload.entity, payload.page);
-    else if (operation === "workDetails")
-      value = parseAvwikiWorkDetails(payload.html, payload.work);
     else if (operation === "javbusPlan") {
       value = planJavbusLookup(
         payload.dimension,
         payload.name,
-        isAvwikiDimension(payload.dimension) ? (await loadAvwikiSeed())[payload.dimension] : [],
         payload.dimension === "genres"
           ? catalogEntries(
               import.meta.env.DEV ? [] : entries,
@@ -99,7 +86,6 @@ async function process(request: CatalogRequest) {
               Date.now(),
             )
           : [],
-        isAvwikiDimension(payload.dimension) ? current?.directoryEntries?.[payload.dimension] : {},
       );
       const entities = new Map(value.entities.map((entity) => [entity.url, entity]));
       for (const entity of resolveJavbusCatalogEntities(
@@ -117,7 +103,7 @@ async function process(request: CatalogRequest) {
       value = parseJavbusWorks(payload.html, payload.url, payload.page);
     else if (operation === "javbusDetails")
       value = parseJavbusWorkDetails(payload.html, payload.work);
-    else if (operation === "portraits") value = await resolveAvwikiPortraits(payload, current);
+    else if (operation === "portraits") value = await resolvePortraits(payload, current);
     else if (operation === "portraitIndex") {
       loadGfriendsIndex(payload.json);
       value = true;
@@ -128,8 +114,6 @@ async function process(request: CatalogRequest) {
         entities: import.meta.env.DEV
           ? []
           : entities.entries.filter((entry) => entry.dimension === "labels"),
-        avwikiDirectories: await loadAvwikiSeed(),
-        avwikiCollectedAt: Date.parse(collectedAt),
         javbusEntries: await loadJavbusSeed(),
       };
       value =
@@ -137,8 +121,17 @@ async function process(request: CatalogRequest) {
           ? loadDiscovery(builtin, payload.cache, Date.now())
           : mergeDiscovery(builtin, payload.cache, payload.update, Date.now());
       current = value;
+      baseline ??= loadDiscovery(
+        { genres: [], actors: [], entities: [], javbusEntries: builtin.javbusEntries },
+        null,
+        Date.now(),
+      );
       // 实体身份留在 Worker；页面只需目录、计数和增量缓存，避免复制数万条对象。
-      value = { ...value, javbusEntries: undefined };
+      value = {
+        ...value,
+        javbusEntries: undefined,
+        nativeOverrides: nativeCatalogOverrides(baseline, value),
+      };
     }
     self.postMessage({ id, value });
   } catch (error) {

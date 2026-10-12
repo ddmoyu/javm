@@ -4,6 +4,8 @@
 - 状态：已采纳
 - 依据：用户要求发现页的大分类与 AVWikiDB 一致，五类名单随包提供；头像优先 AVWikiDB，GFriends 作为兜底，并缓存到 AppData。
 
+> 2026-10-12：AVWikiDB 已按用户要求移除，发现页只使用 JavBus，见 [ADR 0027](0027-javbus-only-discovery.md)。下文涉及 AVWikiDB 的内容仅为历史记录。
+
 2026-10-11 后续决策：[ADR 0024](0024-javbus-discovery-works.md) 保留本 ADR 的五类 CSV 名单，在线作品默认改接 JavBus 并增加分类入口。下文的五类入口与 AVWikiDB 在线作品路径描述保留为历史决策，冲突处以 ADR 0024 为准。
 
 ## 决策

@@ -8,15 +8,17 @@ import type { Runtime } from "./bootstrap";
 import { PortraitService } from "../../services/catalog/PortraitService";
 import { createPortraitPort } from "./portraits";
 import { createCatalogHttp } from "./catalogHttp";
-import { fetchCatalogWithWebview } from "./catalogWebview";
+import { NativeLibraryPort } from "./library";
+import { createCatalogSeedPort } from "./catalogSeed";
 
-const CACHE_KEY = "javm-discovery-catalog-v6";
+const CACHE_KEY = "javm-discovery-catalog-v8";
 export function createDiscoveryCatalogService(
   runtime: Runtime,
   network: NetworkSettingsService,
   beforeFetch: () => Promise<unknown>,
 ) {
   const processor = new CatalogWorkerClient();
+  let importLegacyCsv = true;
   let csvReady: Promise<string> | undefined;
   const csvDirectory = () =>
     (csvReady ??= (async () => {
@@ -36,20 +38,24 @@ export function createDiscoveryCatalogService(
     processor,
     runtime === "desktop" && import.meta.env.PROD
       ? {
+          ...createCatalogSeedPort(new NativeLibraryPort()),
           async read() {
             try {
               const keys = await storage.getKeys();
+              importLegacyCsv = !keys.includes(CACHE_KEY);
               const key = keys.includes(CACHE_KEY)
                 ? CACHE_KEY
-                : keys.includes("javm-discovery-catalog-v5")
-                  ? "javm-discovery-catalog-v5"
-                  : keys.includes("javm-discovery-catalog-v4")
-                    ? "javm-discovery-catalog-v4"
-                    : keys.includes("javm-discovery-catalog-v3")
-                      ? "javm-discovery-catalog-v3"
-                      : keys.includes("javm-discovery-catalog-v2")
-                        ? "javm-discovery-catalog-v2"
-                        : "javm-genre-catalog-v1";
+                : keys.includes("javm-discovery-catalog-v6")
+                  ? "javm-discovery-catalog-v6"
+                  : keys.includes("javm-discovery-catalog-v5")
+                    ? "javm-discovery-catalog-v5"
+                    : keys.includes("javm-discovery-catalog-v4")
+                      ? "javm-discovery-catalog-v4"
+                      : keys.includes("javm-discovery-catalog-v3")
+                        ? "javm-discovery-catalog-v3"
+                        : keys.includes("javm-discovery-catalog-v2")
+                          ? "javm-discovery-catalog-v2"
+                          : "javm-genre-catalog-v1";
               return keys.includes(key) ? await storage.getData(key) : null;
             } catch (error) {
               if ((error as { code?: string }).code === "NE_ST_NOSTDIR") return null;
@@ -60,6 +66,7 @@ export function createDiscoveryCatalogService(
             await storage.setData(CACHE_KEY, cache);
           },
           async readCsv() {
+            if (!importLegacyCsv) return {};
             const directory = await csvDirectory(),
               files: Partial<Record<JavbusCatalogDimension, string>> = {};
             let bytes = 0;
@@ -74,33 +81,7 @@ export function createDiscoveryCatalogService(
             }
             return files;
           },
-          async writeCsv(dimension, csv) {
-            if (!Object.hasOwn(javbusKinds, dimension)) throw new Error("目录 CSV 类型无效。");
-            const path = `${await csvDirectory()}/${dimension}.csv`,
-              temporary = `${path}.${crypto.randomUUID()}.tmp`;
-            try {
-              await filesystem.writeFile(temporary, csv);
-              const existing = await filesystem.getStats(path).catch(() => null);
-              const backup = await filesystem.getStats(`${path}.bak`).catch(() => null);
-              if ((existing && !existing.isFile) || (backup && !backup.isFile))
-                throw new Error("CSV 目标路径不是文件。");
-              if (existing?.isFile)
-                await filesystem.copy(path, `${path}.bak`, {
-                  overwrite: true,
-                  recursive: false,
-                  skip: false,
-                });
-              await filesystem.copy(temporary, path, {
-                overwrite: true,
-                recursive: false,
-                skip: false,
-              });
-            } finally {
-              if ((await filesystem.getStats(temporary).catch(() => null))?.isFile)
-                await filesystem.remove(temporary).catch(() => {});
-            }
-          },
-          fetch: createCatalogHttp(network, beforeFetch, fetchCatalogWithWebview),
+          fetch: createCatalogHttp(network, beforeFetch),
         }
       : undefined,
     runtime === "desktop" && import.meta.env.PROD

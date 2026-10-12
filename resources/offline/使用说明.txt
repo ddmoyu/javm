@@ -1,13 +1,13 @@
-JAVM 1.0.0 · Windows x64 离线运行包
+JAVM 1.0.2 · Windows x64 离线运行包
 
 1. 将整个压缩包解压到本机可写目录，双击 JAVM.exe。
-   请保留 bin 和 resources 目录，不要在压缩软件内部直接运行。
+   请保留 bin 目录，不要在压缩软件内部直接运行。图标已嵌入 JAVM.exe。
 2. 无需安装 Node.js、pnpm、Python、.NET SDK 或 Visual Studio。
    运行环境基于 Windows 10/11 x64，使用系统自带 Windows PowerShell 5.1。
    界面由 Neutralino 调用系统已安装的 WebView2 Runtime，本包不携带运行时。
    Windows 11 预装；大多数 Windows 10 已安装。缺少时需要先安装微软的
    Evergreen WebView2 Runtime；无网设备请提前准备其离线安装程序。
-   内含数据库扩展、精简 MediaInfo、N_m3u8DL-RE、
+   内含数据库扩展、精简 MediaInfo、
    精简 FFmpeg、curl 和 MetaTube，程序会自动查找包内工具。
 3. 本地片库、扫描和本地视频播放可离线使用。
    下载网络视频、MetaTube 在线查询、AI 接口调用仍需要对应网络服务。
@@ -20,24 +20,23 @@ JAVM 1.0.0 · Windows x64 离线运行包
 6. 内置播放器依赖 WebView2 支持的编码；不支持的编码可在播放设置中
    指定已安装的外部播放器。FFmpeg 使用参考老版配置的精简构建，
    保留 MP4 无损合并、媒体探测和 JPEG 抽帧，不带通用视频转码功能。
-7. package-manifest.json 记录组件版本、来源及每个文件的 SHA-256。
-   可在此目录运行以下命令检查解压完整性：
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Verify-Package.ps1
+7. 运行包只包含 JAVM.exe 和 bin 目录，不附带开发清单或校验脚本。
+   ZIP 旁的 .sha256 文件可用于核对压缩包完整性。
 8. 发现页保留现有离线名单，在线作品、分页和详情改由 JavBus 读取。
    正常站内重定向会自动处理；验证或登录入口会提示并结束读取，
    不会自动弹出来源网页。在线来源是否可用仍取决于当前网络和站点响应。
 
-许可证及构建记录已归入 package-manifest.json，不再单独附带文件。
+许可证及构建记录保存在开发目录 build/offline-manifests，不随运行包附带。
 licenseNotices 保存对应组件及许可原文；buildInformation 保存构建记录。
 第三方组件及前端依赖版本、来源也记录在该清单中。
 WebView2 由系统安装及更新。
 MediaInfo 保留原有格式解析器，关闭网络读取、报告导出、图形输出、
-详细跟踪；来源和构建配置见 bin/mediainfo-lite.json。
+详细跟踪；来源和构建配置见开发清单的 buildReceipts.mediainfo。
 WebView2 官方下载及分发说明：
 https://developer.microsoft.com/microsoft-edge/webview2/
 https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
 FFmpeg 构建及源代码说明：
-package-manifest.json（许可原文、构建脚本、配置和参考解码器列表）
-bin/tools/ffmpeg-lite.json（来源、裁剪配置标识和二进制校验值）
+build/offline-manifests（许可原文、构建脚本、配置和参考解码器列表）
+开发清单的 buildReceipts.ffmpeg（来源、裁剪配置标识和二进制校验值）
 https://github.com/ddmoyu/ffmepg/releases/tag/javm-ffmpeg-n8.0.1-20260315-153157
 https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz

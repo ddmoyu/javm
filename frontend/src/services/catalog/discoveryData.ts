@@ -1,12 +1,8 @@
 import { loadCatalog, refreshCatalog } from "./catalogData";
 import type { GenreEntry, GenreLane } from "./catalogData";
-import { avwikiSources, hasControlCharacters, isAvwikiDimension } from "./avwikiCsv";
-import type { AvwikiDimension, AvwikiEntry } from "./avwikiCsv";
-import { validPortraitUrl } from "./portraitUrls";
+import { hasControlCharacters } from "./catalogCsv";
 import {
   javbusEntryKey,
-  javbusNameIndex,
-  matchJavbusName,
   mergeJavbusEntries,
   parseJavbusGenres,
   validJavbusEntry,
@@ -37,20 +33,22 @@ export const catalogLabels: Record<CatalogDimension, string> = {
 };
 export const DISCOVERY_LIMIT = 100_000;
 export const DISCOVERY_BYTES = 16 * 1024 * 1024;
-export const ACTOR_SOURCE = "https://avwikidb.com/actor/";
-export const actorDirectorySources = {
-  actresses: ACTOR_SOURCE,
-  maleActors: "https://avwikidb.com/histrion/",
-} as const;
-export type ActorDirectoryDimension = keyof typeof actorDirectorySources;
+export type ActorDirectoryDimension = "actresses" | "maleActors";
 export const isActorDirectoryDimension = (
   dimension: string,
 ): dimension is ActorDirectoryDimension => dimension === "actresses" || dimension === "maleActors";
+// 这些维度按 JavBus 记录保持网站顺序；版本 7 之前的缓存名单来自已移除的离线名单，升级时丢弃。
+const javbusDirectoryDimensions = new Set<CatalogDimension>([
+  "actresses",
+  "maleActors",
+  "directors",
+  "studios",
+  "series",
+]);
 export interface CatalogList {
   names: string[];
   updatedAt: number | null;
   labels?: Record<string, string>;
-  seedAt?: number;
   videoCounts?: Record<string, number>;
   coverage?: { counts: number; labels: number };
 }
@@ -59,12 +57,8 @@ export interface CrawlCursor {
   pending: string[];
 }
 export interface DiscoveryData {
+  nativeOverrides?: Record<CatalogDimension, CatalogList & { positions: number[] }>;
   catalogs: Record<CatalogDimension, CatalogList>;
-  actorPages: Record<ActorDirectoryDimension, number>;
-  directoryPages: Record<AvwikiDimension, number>;
-  directoryOrderSize?: Partial<Record<AvwikiDimension, number>>;
-  directoryPortraits: Record<ActorDirectoryDimension, Record<string, string>>;
-  directoryEntries?: Partial<Record<AvwikiDimension, Record<string, string>>>;
   cursors: Record<GenreLane, CrawlCursor>;
   lane: GenreLane;
   genreCache: string;
@@ -77,9 +71,6 @@ export interface DiscoveryData {
 export interface DiscoverySeed {
   genres: GenreEntry[];
   actors: string[];
-  actorDirectories?: Partial<Record<ActorDirectoryDimension, string[]>>;
-  avwikiDirectories?: Record<AvwikiDimension, AvwikiEntry[]>;
-  avwikiCollectedAt?: number;
   javbusEntries?: JavbusCatalogEntry[];
   entities: { dimension: string; name: string }[];
 }
@@ -87,23 +78,51 @@ export type Additions = Partial<Record<CatalogDimension, string[]>>;
 export interface DiscoveryUpdate {
   javbusDirectory?: { lane: GenreLane; entries: JavbusCatalogEntry[]; nextPage: number | null };
   javbusRecords?: JavbusCatalogEntry[];
-  directory?: {
-    dimension: AvwikiDimension;
-    names: string[];
-    nextPage: number | null;
-    portraits?: Record<string, string>;
-    entries?: Record<string, string>;
-  };
-  actorDirectory?: {
-    dimension: ActorDirectoryDimension;
-    names: string[];
-    nextPage: number | null;
-  };
   genrePages?: Record<GenreLane, string>;
   entities?: { names: Additions; cursor: CrawlCursor; lane: GenreLane };
 }
 export const isCatalogDimension = (value: string): value is CatalogDimension =>
   (catalogDimensions as readonly string[]).includes(value);
+// 升级只淘汰旧快照中的普通未知演员；明确数量和人工名称资料继续保留。
+export function retainLegacyJavbusEntries(
+  entries: JavbusCatalogEntry[],
+  seed: JavbusCatalogEntry[],
+) {
+  const retained = new Set(seed.map(javbusEntryKey));
+  return entries.filter(
+    (entry) =>
+      !isActorDirectoryDimension(entry.dimension) ||
+      entry.videoCount !== undefined ||
+      retained.has(javbusEntryKey(entry)) ||
+      entry.translationStatus !== "pending" ||
+      entry.label !== entry.name ||
+      entry.aliases.length > 0,
+  );
+}
+export function nativeCatalogOverrides(baseline: DiscoveryData, data: DiscoveryData) {
+  return Object.fromEntries(
+    catalogDimensions.map((dimension) => {
+      const old = baseline.catalogs[dimension];
+      const positions = new Map(old.names.map((name, index) => [name, index]));
+      const list = data.catalogs[dimension];
+      const changed: CatalogList & { positions: number[] } = {
+        names: [],
+        positions: [],
+        videoCounts: Object.create(null),
+        updatedAt: list.updatedAt,
+      };
+      list.names.forEach((name, index) => {
+        if (positions.get(name) === index && old.videoCounts?.[name] === list.videoCounts?.[name])
+          return;
+        changed.names.push(name);
+        changed.positions.push(index);
+        if (Object.hasOwn(list.videoCounts ?? {}, name))
+          changed.videoCounts![name] = list.videoCounts![name]!;
+      });
+      return [dimension, changed];
+    }),
+  ) as NonNullable<DiscoveryData["nativeOverrides"]>;
+}
 const validName = (value: unknown): value is string =>
   typeof value === "string" &&
   value.trim() === value &&
@@ -133,11 +152,8 @@ const cursorValid = (value: CrawlCursor, lane: GenreLane) =>
   Array.isArray(value.pending) &&
   value.pending.length <= 100 &&
   value.pending.every((path) => typeof path === "string" && moviePath(path));
-function applyJavbusCatalogs(data: Omit<DiscoveryData, "cache">, seed: DiscoverySeed) {
+function applyJavbusCatalogs(data: Omit<DiscoveryData, "cache">) {
   for (const dimension of catalogDimensions) {
-    const index = javbusNameIndex(
-      isAvwikiDimension(dimension) ? seed.avwikiDirectories?.[dimension] : [],
-    );
     const grouped = new Map<string, JavbusCatalogEntry[]>();
     const sourceRows = (data.javbusEntries ?? []).filter((entry) => entry.dimension === dimension);
     const rows = [
@@ -145,24 +161,16 @@ function applyJavbusCatalogs(data: Omit<DiscoveryData, "cache">, seed: Discovery
       ...sourceRows.filter((entry) => entry.lane === "uncensored"),
     ];
     for (const row of rows) {
-      const name = matchJavbusName(row, index),
-        entries = grouped.get(name) ?? [];
+      const entries = grouped.get(row.name) ?? [];
       entries.push(row);
-      grouped.set(name, entries);
+      grouped.set(row.name, entries);
     }
     const old = data.catalogs[dimension],
       labels: Record<string, string> = Object.assign(Object.create(null), old.labels),
-      originalLabels = isAvwikiDimension(dimension)
-        ? new Set(
-            (seed.avwikiDirectories?.[dimension] ?? [])
-              .filter((entry) => entry.label !== entry.name)
-              .map((entry) => entry.name),
-          )
-        : new Set<string>(),
       videoCounts: Record<string, number> = Object.create(null);
     for (const [name, entries] of grouped) {
       const translated = entries.find((entry) => entry.label !== entry.name);
-      if (translated && !originalLabels.has(name)) labels[name] = translated.label;
+      if (translated) labels[name] = translated.label;
       // 同一 ID 的两个分区分别保存；只有每个分区均有明确数量才合计。
       // 同名多 ID 不推断是同一实体，也不把局部数量冒充总数。
       if (
@@ -184,7 +192,7 @@ function applyJavbusCatalogs(data: Omit<DiscoveryData, "cache">, seed: Discovery
   }
 }
 function encode(data: Omit<DiscoveryData, "cache">, seed?: DiscoverySeed): DiscoveryData {
-  if (seed) applyJavbusCatalogs(data, seed);
+  if (seed) applyJavbusCatalogs(data);
   const baseline = new Map(
     (seed?.javbusEntries ?? []).map((entry) => [javbusEntryKey(entry), entry]),
   );
@@ -215,7 +223,7 @@ function encode(data: Omit<DiscoveryData, "cache">, seed?: DiscoverySeed): Disco
     }
   }
   const cache = JSON.stringify({
-    version: 6,
+    version: 8,
     ...data,
     javbusEntries: changed,
     ...(countUpdates.length ? { javbusCountUpdates: countUpdates } : {}),
@@ -233,46 +241,22 @@ export function loadDiscovery(
     catalogDimensions.map((dimension) => [
       dimension,
       {
-        names: (isAvwikiDimension(dimension) ? uniqueNames : sortNames)(
-          isAvwikiDimension(dimension) && seed.avwikiDirectories
-            ? seed.avwikiDirectories[dimension].map((entry) => entry.name)
-            : dimension === "genres"
-              ? genres.names
-              : isActorDirectoryDimension(dimension)
-                ? (seed.actorDirectories?.[dimension] ?? [])
-                : dimension === "actors"
-                  ? [
-                      ...seed.actors,
-                      ...seed.entities
-                        .filter((entry) => entry.dimension === dimension)
-                        .map((entry) => entry.name),
-                    ]
-                  : seed.entities
-                      .filter((entry) => entry.dimension === dimension)
-                      .map((entry) => entry.name),
+        names: sortNames(
+          dimension === "genres"
+            ? genres.names
+            : [
+                ...(dimension === "actors" ? seed.actors : []),
+                ...seed.entities
+                  .filter((entry) => entry.dimension === dimension)
+                  .map((entry) => entry.name),
+              ],
         ),
         updatedAt: null,
-        ...(isAvwikiDimension(dimension) && seed.avwikiCollectedAt
-          ? { seedAt: seed.avwikiCollectedAt }
-          : {}),
-        ...(isAvwikiDimension(dimension) && seed.avwikiDirectories
-          ? {
-              labels: Object.fromEntries(
-                seed.avwikiDirectories[dimension]
-                  .filter((entry) => entry.label !== entry.name)
-                  .map((entry) => [entry.name, entry.label]),
-              ),
-            }
-          : {}),
       },
     ]),
   ) as DiscoveryData["catalogs"];
   let data: Omit<DiscoveryData, "cache"> = {
     catalogs,
-    actorPages: { actresses: 1, maleActors: 1 },
-    directoryPages: { actresses: 1, maleActors: 1, directors: 1, studios: 1, series: 1 },
-    directoryOrderSize: {},
-    directoryPortraits: { actresses: {}, maleActors: {} },
     genreCache: genres.cache,
     javbusEntries: mergeJavbusEntries([], seed.javbusEntries ?? [], now),
     javbusPages: { censored: 1, uncensored: 1 },
@@ -296,7 +280,7 @@ export function loadDiscovery(
       return encode(data, seed);
     }
     if (
-      ![2, 3, 4, 5, 6].includes(value.version) ||
+      ![2, 3, 4, 5, 6, 7, 8].includes(value.version) ||
       typeof value.genreCache !== "string" ||
       !["censored", "uncensored"].includes(value.lane) ||
       !cursorValid(value.cursors?.censored, "censored") ||
@@ -304,16 +288,11 @@ export function loadDiscovery(
     )
       throw new Error();
     for (const dimension of catalogDimensions) {
-      // 五类目录以 AVWikiDB 为准，不混入旧 JavBus/GFriends 名称。
-      if (
-        value.version < 4 &&
-        seed.avwikiDirectories &&
-        (dimension === "actors" || isAvwikiDimension(dimension))
-      )
-        continue;
-      // 旧版演员缓存混有 GFriends 名称，不能据此推断演员的目录归属。
-      if (value.version === 2 && (dimension === "actors" || isActorDirectoryDimension(dimension)))
-        continue;
+      // 演员显示名单从保留的身份记录重建，旧全量 names 不再补回未知演员。
+      if (isActorDirectoryDimension(dimension)) continue;
+      if (value.version < 7 && javbusDirectoryDimensions.has(dimension)) continue;
+      // 旧版演员缓存混有其他来源名称，不能据此推断演员的目录归属。
+      if (value.version < 4 && dimension === "actors") continue;
       const list = value.catalogs?.[dimension];
       if (
         !list ||
@@ -323,62 +302,15 @@ export function loadDiscovery(
         !validTime(list.updatedAt, now)
       )
         throw new Error();
-      // v4 名单已按名称重排，只能从内置快照恢复顺序；v5 优先保留更新后的顺序。
-      const names = isAvwikiDimension(dimension)
-        ? uniqueNames(
-            value.version >= 5
-              ? [...list.names, ...catalogs[dimension].names]
-              : [...catalogs[dimension].names, ...list.names],
-          )
+      // JavBus 目录保留网站顺序；其余维度按名称排序。
+      const names = javbusDirectoryDimensions.has(dimension)
+        ? uniqueNames([...list.names, ...catalogs[dimension].names])
         : sortNames([...catalogs[dimension].names, ...list.names]);
       if (names.length > DISCOVERY_LIMIT) throw new Error();
       catalogs[dimension] = { ...catalogs[dimension], names, updatedAt: list.updatedAt };
     }
     const savedGenres = loadCatalog(seed.genres, value.genreCache, now);
     catalogs.genres = { names: savedGenres.names, updatedAt: savedGenres.updatedAt };
-    if (value.version === 3 && !seed.avwikiDirectories) {
-      for (const dimension of ["actresses", "maleActors"] as const) {
-        const page = value.actorPages?.[dimension];
-        if (!Number.isInteger(page) || page < 1 || page > 1000) throw new Error();
-        data.actorPages[dimension] = page;
-        data.directoryPages[dimension] = page;
-      }
-    }
-    if (value.version >= 4) {
-      for (const dimension of Object.keys(avwikiSources) as AvwikiDimension[]) {
-        const page = value.directoryPages?.[dimension];
-        if (!Number.isInteger(page) || page < 1 || page > 1000) throw new Error();
-        // 旧缓存没有分页顺序，保留名单并从首页重新建立顺序。
-        data.directoryPages[dimension] = value.version >= 5 ? page : 1;
-        if (value.version >= 5) {
-          const size = value.directoryOrderSize?.[dimension] ?? 0;
-          if (!Number.isInteger(size) || size < 0 || size > value.catalogs[dimension].names.length)
-            throw new Error();
-          data.directoryOrderSize![dimension] = size;
-        }
-        const entries = value.directoryEntries?.[dimension];
-        if (entries !== undefined) {
-          validateDirectoryEntries(entries);
-          (data.directoryEntries ??= {})[dimension] = entries;
-        }
-        if (isActorDirectoryDimension(dimension))
-          data.actorPages[dimension] = data.directoryPages[dimension];
-      }
-      for (const dimension of ["actresses", "maleActors"] as const) {
-        const images = value.directoryPortraits?.[dimension] ?? {};
-        if (
-          !images ||
-          typeof images !== "object" ||
-          Array.isArray(images) ||
-          Object.keys(images).length > DISCOVERY_LIMIT ||
-          Object.entries(images).some(
-            ([name, url]) => !validName(name) || typeof url !== "string" || !validPortraitUrl(url),
-          )
-        )
-          throw new Error();
-        data.directoryPortraits[dimension] = images;
-      }
-    }
     if (value.version >= 6) {
       if (
         !Array.isArray(value.javbusEntries) ||
@@ -388,7 +320,13 @@ export function loadDiscovery(
         !["censored", "uncensored"].includes(value.javbusLane)
       )
         throw new Error();
-      data.javbusEntries = mergeJavbusEntries(data.javbusEntries!, value.javbusEntries, now);
+      data.javbusEntries = mergeJavbusEntries(
+        data.javbusEntries!,
+        value.version < 8
+          ? retainLegacyJavbusEntries(value.javbusEntries, seed.javbusEntries ?? [])
+          : value.javbusEntries,
+        now,
+      );
       if (value.javbusCountUpdates !== undefined) {
         if (
           !Array.isArray(value.javbusCountUpdates) ||
@@ -403,6 +341,7 @@ export function loadDiscovery(
           const [dimension, lane, id, videoCount, countUpdatedAt] = update;
           const key = `${dimension}:${lane}:${id}`;
           const old = entries.get(key);
+          if (!old && value.version < 8 && isActorDirectoryDimension(dimension)) continue;
           if (!old || seen.has(key)) throw new Error();
           const entry = { ...old, videoCount, countUpdatedAt };
           if (!validJavbusEntry(entry, now)) throw new Error();
@@ -421,14 +360,15 @@ export function loadDiscovery(
           page > JAVBUS_ACTRESSES_PAGE_LIMIT ||
           !Number.isInteger(size) ||
           size < 0 ||
-          size >
-            data.javbusEntries.filter(
-              (entry) => entry.dimension === "actresses" && entry.lane === lane,
-            ).length
+          (value.version >= 8 &&
+            size >
+              data.javbusEntries.filter(
+                (entry) => entry.dimension === "actresses" && entry.lane === lane,
+              ).length)
         )
           throw new Error();
         data.javbusPages![lane] = page;
-        data.javbusOrderSize![lane] = size;
+        data.javbusOrderSize![lane] = value.version < 8 ? 0 : size;
       }
     }
     data = {
@@ -450,63 +390,6 @@ export function mergeDiscovery(
   now: number,
 ) {
   const data = loadDiscovery(seed, cache, now);
-  if (update.directory) {
-    const { dimension, names, nextPage } = update.directory;
-    if (
-      !isAvwikiDimension(dimension) ||
-      names.length > 1000 ||
-      !names.every(validName) ||
-      (nextPage !== null && (!Number.isInteger(nextPage) || nextPage < 1 || nextPage > 1000))
-    )
-      throw new Error("目录更新无效，已保留原名单。");
-    const previous = data.catalogs[dimension].names;
-    const prefixSize =
-      data.directoryPages[dimension] === 1 ? 0 : (data.directoryOrderSize?.[dimension] ?? 0);
-    // 将本轮已读取的页面按来源顺序连在一起，未刷新到的旧条目仍保留在后面。
-    const prefix = uniqueNames([...previous.slice(0, prefixSize), ...names]);
-    data.catalogs[dimension] = {
-      ...data.catalogs[dimension],
-      names: uniqueNames([...prefix, ...previous]),
-      updatedAt: now,
-    };
-    (data.directoryOrderSize ??= {})[dimension] = nextPage === null ? 0 : prefix.length;
-    data.directoryPages[dimension] = nextPage ?? 1;
-    if (update.directory.entries) {
-      validateDirectoryEntries(update.directory.entries);
-      const entries = { ...data.directoryEntries?.[dimension], ...update.directory.entries };
-      validateDirectoryEntries(entries);
-      (data.directoryEntries ??= {})[dimension] = entries;
-    }
-    if (isActorDirectoryDimension(dimension)) data.actorPages[dimension] = nextPage ?? 1;
-    if (isActorDirectoryDimension(dimension) && update.directory.portraits) {
-      const images = update.directory.portraits;
-      if (
-        Object.keys(images).length > 1000 ||
-        Object.entries(images).some(
-          ([name, url]) => !names.includes(name) || !validName(name) || !validPortraitUrl(url),
-        )
-      )
-        throw new Error("目录头像地址无效，已保留原名单。");
-      data.directoryPortraits[dimension] = { ...data.directoryPortraits[dimension], ...images };
-      if (Object.keys(data.directoryPortraits[dimension]).length > DISCOVERY_LIMIT)
-        throw new Error("目录头像数量超过限制，已保留原名单。");
-    }
-  }
-  if (update.actorDirectory) {
-    const { dimension, names, nextPage } = update.actorDirectory;
-    if (
-      !isActorDirectoryDimension(dimension) ||
-      names.length > 1000 ||
-      !names.every(validName) ||
-      (nextPage !== null && (!Number.isInteger(nextPage) || nextPage < 1 || nextPage > 1000))
-    )
-      throw new Error("演员目录更新无效，已保留原名单。");
-    data.catalogs[dimension] = {
-      names: uniqueNames([...data.catalogs[dimension].names, ...names]),
-      updatedAt: now,
-    };
-    data.actorPages[dimension] = nextPage ?? 1;
-  }
   if (update.genrePages) {
     const value = refreshCatalog(seed.genres, data.genreCache, update.genrePages, now);
     data.catalogs.genres = { names: value.names, updatedAt: value.updatedAt };
@@ -553,10 +436,7 @@ export function mergeDiscovery(
     const { names, cursor, lane } = update.entities;
     if (!cursorValid(cursor, lane)) throw new Error("目录更新位置无效，已保留原名单。");
     for (const dimension of catalogDimensions.filter(
-      (value) =>
-        value !== "genres" &&
-        !isActorDirectoryDimension(value) &&
-        !(seed.avwikiDirectories && isAvwikiDimension(value)),
+      (value) => value !== "genres" && !isActorDirectoryDimension(value),
     )) {
       const incoming = names[dimension] ?? [];
       if (incoming.length > DISCOVERY_LIMIT || !incoming.every(validName))
@@ -659,95 +539,4 @@ export function parseEntities(html: string): Additions {
   }
   if (!Object.keys(names).length) throw new Error("网站资料结构已变化，已保留原名单。");
   return names;
-}
-
-export function parseActorDirectory(
-  html: string,
-  dimension: ActorDirectoryDimension,
-  page: number,
-) {
-  return parseAvwikiDirectory(html, dimension, page);
-}
-export function parseAvwikiDirectory(html: string, dimension: AvwikiDimension, page: number) {
-  if (html.length > 2 * 1024 * 1024 || !Number.isInteger(page) || page < 1 || page > 1000)
-    throw new Error("演员目录响应无效，已保留原名单。");
-  const kind = new URL(avwikiSources[dimension]).pathname.split("/")[1]!;
-  const source = html.replace(/<!--[^]*?-->|<(script|style)\b[^>]*>[^]*?<\/\1\s*>/gi, "");
-  const total = Number(
-    text(source)
-      .match(/全\s*([\d,]+)\s*件/)?.[1]
-      ?.replaceAll(",", ""),
-  );
-  const entries = new Map<string, string>();
-  let invalidIds = 0;
-  let nextPage: number | null = null;
-  const grid =
-    /<ul\b[^>]*class\s*=\s*["'][^"']*\bentity-grid\b[^"']*["'][^>]*>([^]*?)<\/ul\s*>/i.exec(
-      source,
-    )?.[1];
-  if (!grid) throw new Error("来源未返回目录主列表，已保留原名单。");
-  for (const match of grid.matchAll(/<a\b([^>]{0,4096})>([^]*?)<\/a\s*>/gi)) {
-    const href = /\bhref\s*=\s*(["'])([^"']+)\1/i.exec(match[1]!);
-    if (!href || match[2]!.length > 8192) continue;
-    let url: URL;
-    try {
-      url = new URL(text(href[2]!), avwikiSources[dimension]);
-    } catch {
-      continue;
-    }
-    if (url.origin !== "https://avwikidb.com" || url.hash) continue;
-    // 来源偶有无编号的 /null/ 条目，只跳过这种已知异常。
-    if (url.pathname === `/${kind}/null/` && !url.search) {
-      invalidIds++;
-      continue;
-    }
-    const entity = new RegExp(`^/${kind}/([a-z]?[0-9]+)/?$`).exec(url.pathname);
-    if (entity && !url.search) {
-      const name = text(match[2]!);
-      if (validName(name)) entries.set(entity[1]!, name);
-    }
-  }
-  const next = new RegExp(`href\\s*=\\s*["']/${kind}/\\?page=${page + 1}["']`, "i");
-  if (next.test(source)) nextPage = page + 1;
-  const portraits: Record<string, string> = Object.create(null);
-  if (isActorDirectoryDimension(dimension)) {
-    const counts = new Map<string, number>();
-    for (const name of entries.values()) counts.set(name, (counts.get(name) ?? 0) + 1);
-    for (const card of grid.matchAll(/<li\b[^>]*>([^]*?)<\/li\s*>/gi)) {
-      const id = new RegExp(`href\\s*=\\s*["']/${kind}/([a-z]?[0-9]+)/["']`, "i").exec(
-        card[1]!,
-      )?.[1];
-      const name = id && entries.get(id);
-      const image = /<img\b[^>]*\bsrc\s*=\s*(["'])([^"']+)\1/i.exec(card[1]!)?.[2];
-      if (name && counts.get(name) === 1 && image && validPortraitUrl(text(image)))
-        portraits[name] = text(image);
-    }
-  }
-  const expected = Math.min(100, total - (page - 1) * 100);
-  if (
-    !Number.isInteger(total) ||
-    total < 1 ||
-    total > DISCOVERY_LIMIT ||
-    expected < 1 ||
-    entries.size + invalidIds !== expected ||
-    (total > page * 100 && nextPage === null)
-  )
-    throw new Error("演员来源未返回完整目录分页，已保留原名单。");
-  return {
-    names: uniqueNames([...entries.values()]),
-    entries: Object.fromEntries(entries),
-    nextPage,
-    ...(Object.keys(portraits).length ? { portraits } : {}),
-  };
-}
-
-function validateDirectoryEntries(value: unknown) {
-  if (
-    !value ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    Object.keys(value).length > DISCOVERY_LIMIT ||
-    Object.entries(value).some(([id, name]) => !/^[a-z]?\d{1,16}$/.test(id) || !validName(name))
-  )
-    throw new Error("目录来源身份无效，已保留原名单。");
 }

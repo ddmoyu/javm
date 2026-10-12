@@ -83,7 +83,6 @@ try {
   const settings = {
     ...defaultDownloadSettings,
     ffmpegPath: `${config.tools}/ffmpeg.exe`,
-    hlsPath: `${config.tools}/N_m3u8DL-RE.exe`,
     curlPath: `${config.tools}/curl.exe`,
   };
   await filesystem.createDirectory(download.directory);

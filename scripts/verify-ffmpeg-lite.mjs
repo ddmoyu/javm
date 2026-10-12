@@ -56,9 +56,11 @@ export async function verifyFfmpegLite(directory, expected, env = process.env, b
   if (
     !protocols.includes("file") ||
     !protocols.includes("pipe") ||
-    protocols.some((name) => !["file", "pipe"].includes(name))
+    !protocols.includes("crypto") ||
+    // crypto 只在本地解密 AES-128 HLS 分片，仍不允许任何网络协议。
+    protocols.some((name) => !["file", "pipe", "crypto"].includes(name))
   )
-    throw new Error("FFmpeg lite must only use file/pipe protocols.");
+    throw new Error("FFmpeg lite must only use file/pipe/crypto protocols.");
   const encoders = [
     ...run("ffmpeg.exe", "-encoders").matchAll(/^\s*[VAS][A-Z.]{5}\s+(\w+)\s+/gm),
   ].map((match) => match[1]);

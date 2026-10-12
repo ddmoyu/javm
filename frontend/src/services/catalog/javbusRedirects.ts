@@ -1,5 +1,5 @@
 import type { HttpRequest, HttpResponse } from "../network/HttpService";
-import { hasControlCharacters } from "./avwikiCsv";
+import { hasControlCharacters } from "./catalogCsv";
 import { isJavbusCatalogUrl, JAVBUS_ORIGIN } from "./javbusWorks";
 
 const hosts = new Set(["www.javbus.com", "javbus.com"]);

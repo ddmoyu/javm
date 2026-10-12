@@ -109,6 +109,32 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
     }
     Json source={{"workId",id},{"hasVideo",!current["media_files"].empty()},{"provider",provider},{"id",providerId},{"homepage",details.value("homepage",std::string{})}};
     source["sources"]=sources;
+    if(details.value("origin",std::string{})=="metatube") {
+        source["origin"]="metatube";
+        const auto previewUrl=[](const Json& value) -> std::string {
+            if(!value.is_string()) return {};
+            const auto url=value.get<std::string>();
+            if(url.size()>2048 || (!url.starts_with("https://") && !url.starts_with("http://")) ||
+                std::any_of(url.begin(),url.end(),[](unsigned char c){return c<=32 || c==127;})) return {};
+            const auto start=url.find("://")+3, end=url.find_first_of("/?#",start);
+            const auto authority=url.substr(start,end==std::string::npos?end:end-start);
+            return authority.empty() || authority.find('@')!=std::string::npos ? std::string{} : url;
+        };
+        Json preview={{"homepage",previewUrl(details.value("homepage",Json()))},{"previewImages",Json::array()}};
+        for(const auto* key:{"previewVideoUrl","previewVideoHlsUrl"}) {
+            const auto url=previewUrl(details.value(key,Json()));
+            if(!url.empty()) preview[key]=url;
+        }
+        const auto images=details.value("previewImages",Json::array());
+        std::set<std::string> seen;
+        if(images.is_array()) for(const auto& value:images) {
+            const auto url=previewUrl(value);
+            if(!url.empty() && seen.insert(url).second) preview["previewImages"].push_back(url);
+            if(preview["previewImages"].size()>=24) break;
+        }
+        // 仅保存用户主动刮削得到的链接，普通目录收藏不能触发或覆盖此预览。
+        provenance["_preview"]=preview;
+    }
     // 文件与 SQLite 无法跨介质原子提交；文件先安全替换，数据库失败时可幂等重试。
     const auto original=writeScrapedNfo(nfoPath,metadata,source,params.value("nfoStamp",std::string{}));
     const auto parsed=readNfo(nfoPath);

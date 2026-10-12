@@ -1,10 +1,7 @@
 import { expect, it, vi } from "vite-plus/test";
-import {
-  javbusEntryFromEntity,
-  serializeJavbusCsv,
-} from "../frontend/src/services/catalog/javbusCatalog";
+import { javbusEntryFromEntity } from "../frontend/src/services/catalog/javbusCatalog";
 
-it("生产内置名单读取明确数量，开发模式不请求真实目录", async () => {
+it("生产 SQLite 批次保留明确数量，开发模式不请求真实目录", async () => {
   const now = Date.now();
   const rows = {
     actresses: javbusEntryFromEntity(
@@ -26,32 +23,32 @@ it("生产内置名单读取明确数量，开发模式不请求真实目录", a
       1234,
     ),
   };
-  const request = vi.fn(async (url: string) => {
-    const dimension = Object.keys(rows).find((key) => url.includes(`/${key}.csv`)) as
-      | keyof typeof rows
-      | undefined;
-    return new Response(serializeJavbusCsv(dimension ? [rows[dimension]] : [], now));
+  const request = vi.fn(() => {
+    throw new Error("Safe fixture must not fetch");
   });
   vi.stubGlobal("fetch", request);
   try {
     vi.stubEnv("DEV", true);
     vi.resetModules();
-    expect(
-      await (await import("../frontend/src/services/catalog/javbusSeed")).loadJavbusSeed(),
-    ).toEqual([]);
+    const samples = await (
+      await import("../frontend/src/services/catalog/javbusSeed")
+    ).loadJavbusSeed();
+    expect(samples.every((entry) => entry.name.startsWith("示例"))).toBe(true);
     expect(request).not.toHaveBeenCalled();
     vi.stubEnv("DEV", false);
     vi.resetModules();
-    const { loadJavbusSeed } = await import("../frontend/src/services/catalog/javbusSeed");
+    const { loadJavbusSeed, appendJavbusSeed } =
+      await import("../frontend/src/services/catalog/javbusSeed");
+    appendJavbusSeed(Object.values(rows), true, true);
     const entries = await loadJavbusSeed();
     expect(entries.map((entry) => [entry.dimension, entry.videoCount])).toEqual([
       ["actresses", 417],
       ["studios", 0],
       ["labels", 1234],
     ]);
-    expect(request).toHaveBeenCalledTimes(7);
+    expect(request).not.toHaveBeenCalled();
     expect(await loadJavbusSeed()).toBe(entries);
-    expect(request).toHaveBeenCalledTimes(7);
+    expect(request).not.toHaveBeenCalled();
   } finally {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();

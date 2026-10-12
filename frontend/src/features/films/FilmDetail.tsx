@@ -15,7 +15,7 @@ import {
   Title,
   UnstyledButton,
 } from "@mantine/core";
-import type { Film, MediaImage, MediaTrailer, MediaFile } from "../../contracts/media";
+import type { Film, MediaImage, MediaTrailer } from "../../contracts/media";
 import type { FilmDetailView } from "../../app/state";
 import { useWorkspace } from "../../app/state";
 import { getFilmMetadata } from "./filmMetadata";
@@ -30,12 +30,10 @@ import { FilmArtworkEditor } from "./FilmArtworkEditor";
 import type { ArtworkMode } from "./FilmArtworkEditor";
 import { FilmEditor } from "./FilmEditor";
 import { FilmResources } from "./FilmResources";
-import { ResourceLookupButton } from "../resources/ResourceSearch";
 import { os } from "@neutralinojs/lib";
 import { libraryError } from "../../services/library/LibraryService";
 import { LibraryDocumentsPanel } from "../directories/LibraryDocumentsPanel";
 import { FileOrganizationModal } from "./FileOrganizationModal";
-import { RelatedMediaModal } from "./RelatedMediaModal";
 
 interface Props {
   film: Film | null;
@@ -70,7 +68,6 @@ function FilmDetailContent({
     resourceSearch,
   } = useWorkspace();
   const [busy, setBusy] = useState(false);
-  const [related, setRelated] = useState<MediaFile | null>(null);
   const [removing, setRemoving] = useState(false);
   const [organizing, setOrganizing] = useState<{ id: string; path: string } | null>(null);
   const [removingResource, setRemovingResource] = useState<{ id: string; path: string } | null>(
@@ -117,11 +114,10 @@ function FilmDetailContent({
       ? [{ src: film.coverUrl, title: `${film.title} · 封面` }]
       : [];
   const gallery: MediaImage[] = [...covers, ...(film.screenshots ?? [])];
-  const trailers = film.trailers ?? [];
   const playTrailer = (trailer: MediaTrailer) => {
     onClose();
     playSource(trailer.src, {
-      title: `${film.code || film.title} · 预告片`,
+      title: `${film.code || film.title} · 预览片`,
       format: trailer.format,
       referer: metadata.homepage || undefined,
     });
@@ -133,8 +129,7 @@ function FilmDetailContent({
     removing ||
     !!removingResource ||
     !!removingImages ||
-    !!organizing ||
-    !!related;
+    !!organizing;
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -235,7 +230,7 @@ function FilmDetailContent({
               disabled={!film.coverUrl}
               onClick={() => open(gallery, 0, metadata.homepage)}
             >
-              <Poster film={film} natural />
+              <Poster film={film} />
             </UnstyledButton>
             {covers.length > 1 && (
               <Button
@@ -293,53 +288,11 @@ function FilmDetailContent({
                 </Text>
               )}
             </UnstyledButton>
-            {(trailers.length > 0 ||
-              (preview && onCollect) ||
-              (tab !== "links" && resourceSearch)) && (
+            {preview && onCollect && (
               <Group gap="sm" wrap="wrap">
-                {trailers[0] && (
-                  <Group gap={6} wrap="nowrap">
-                    <Button
-                      leftSection={<Icon name="play" size={16} />}
-                      onClick={() => playTrailer(trailers[0]!)}
-                    >
-                      播放预告片
-                    </Button>
-                    {trailers.length > 1 && (
-                      <Menu position="bottom-start">
-                        <Menu.Target>
-                          <Button variant="light" px={10} aria-label="其他预告片">
-                            <Icon name="down" size={16} />
-                          </Button>
-                        </Menu.Target>
-                        <Menu.Dropdown>
-                          {trailers.slice(1).map((trailer) => (
-                            <Menu.Item
-                              key={trailer.src}
-                              leftSection={<Icon name="play" size={16} />}
-                              onClick={() => playTrailer(trailer)}
-                            >
-                              {trailer.format === "hls" ? "预告片（流媒体）" : "预告片（普通视频）"}
-                            </Menu.Item>
-                          ))}
-                        </Menu.Dropdown>
-                      </Menu>
-                    )}
-                  </Group>
-                )}
-                {preview && onCollect && (
-                  <Button loading={busy} onClick={() => void operate(onCollect)}>
-                    收藏并保存资料
-                  </Button>
-                )}
-                {tab !== "links" && resourceSearch && (
-                  <ResourceLookupButton
-                    service={resourceSearch}
-                    code={film.code}
-                    workId={preview ? undefined : String(film.id)}
-                    onStart={() => setTab("links")}
-                  />
-                )}
+                <Button loading={busy} onClick={() => void operate(onCollect)}>
+                  收藏并保存资料
+                </Button>
               </Group>
             )}
             {preview && previewStatus}
@@ -369,17 +322,22 @@ function FilmDetailContent({
                 >
                   刮削资料
                 </Button>
-                <Button variant="default" onClick={() => add("download", film)}>
-                  下载视频
-                </Button>
-                <Button
-                  variant="default"
-                  loading={busy}
-                  disabled={runtime !== "desktop"}
-                  onClick={() => void attach()}
-                >
-                  关联视频
-                </Button>
+                {/* 已有可播放的本地视频时不再突出下载与关联，关联入口收进更多菜单。 */}
+                {!playable && (
+                  <>
+                    <Button variant="default" onClick={() => add("download", film)}>
+                      下载视频
+                    </Button>
+                    <Button
+                      variant="default"
+                      loading={busy}
+                      disabled={runtime !== "desktop"}
+                      onClick={() => void attach()}
+                    >
+                      关联视频
+                    </Button>
+                  </>
+                )}
                 <Menu position="bottom-end">
                   <Menu.Target>
                     <Button aria-label="更多影片操作" variant="default" px={10}>
@@ -390,6 +348,14 @@ function FilmDetailContent({
                     <Menu.Item onClick={() => setEditing(true)}>编辑资料</Menu.Item>
                     <Menu.Item onClick={() => action("fetch")}>获取封面与截图</Menu.Item>
                     <Menu.Item onClick={() => setTab("files")}>查看本地文件</Menu.Item>
+                    {playable && (
+                      <Menu.Item
+                        disabled={busy || runtime !== "desktop"}
+                        onClick={() => void attach()}
+                      >
+                        关联其他视频
+                      </Menu.Item>
+                    )}
                     <Menu.Divider />
                     <Menu.Item
                       color="red"
@@ -406,7 +372,7 @@ function FilmDetailContent({
         </Group>
         <Tabs value={tab} onChange={setTab} mt="xl">
           <Tabs.List mb="lg">
-            <Tabs.Tab value="info">资料与截图</Tabs.Tab>
+            <Tabs.Tab value="info">资料与预览</Tabs.Tab>
             <Tabs.Tab value="links">资源链接</Tabs.Tab>
             {!preview && <Tabs.Tab value="files">本地文件</Tabs.Tab>}
           </Tabs.List>
@@ -424,8 +390,9 @@ function FilmDetailContent({
               </DataList>
               <FilmScreenshots
                 film={film}
-                label={preview || film.availability === "metadata_only" ? "预览截图" : "视频截图"}
+                label="预览"
                 onAction={preview ? undefined : action}
+                onPlayTrailer={playTrailer}
               />
             </SimpleGrid>
             {metadata.plot && (
@@ -480,16 +447,6 @@ function FilmDetailContent({
                         <Button variant="subtle" size="xs" onClick={() => void copy(file.path)}>
                           复制路径
                         </Button>
-                        {file.kind === "video" && file.id && (
-                          <Button
-                            size="xs"
-                            variant="subtle"
-                            disabled={busy}
-                            onClick={() => setRelated(file)}
-                          >
-                            分卷设置
-                          </Button>
-                        )}
                         {file.kind === "video" && file.id && library.maintenance && (
                           <Button
                             color="red"
@@ -557,9 +514,6 @@ function FilmDetailContent({
         </Stack>
       </Modal>
       {editing && <FilmEditor film={film} onClose={() => setEditing(false)} />}
-      {related && (
-        <RelatedMediaModal file={related} library={library} onClose={() => setRelated(null)} />
-      )}
       {organizing && library.organization && (
         <FileOrganizationModal
           service={library.organization}

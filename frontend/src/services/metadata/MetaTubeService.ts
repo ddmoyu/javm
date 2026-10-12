@@ -34,6 +34,8 @@ export interface MovieCandidate {
   title: string;
 }
 export interface MovieDetails {
+  /** 实际读取途径；与 MetaTube 内部 provider 名称区分。 */
+  origin?: "metatube";
   fusion?: {
     sources: { provider: string; id: string; homepage: string }[];
     fields: Record<string, { provider: string; id: string }>;
@@ -73,6 +75,7 @@ export function movieDetails(value: unknown): MovieDetails {
   const number = (value: unknown, max: number) =>
     typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= max ? value : 0;
   return {
+    origin: "metatube",
     provider: text(data.provider ?? "", 100),
     id: text(data.id ?? "", 200),
     homepage: webUrl(data.homepage) ?? "",

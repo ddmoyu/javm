@@ -1,6 +1,5 @@
-import { hasControlCharacters, parseCatalogCsvRows } from "./avwikiCsv";
-import type { AvwikiEntry } from "./avwikiCsv";
-import type { AvwikiEntity } from "./avwikiWorks";
+import { hasControlCharacters, parseCatalogCsvRows } from "./catalogCsv";
+import type { OnlineEntity } from "./onlineWorks";
 import { parseGenrePage } from "./catalogData";
 import type { GenreEntry, GenreLane } from "./catalogData";
 import {
@@ -91,7 +90,7 @@ export function validJavbusEntry(entry: JavbusCatalogEntry, now: number): boolea
   );
 }
 export function javbusEntryFromEntity(
-  entity: AvwikiEntity,
+  entity: OnlineEntity,
   dimension: JavbusCatalogDimension,
   now: number,
   videoCount?: number,
@@ -292,22 +291,11 @@ export function parseJavbusRelations(html: string, now: number) {
   }
   return [...entries.values()];
 }
-export function javbusNameIndex(csv: AvwikiEntry[] = []) {
-  const index = new Map<string, Set<string>>();
-  for (const item of csv)
-    for (const name of [item.name, item.label, ...item.aliases]) {
-      const key = nameKey(name),
-        names = index.get(key) ?? new Set<string>();
-      names.add(item.name);
-      index.set(key, names);
-    }
-  return index;
-}
 export function resolveJavbusCatalogEntities(
   entries: JavbusCatalogEntry[],
   dimension: string,
   names: string[],
-): AvwikiEntity[] {
+): OnlineEntity[] {
   const wanted = new Set(names.map(nameKey));
   const selected = entries.filter(
     (entry) =>
@@ -319,11 +307,6 @@ export function resolveJavbusCatalogEntities(
     const url = javbusEntryUrl(entry);
     return { id: new URL(url).pathname.slice(1).replaceAll("/", ":"), name: entry.name, url };
   });
-}
-export function matchJavbusName(entry: JavbusCatalogEntry, index = javbusNameIndex()) {
-  const wanted = new Set([entry.name, entry.label, ...entry.aliases].map(nameKey));
-  const matches = new Set([...wanted].flatMap((key) => [...(index.get(key) ?? [])]));
-  return matches.size === 1 ? matches.values().next().value! : entry.name;
 }
 export function mergeJavbusEntries(
   previous: JavbusCatalogEntry[],

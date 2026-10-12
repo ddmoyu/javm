@@ -52,6 +52,13 @@ export interface DirectoryInput {
   formats: string[];
 }
 export interface NativeVideo {
+  /** 用户主动刮削后保存的预览链接，读取片库时不请求 MetaTube。 */
+  preview?: {
+    homepage?: string;
+    previewVideoUrl?: string;
+    previewVideoHlsUrl?: string;
+    previewImages?: string[];
+  };
   screenshots?: { id: string; path: string; kind: "screenshot" | "sheet"; seconds: number }[];
   plot?: string;
   metadata_edited?: boolean;

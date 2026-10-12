@@ -18,7 +18,7 @@ describe("MetaTube 资料与五分制", () => {
       expect(movieDetailsToFilm(movieDetails({ score }), candidate).rating).toBeUndefined();
   });
 
-  it("保留品牌、来源、封面和两种预告片，并过滤无效或重复图片", () => {
+  it("保留品牌、来源和封面，优先普通预览片并过滤无效或重复图片", () => {
     const film = movieDetailsToFilm(
       movieDetails({
         label: "示例品牌",
@@ -41,12 +41,13 @@ describe("MetaTube 资料与五分制", () => {
     expect(film.coverUrl).toBe(`${media}poster.jpg`);
     expect(film.artwork).toHaveLength(3);
     expect(film.screenshots).toHaveLength(1);
-    expect(film.trailers).toHaveLength(2);
-    const hls = film.trailers![1]!;
+    expect(film.trailers).toHaveLength(1);
+    const trailer = film.trailers![0]!;
+    expect(trailer.src).toBe(`${media}trailer.mp4`);
     expect(
-      playbackRequest(hls.src, { format: hls.format, referer: film.metadata!.homepage }),
+      playbackRequest(trailer.src, { format: trailer.format, referer: film.metadata!.homepage }),
     ).toMatchObject({
-      format: "hls",
+      format: "video",
       kind: "network",
       referer: `${media}movie`,
     });

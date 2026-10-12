@@ -534,8 +534,25 @@ html:has(:fullscreen) .window-resize-edges {
   flex: none;
 }
 .thumb:hover,
+.thumb:focus-visible,
 .thumb[data-active] {
   outline: 2px solid var(--mantine-color-rouge-5);
+}
+.trailer-thumb {
+  background: var(--mantine-color-dark-8);
+}
+.trailer-thumb-content {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(10, 3, 10, 0.55);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
 }
 .thumb > time,
 .stage > time {
@@ -678,11 +695,14 @@ html:has(:fullscreen) .window-resize-edges {
   flex: none;
   max-width: 100%;
 }
+/* 封面框固定尺寸，加载前后占位一致，避免右侧资料区跳动。 */
 .detail-poster {
   position: relative;
   display: block;
-  width: auto;
+  width: min(320px, calc(100vw - 64px));
+  aspect-ratio: 800 / 538;
   max-width: 100%;
+  background: var(--sunken);
   overflow: hidden;
   border-radius: var(--mantine-radius-md);
   outline: 1px solid var(--line);
@@ -742,16 +762,6 @@ html:has(:fullscreen) .window-resize-edges {
 }
 .poster-fill {
   object-fit: contain;
-}
-.poster-fill[data-natural] {
-  position: static;
-  max-width: min(320px, calc(100vw - 64px));
-  max-height: 220px;
-}
-.poster-empty[data-natural] {
-  position: static;
-  width: 136px;
-  aspect-ratio: 1 / 1.39;
 }
 .thumb img {
   width: 100%;

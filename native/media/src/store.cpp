@@ -116,7 +116,7 @@ Store::Store(fs::path path):path_(std::move(path)) {
 void Store::open() {
     bool corrupt=false;
     try {
-        const auto opened=sqlite3_open_v2(pathText(path_).c_str(),&db_,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_FULLMUTEX,nullptr);
+        const auto opened=sqlite3_open_v2(pathText(path_).c_str(),&db_,SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE|SQLITE_OPEN_FULLMUTEX|SQLITE_OPEN_URI,nullptr);
         check(db_,opened);
         check(db_,sqlite3_busy_timeout(db_,5000));
         const auto integrity=rows(db_,"PRAGMA quick_check");
@@ -128,7 +128,6 @@ void Store::open() {
         migrate();
         exec(db_,"PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;");
         prepareCatalog();
-        exec(db_,"UPDATE directories SET state='interrupted',error='上次扫描中断，可重新扫描' WHERE state='scanning'");
         ready_=true;
     } catch(...) {
         if(db_) {
@@ -284,6 +283,7 @@ public:
 };
 }
 void Store::prepareCatalog() {
+    catalogSeedPath_.clear();
     check(db_,sqlite3_create_collation_v2(db_,"JAVM_NATURAL",SQLITE_UTF8,nullptr,naturalCompare,nullptr));
     check(db_,sqlite3_create_function_v2(db_,"javm_lower",1,SQLITE_UTF8 | SQLITE_DETERMINISTIC,nullptr,
         [](sqlite3_context* context,int,sqlite3_value** values) {
@@ -388,6 +388,7 @@ Json Store::query(const Json& params) {
     result["items"] = decorate(std::move(found)); result["offset"] = offset;
     return result;
 }
+#include "store_discovery.inc"
 Json Store::catalogAppend(const Json& params) {
     const auto dimension = requestText(params,"dimension");
     const std::set<std::string> allowed{"actors","actresses","maleActors","studios","labels","series","directors","genres"};
@@ -409,16 +410,22 @@ Json Store::catalogAppend(const Json& params) {
     for (const auto& count: videoCounts)
         if (!count.is_null() && (!count.is_number_integer() || count < 0 || count > 100000000))
             throw std::runtime_error("网站影片数量无效");
+    const auto positions=params.value("positions",Json::array());
+    if(!positions.is_array() || (params.contains("positions") && positions.size()!=names.size()))
+        throw std::runtime_error("名单顺序参数无效");
+    for(const auto& position:positions)
+        if(!position.is_number_integer() || position<0 || position>=100000) throw std::runtime_error("名单顺序参数无效");
     std::lock_guard lock(mutex_);
     QueryDeadline deadline(db_);
     Transaction transaction(db_);
+    if(params.value("reset",false)) run(db_,"DELETE FROM javm_discovery_overrides WHERE dimension=?",{dimension});
     // 临时索引与本地媒体关系隔离；名字没有关联影片时计数仍为零。
     const auto offset = params.contains("offset") ? params.at("offset").get<int64_t>() :
         rows(db_,"SELECT COALESCE(MAX(position)+1,0) AS next FROM javm_discovery_names WHERE dimension=?",{dimension})[0]["next"].get<int64_t>();
-    const auto insert = "INSERT INTO javm_discovery_names(dimension,name,position,video_count) SELECT ?,n.value,?+MIN(CAST(n.key AS INTEGER)),CASE WHEN COUNT(c.value)=COUNT(*) AND COUNT(DISTINCT c.value)=1 THEN MAX(c.value) ELSE NULL END FROM json_each(?) n LEFT JOIN json_each(?) c ON c.key=n.key GROUP BY n.value ";
+    const auto insert = "INSERT INTO javm_discovery_overrides(dimension,name,position,video_count) SELECT ?,n.value,COALESCE(MIN(p.value),?+MIN(CAST(n.key AS INTEGER))),CASE WHEN COUNT(c.value)=COUNT(*) AND COUNT(DISTINCT c.value)=1 THEN MAX(c.value) ELSE NULL END FROM json_each(?) n LEFT JOIN json_each(?) c ON c.key=n.key LEFT JOIN json_each(?) p ON p.key=n.key GROUP BY n.value ";
     run(db_,insert+std::string(params.contains("offset") ?
         "ON CONFLICT(dimension,name) DO UPDATE SET position=excluded.position,video_count=excluded.video_count" :
-        "ON CONFLICT(dimension,name) DO NOTHING"),{dimension,offset,names.dump(),videoCounts.dump()});
+        "ON CONFLICT(dimension,name) DO NOTHING"),{dimension,offset,names.dump(),videoCounts.dump(),positions.dump()});
     const auto count = rows(db_,"SELECT count(*) AS count FROM javm_discovery_names WHERE dimension=?",{dimension})[0]["count"].get<int64_t>();
     if (count > 100000) throw std::runtime_error("名单数量超过限制");
     transaction.commit();

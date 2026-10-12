@@ -10,8 +10,6 @@ export function validPortraitUrl(value: string) {
   try {
     const url = new URL(value);
     if (url.username || url.password || url.hash || url.href !== value) return false;
-    if (url.origin === "https://pics.dmm.co.jp")
-      return !url.search && /^\/mono\/actjpgs\/[a-z0-9_-]+\.jpg$/i.test(url.pathname);
     return (
       gfriendsImageBases.some((base) => value.startsWith(base)) &&
       (!url.search || /^\?t=\d+(?:\.\d+)?$/.test(url.search)) &&
@@ -32,4 +30,4 @@ export function validPortraitUrl(value: string) {
     return false;
   }
 }
-import { hasControlCharacters } from "./avwikiCsv";
+import { hasControlCharacters } from "./catalogCsv";

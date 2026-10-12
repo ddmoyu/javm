@@ -1,15 +1,21 @@
 import type { MovieDetails } from "../metadata/MetaTubeService";
 import { normalizeCode } from "../scraping/identity";
-import { hasControlCharacters } from "./avwikiCsv";
-import type { AvwikiDimension, AvwikiEntry } from "./avwikiCsv";
-import type { AvwikiEntity, AvwikiWork, AvwikiWorksPage } from "./avwikiWorks";
+import { hasControlCharacters } from "./catalogCsv";
+import type { OnlineEntity, OnlineWork, OnlineWorksPage } from "./onlineWorks";
 import type { GenreEntry, GenreLane } from "./catalogData";
 
-export type WorksDimension = AvwikiDimension | "genres" | "labels";
+export type WorksDimension =
+  | "actresses"
+  | "maleActors"
+  | "directors"
+  | "studios"
+  | "series"
+  | "genres"
+  | "labels";
 export interface JavbusPlan {
   names: string[];
   queries: string[];
-  entities: AvwikiEntity[];
+  entities: OnlineEntity[];
 }
 export const JAVBUS_ORIGIN = "https://www.javbus.com";
 export const JAVBUS_ACTRESSES_PAGE_LIMIT = 2000;
@@ -90,7 +96,7 @@ export function javbusSearchUrl(dimension: WorksDimension, name: string, lane: G
   if (!isJavbusCatalogUrl(url)) throw new Error("JavBus 搜索名称无效。");
   return url;
 }
-export function javbusEntityUrl(entity: AvwikiEntity, page = 1) {
+export function javbusEntityUrl(entity: OnlineEntity, page = 1) {
   const url = sourceUrl(entity.url);
   if (!url || !entityPattern.test(url.pathname) || !pageValid(page))
     throw new Error("JavBus 作品目录地址无效。");
@@ -110,24 +116,10 @@ function aliases(name: string) {
 export function planJavbusLookup(
   dimension: WorksDimension,
   name: string,
-  entries: AvwikiEntry[] = [],
   genres: GenreEntry[] = [],
-  additions: Record<string, string> = {},
 ): JavbusPlan {
   const wanted = nameKey(name);
-  const matches = entries.filter((entry) =>
-    [entry.name, entry.label, additions[entry.id] ?? "", ...entry.aliases].some(
-      (value) => nameKey(value) === wanted,
-    ),
-  );
-  if (matches.length > 50) throw new Error("同名来源过多，请先确认名称。");
-  const names = [
-    ...new Set(
-      [name, ...matches.flatMap((entry) => [entry.name, ...entry.aliases, entry.label])].flatMap(
-        aliases,
-      ),
-    ),
-  ];
+  const names = [...new Set(aliases(name))];
   const queries = [...new Set(names.map((value) => value.split("(")[0]!.trim()))]
     .filter((value) => value && !/[\\/?#%]/.test(value))
     .slice(0, 3);
@@ -250,10 +242,10 @@ const emptyResult = (source: string) =>
   /(?:沒有|没有)(?:您|你)要的(?:結果|结果)|(?:沒有|没有|無|无|沒有找到|没有找到)(?:找到)?(?:相關|相关)?(?:的)?(?:影片|演員|演员|結果|结果)|No (?:results|movies|actresses) found/i.test(
     plain(source),
   );
-export function parseJavbusActors(html: string, names?: string[]): AvwikiEntity[] {
+export function parseJavbusActors(html: string, names?: string[]): OnlineEntity[] {
   const source = documentSource(html),
     wanted = names && new Set(names.flatMap(aliases).map(nameKey));
-  const entries = new Map<string, AvwikiEntity>();
+  const entries = new Map<string, OnlineEntity>();
   let cards = 0;
   for (const match of anchors(source)) {
     if (!hasClass(match[1]!, "avatar-box")) continue;
@@ -291,10 +283,10 @@ export function parseJavbusFacets(
   html: string,
   dimension: WorksDimension,
   names: string[],
-): AvwikiEntity[] {
+): OnlineEntity[] {
   const source = infoBlock(documentSource(html)),
     wanted = new Set(names.map(nameKey));
-  const entries = new Map<string, AvwikiEntity>();
+  const entries = new Map<string, OnlineEntity>();
   for (const match of anchors(source)) {
     const name = plain(match[2]!);
     const entity = entityOf(attribute(match[1]!, "href"), name, dimension);
@@ -302,10 +294,10 @@ export function parseJavbusFacets(
   }
   return [...entries.values()];
 }
-export function parseJavbusWorks(html: string, url: string, page: number): AvwikiWorksPage {
+export function parseJavbusWorks(html: string, url: string, page: number): OnlineWorksPage {
   if (!isJavbusCatalogUrl(url) || !pageValid(page)) throw new Error("JavBus 分页参数无效。");
   const source = documentSource(html),
-    items = new Map<string, AvwikiWork>();
+    items = new Map<string, OnlineWork>();
   const base = page === 1 ? url : url.replace(new RegExp(`/${page}$`), "");
   let nextPage: number | null = null,
     cards = 0,
@@ -371,7 +363,7 @@ export function readJavbusVideoCount(source: string): number | undefined {
     add(match[1] ?? match[2] ?? match[3]!);
   return values.size === 1 ? values.values().next().value : undefined;
 }
-export function parseJavbusWorkDetails(html: string, work: AvwikiWork): MovieDetails {
+export function parseJavbusWorkDetails(html: string, work: OnlineWork): MovieDetails {
   const url = sourceUrl(work.url);
   if (!url || !workPattern.test(url.pathname)) throw new Error("JavBus 作品地址无效。");
   const source = documentSource(html),

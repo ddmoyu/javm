@@ -9,6 +9,7 @@ namespace media {
 class Store {
     sqlite3* db_ = nullptr;
     fs::path path_;
+    fs::path catalogSeedPath_;
     std::mutex mutex_;
     void* mainInstance_ = nullptr;
     std::atomic_bool ready_{false};
@@ -45,6 +46,8 @@ public:
     Json query(const Json& params);
     Json facets(const Json& params);
     Json catalogAppend(const Json& params);
+    Json catalogSeed(const Json& params);
+    Json catalogEntries(const Json& params);
     Json summary();
     Json video(const std::string& id);
     bool duplicateCode(const std::string& code, const std::string& except);

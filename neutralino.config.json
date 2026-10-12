@@ -3,7 +3,7 @@
   "applicationId": "net.ddmoyu.javm.dev",
   "applicationName": "JAVM",
   "applicationIcon": "resources/icon.png",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/dist/frontend/",
@@ -50,6 +50,7 @@
     "os.setTray",
     "os.showMessageBox",
     "filesystem.createDirectory",
+    "resources.extractFile",
     "filesystem.readDirectory",
     "filesystem.getStats",
     "filesystem.readFile",
@@ -116,8 +117,7 @@
       "bin/MediaInfo.dll",
       "bin/mediainfo-lite.json",
       "bin/licenses",
-      "bin/tools",
-      "resources/icon.png"
+      "bin/tools"
     ]
   }
 }

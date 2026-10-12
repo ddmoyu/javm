@@ -1,5 +1,7 @@
 # MetaTube 与 AI 资料辅助
 
+2026-10-12：内置程序改为从官方 v1.4.0 固定提交构建的 `javm-lite-1`。保留全部来源及 JAVM 当前使用的接口，移除未使用功能和依赖；构建、缓存兼容与体积证据见 [MetaTube 精简验证](../verification/2026-10-12-metatube-lite.md)。下文官方二进制下载方式属于初始接入记录。
+
 2026-10-10 后续实施：新增自动单片／批量刮削、封面落盘、NFO 写入及下载交接，范围以 [基础刮削 ADR](0020-metatube-scraping.md) 为准。下文“本轮不扩展”记录最初的资料辅助接入范围。
 
 2026-10-09，按用户授权接入 MetaTube 和 AI。初始实现记录见 [资料辅助验证](../verification/2026-10-09-metatube-ai.md)，当前随包提供的实现与交付见 [内置 MetaTube 验证](../verification/2026-10-09-bundled-metatube.md)。

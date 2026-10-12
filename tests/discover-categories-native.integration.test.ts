@@ -6,7 +6,7 @@ import { MediaHost } from "./helpers/mediaHost";
 import type { FacetValue, NativeVideo, QueryPage } from "../frontend/src/contracts/library";
 
 describe.runIf(process.platform === "win32" && process.env.JAVM_MEDIA_INTEGRATION === "1")(
-  "AVWikiDB 男女演员原生目录隔离",
+  "男女演员原生目录隔离",
   () => {
     let host: MediaHost;
     beforeAll(async () => {

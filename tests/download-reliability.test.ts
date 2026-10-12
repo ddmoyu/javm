@@ -198,98 +198,215 @@ describe("下载异常恢复", () => {
   });
 });
 
-describe("HLS 尝试隔离与协作取消", () => {
-  it.each(["取消", "网络失败"])(
-    "%s留下的残轨不参与下一次合并，分片目录继续复用",
-    async (reason) => {
-      const task = createDownloadTasks(input, [])[0]!;
-      const files = new Map<string, string>();
-      const attempts: string[] = [];
-      const segments: string[] = [];
-      let attempt = 0;
-      const controller = new AbortController();
-      const run = vi.fn<ProcessRunner>(async (file, args) => {
-        if (file === "ffmpeg") {
-          for (const [index, arg] of args.entries())
-            if (arg === "-i") expect(files.get(args[index + 1]!)).toBe("complete");
-          files.set(args.at(-1)!, "complete");
-        } else {
-          const destination = args[args.indexOf("--save-dir") + 1]!;
-          attempts.push(destination);
-          segments.push(args[args.indexOf("--tmp-dir") + 1]!);
-          files.set(`${destination}/media.ts`, attempt++ ? "complete" : "partial");
-          if (attempt === 1) {
-            if (reason === "取消") {
-              controller.abort();
-              controller.signal.throwIfAborted();
-            }
-            return { ...ok, exitCode: 1, stdErr: "connection reset" };
-          }
-        }
+describe("HLS 续传与协作取消", () => {
+  it.each(["取消", "网络失败"])("%s后只补下载缺失分片，半写入的分片不参与合并", async (reason) => {
+    const task = createDownloadTasks(input, [])[0]!;
+    const files = new Map<string, string>();
+    const segmentLists: string[][] = [];
+    const controller = new AbortController();
+    const run = vi.fn<ProcessRunner>(async (file, args, _signal, output) => {
+      if (file === "ffmpeg") {
+        // 合并时每个本地分片都必须完整。
+        for (const [path, value] of files)
+          if (path.includes("/hls/") && path.endsWith(".ts")) expect(value).toBe("complete");
+        files.set(args.at(-1)!, "complete");
         return ok;
-      });
-      const host: DownloadHost = {
-        run,
-        tool: async (name) => name,
-        defaultDirectory: async () => input.directory,
-        open: async () => {},
-        probe: vi.fn(async (path) => {
-          if (files.get(path) === "partial") throw new Error("不应读取旧残片");
-          return {
-            video: true,
-            audio: true,
-            videoTracks: 1,
-            audioTracks: 1,
-            durationMs: 12000,
-            width: 320,
-            height: 180,
-            audioChannels: 2,
-            audioLanguage: "",
-          };
-        }),
-        files: {
-          mkdir: async () => {},
-          stat: async (path) =>
-            files.has(path) ? { isFile: true, size: files.get(path)!.length } : null,
-          read: async (path) => files.get(path)!,
-          write: async (path, value) => {
-            files.set(path, value);
-          },
-          list: async (directory) =>
-            [...files.keys()].filter((path) => path.startsWith(`${directory}/`)),
-          move: async (from, to) => {
-            files.set(to, files.get(from)!);
-            files.delete(from);
-          },
-          remove: async (directory) => {
-            for (const path of files.keys()) if (path.startsWith(directory)) files.delete(path);
-          },
+      }
+      const config = files.get(args[args.indexOf("--config") + 1]!)!;
+      const outputs = [...config.matchAll(/^output = "(.*)"$/gm)].map((match) => match[1]!);
+      if (outputs[0]!.endsWith("fetch.m3u8")) {
+        files.set(
+          outputs[0]!,
+          "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\na.ts\n#EXTINF:4,\nb.ts\n#EXTINF:4,\nc.ts\n#EXT-X-ENDLIST\n",
+        );
+        return { ...ok, stdOut: task.url };
+      }
+      segmentLists.push(outputs.map((path) => path.split("/").at(-1)!));
+      const report = (path: string, code: number) =>
+        output?.(
+          `javm-transfer\t${code}\t${code ? 0 : 200}\t${code ? 0 : 8}\tvideo/mp2t\t${path}\n`,
+          "stderr",
+        );
+      if (segmentLists.length === 1) {
+        // 第一次：一个分片完成，一个只写了一半，第三个还没开始。
+        files.set(outputs[0]!, "complete");
+        report(outputs[0]!, 0);
+        files.set(outputs[1]!, "partial");
+        if (reason === "取消") {
+          controller.abort();
+          return { ...ok, exitCode: -1 };
+        }
+        report(outputs[1]!, 56);
+        return { ...ok, exitCode: 56, stdErr: "curl: (56) connection reset" };
+      }
+      for (const path of outputs) {
+        files.set(path, "complete");
+        report(path, 0);
+      }
+      return ok;
+    });
+    const host: DownloadHost = {
+      run,
+      tool: async (name) => name,
+      defaultDirectory: async () => input.directory,
+      open: async () => {},
+      probe: vi.fn(async () => ({
+        video: true,
+        audio: false,
+        videoTracks: 1,
+        audioTracks: 0,
+        durationMs: 12000,
+        width: 320,
+        height: 180,
+        audioChannels: 0,
+        audioLanguage: "",
+      })),
+      files: {
+        mkdir: async () => {},
+        stat: async (path) =>
+          files.has(path) ? { isFile: true, size: files.get(path)!.length } : null,
+        read: async (path) => {
+          if (!files.has(path)) throw new Error("missing");
+          return files.get(path)!;
         },
-      };
-      const engine = new ToolDownloadEngine(host);
-      await expect(
-        engine.run(
-          task,
-          defaultDownloadSettings,
-          controller.signal,
-          () => {},
-          async () => {},
-        ),
-      ).rejects.toThrow();
-      expect(files.get(`${attempts[0]}/media.ts`)).toBe("partial");
-      await engine.run(
+        write: async (path, value) => {
+          files.set(path, value);
+        },
+        list: async (directory) =>
+          [...files.keys()].filter((path) => path.startsWith(`${directory}/`)),
+        move: async (from, to) => {
+          files.set(to, files.get(from)!);
+          files.delete(from);
+        },
+        remove: async (target) => {
+          for (const path of files.keys())
+            if (path === target || path.startsWith(`${target}/`)) files.delete(path);
+        },
+      },
+    };
+    const engine = new ToolDownloadEngine(host);
+    await expect(
+      engine.run(
+        task,
+        defaultDownloadSettings,
+        controller.signal,
+        () => {},
+        async () => {},
+      ),
+    ).rejects.toThrow();
+    expect(files.has(task.output)).toBe(false);
+    await engine.run(
+      task,
+      defaultDownloadSettings,
+      new AbortController().signal,
+      () => {},
+      async () => {},
+    );
+    expect(segmentLists).toHaveLength(2);
+    expect(segmentLists[0]).toHaveLength(3);
+    // 已记录完成的分片不再下载；半写入的分片和未开始的分片重新下载。
+    expect(segmentLists[1]).toHaveLength(2);
+    expect(segmentLists[1]).not.toContain(segmentLists[0]![0]);
+    expect(segmentLists[1]).toContain(segmentLists[0]![1]);
+    expect(files.get(task.output)).toBe("complete");
+    expect(run.mock.calls.every((call) => call[4] === true)).toBe(true);
+  });
+
+  it("慢盘上只保留最新一份进度快照，并以临时文件改名替换", async () => {
+    const task = createDownloadTasks(input, [])[0]!;
+    const files = new Map<string, string>();
+    const stateWrites: string[] = [];
+    const moves: [string, string][] = [];
+    const disk = deferred<void>();
+    let clock = 0;
+    // 每次取时间都前进 3 秒，让每个分片完成时都越过 2 秒的保存节流。
+    const now = vi.spyOn(performance, "now").mockImplementation(() => (clock += 3000));
+    const count = 200;
+    const run = vi.fn<ProcessRunner>(async (file, args, _signal, output) => {
+      if (file === "ffmpeg") {
+        files.set(args.at(-1)!, "complete");
+        return ok;
+      }
+      const config = files.get(args[args.indexOf("--config") + 1]!)!;
+      const outputs = [...config.matchAll(/^output = "(.*)"$/gm)].map((match) => match[1]!);
+      if (outputs[0]!.endsWith("fetch.m3u8")) {
+        const rows = ["#EXTM3U", "#EXT-X-TARGETDURATION:4"];
+        for (let index = 0; index < count; index++) rows.push("#EXTINF:4,", `s${index}.ts`);
+        files.set(outputs[0]!, [...rows, "#EXT-X-ENDLIST"].join("\n"));
+        return { ...ok, stdOut: task.url };
+      }
+      for (const path of outputs) {
+        files.set(path, "complete");
+        output?.(`javm-transfer\t0\t200\t8\tvideo/mp2t\t${path}\n`, "stderr");
+      }
+      // 进程结束前放开被阻塞的磁盘写入。
+      disk.resolve();
+      return ok;
+    });
+    const host: DownloadHost = {
+      run,
+      tool: async (name) => name,
+      defaultDirectory: async () => input.directory,
+      open: async () => {},
+      probe: async () => ({
+        video: true,
+        audio: false,
+        videoTracks: 1,
+        audioTracks: 0,
+        durationMs: count * 4000,
+        width: 320,
+        height: 180,
+        audioChannels: 0,
+        audioLanguage: "",
+      }),
+      files: {
+        mkdir: async () => {},
+        stat: async (path) =>
+          files.has(path) ? { isFile: true, size: files.get(path)!.length } : null,
+        read: async (path) => {
+          if (!files.has(path)) throw new Error("missing");
+          return files.get(path)!;
+        },
+        write: async (path, value) => {
+          if (path.endsWith("state.json.tmp")) {
+            stateWrites.push(value);
+            await disk.promise;
+          }
+          if (path.endsWith("state.json")) throw new Error("进度记录不能被直接覆盖");
+          files.set(path, value);
+        },
+        list: async (directory) =>
+          [...files.keys()].filter((path) => path.startsWith(`${directory}/`)),
+        move: async (from, to) => {
+          moves.push([from, to]);
+          files.set(to, files.get(from)!);
+          files.delete(from);
+        },
+        remove: async () => {},
+      },
+    };
+    try {
+      await new ToolDownloadEngine(host).run(
         task,
         defaultDownloadSettings,
         new AbortController().signal,
         () => {},
         async () => {},
       );
-      expect(attempts[0]).not.toBe(attempts[1]);
-      expect(segments[0]).toBe(segments[1]);
-      expect(files.get(task.output)).toBe("complete");
-      expect(run.mock.calls.every((call) => call[4] === true)).toBe(true);
-    },
-  );
+    } finally {
+      now.mockRestore();
+    }
+    // 第一次写入期间到达的 200 次保存请求只合并为一次后续写入。
+    expect(stateWrites.length).toBeLessThanOrEqual(2);
+    // 最终视频本身也通过改名发布；这里只看进度记录的写入方式。
+    const stateMoves = moves.filter(([, to]) => to.endsWith("hls/state.json"));
+    expect(stateMoves.length).toBe(stateWrites.length);
+    expect(stateMoves.every(([from, to]) => from === `${to}.tmp`)).toBe(true);
+    const statePath = stateMoves.at(-1)![1];
+    const saved = JSON.parse(files.get(statePath)!) as { completed: Record<string, number> };
+    expect(Object.keys(saved.completed)).toHaveLength(count);
+    expect(files.get(task.output)).toBe("complete");
+  });
 
   it("MP4 下载、合并和工具检查均启用协作取消", async () => {
     const task = createDownloadTasks(
@@ -333,7 +450,7 @@ describe("HLS 尝试隔离与协作取消", () => {
       async () => {},
     );
     await engine.checkTools(defaultDownloadSettings);
-    expect(run.mock.calls).toHaveLength(5);
+    expect(run.mock.calls).toHaveLength(4);
     expect(run.mock.calls.every((call) => call[4] === true)).toBe(true);
   });
 });

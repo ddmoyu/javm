@@ -42,7 +42,6 @@ export interface DownloadTask {
 export interface DownloadSettings {
   directory: string;
   concurrency: number;
-  hlsPath: string;
   ffmpegPath: string;
   curlPath: string;
 }
@@ -70,7 +69,6 @@ export const downloadLabels: Record<DownloadStatus, string> = {
 export const defaultDownloadSettings: DownloadSettings = {
   directory: "",
   concurrency: 2,
-  hlsPath: "",
   ffmpegPath: "",
   curlPath: "",
 };

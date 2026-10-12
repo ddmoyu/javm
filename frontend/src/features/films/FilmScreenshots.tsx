@@ -1,5 +1,5 @@
 import { Button, Group, Menu, SimpleGrid, Text, UnstyledButton } from "@mantine/core";
-import type { Film } from "../../contracts/media";
+import type { Film, MediaTrailer } from "../../contracts/media";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import { useImagePreview } from "../../components/ImagePreview";
@@ -11,20 +11,24 @@ export function FilmScreenshots({
   film,
   label = "视频截图",
   onAction,
+  onPlayTrailer,
 }: {
   film: Film;
   label?: string;
   onAction?: (action: ScreenshotAction, index?: number) => void;
+  onPlayTrailer?: (trailer: MediaTrailer) => void;
 }) {
   const { open } = useImagePreview();
   const images = film.screenshots ?? [];
+  const trailer = onPlayTrailer ? film.trailers?.[0] : undefined;
+  const poster = images[0]?.src || film.coverUrl;
   return (
     <section aria-label={label}>
       <Group justify="space-between" mb="sm">
         <Text fw={600} size="sm">
           {label}{" "}
           <Text span size="xs" c="dimmed">
-            {images.length}
+            {trailer ? `1 段预览片 · ${images.length} 张图片` : `${images.length} 张图片`}
           </Text>
         </Text>
         {onAction && (
@@ -50,7 +54,11 @@ export function FilmScreenshots({
                 获取长截图
               </Menu.Item>
               <Menu.Divider />
-              <Menu.Item color="red" disabled={!images.length} onClick={() => onAction("clear")}>
+              <Menu.Item
+                color="red"
+                disabled={!images.some((image) => image.id)}
+                onClick={() => onAction("clear")}
+              >
                 清空截图
               </Menu.Item>
             </Menu.Dropdown>
@@ -58,16 +66,45 @@ export function FilmScreenshots({
         )}
       </Group>
       <SimpleGrid cols={3} spacing={8}>
+        {trailer && (
+          <UnstyledButton
+            className="thumb trailer-thumb"
+            aria-label="播放预览片"
+            onClick={() => onPlayTrailer?.(trailer)}
+          >
+            {poster && (
+              <SourceImage
+                candidates={[poster]}
+                referer={film.metadata?.homepage}
+                placeholder={() => null}
+                alt=""
+                h="100%"
+                fit="cover"
+                loading="lazy"
+                decoding="async"
+              />
+            )}
+            <span className="trailer-thumb-content">
+              <Icon name="play" size={24} filled />
+              <span>预览片</span>
+            </span>
+          </UnstyledButton>
+        )}
         {images.map((image, index) => (
           <ObjectMenu
             key={image.id ?? `${image.src}:${index}`}
             items={
-              onAction && (
+              onAction &&
+              (image.path || image.id) && (
                 <>
-                  <Menu.Item onClick={() => onAction("cover", index)}>设为封面</Menu.Item>
-                  <Menu.Item color="red" onClick={() => onAction("remove", index)}>
-                    删除截图
-                  </Menu.Item>
+                  {image.path && (
+                    <Menu.Item onClick={() => onAction("cover", index)}>设为封面</Menu.Item>
+                  )}
+                  {image.id && (
+                    <Menu.Item color="red" onClick={() => onAction("remove", index)}>
+                      删除截图
+                    </Menu.Item>
+                  )}
                 </>
               )
             }
@@ -95,7 +132,7 @@ export function FilmScreenshots({
           </ObjectMenu>
         ))}
       </SimpleGrid>
-      {!images.length && (
+      {!images.length && !trailer && (
         <Empty
           icon="image"
           title="暂无截图"

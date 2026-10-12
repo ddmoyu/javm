@@ -11,7 +11,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import type { OnlineActorSearchService } from "../../services/catalog/OnlineActorSearchService";
-import type { AvwikiEntity } from "../../services/catalog/avwikiWorks";
+import type { OnlineEntity } from "../../services/catalog/onlineWorks";
 import { publicMessage } from "../../services/publicMessage";
 export function OnlineActorSearch({
   service,
@@ -22,7 +22,7 @@ export function OnlineActorSearch({
   service: OnlineActorSearchService;
   query: string;
   active: boolean;
-  select: (entity: AvwikiEntity) => void;
+  select: (entity: OnlineEntity) => void;
 }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   useEffect(() => {

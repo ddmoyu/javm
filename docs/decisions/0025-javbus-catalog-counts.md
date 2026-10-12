@@ -4,6 +4,8 @@
 - 状态：已接入源码；真实目录和显式计数格式已确认，采集覆盖以快照清单为准
 - 依据：用户提供演员目录、演员作品页、分类目录及分类作品页，要求沿用多列 CSV，记录网站影片数并按数量排序；导演、发行商和制作商从已有影片资料汇总。
 
+> 2026-10-12：AVWikiDB 已按用户要求移除，发现页只使用 JavBus，见 [ADR 0027](0027-javbus-only-discovery.md)。下文涉及 AVWikiDB 的内容仅为历史记录。
+
 ## 来源与维度
 
 `/actresses` 和 `/uncensored/actresses` 是两个演员目录，目录中的 `/star/{id}` 或 `/uncensored/star/{id}` 是对应作品列表。`/genre` 是分类目录，`/genre/{id}` 是分类作品列表。代码中预留的 `/series/{id}`、`/director/{id}` 路径不能视为已取得可用链接；当前这两类 CSV 均为空。

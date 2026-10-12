@@ -63,9 +63,7 @@ export function parseHeaders(value: string): Record<string, string> {
 export function validateSettings(settings: DownloadSettings) {
   validateDirectory(settings.directory);
   if (
-    [settings.hlsPath, settings.ffmpegPath, settings.curlPath].some((value) =>
-      /[\u0000-\u001f\u007f]/.test(value),
-    )
+    [settings.ffmpegPath, settings.curlPath].some((value) => /[\u0000-\u001f\u007f]/.test(value))
   ) {
     throw new Error("工具路径不能包含换行或控制字符。");
   }
@@ -86,9 +84,7 @@ export function createDownloadTasks(input: NewDownload, existing: DownloadTask[]
   const urls = [...new Set(input.urls.map(normalizeDownloadUrl))];
   if (!urls.length || urls.length > 100) throw new Error("每次请输入 1 到 100 条视频直链。");
   if (existing.length + urls.length > downloadTaskLimit)
-    throw new Error(
-      `最多保留 ${downloadTaskLimit} 个下载任务，请先移除已结束记录。移除记录不会删除文件。`,
-    );
+    throw new Error(`最多保留 ${downloadTaskLimit} 个下载任务，请先移除已结束的任务。`);
   // Validate callers outside the form as well.
   if (
     Object.entries(input.headers).some(([key, value]) => /[\u0000-\u001f\u007f]/.test(key + value))

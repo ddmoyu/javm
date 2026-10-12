@@ -45,7 +45,6 @@ describe.runIf(process.env.JAVM_HTTP_INTEGRATION === "1")("JavBus 302 适配器�
   let paths: string[], statuses: number[], connections: number[];
   const base = path.resolve(import.meta.dirname, "../.tmp");
   const url = "https://www.javbus.com/star/safe";
-  const browser = vi.fn();
   const network = { getProxy: async () => "" } as unknown as NetworkSettingsService;
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -131,12 +130,11 @@ describe.runIf(process.env.JAVM_HTTP_INTEGRATION === "1")("JavBus 302 适配器�
   });
   it("302 到 200 通过正式文件读取与清理，保留连接复用和限频", async () => {
     await expect(
-      createCatalogHttp(network, async () => {}, browser)(url, new AbortController().signal),
+      createCatalogHttp(network, async () => {})(url, new AbortController().signal),
     ).resolves.toBe("<main>安全合成作品页</main>");
     expect(paths).toEqual(["/star/safe", "/star/safe/"]);
     expect(statuses).toEqual([302, 200]);
     expect(connections).toEqual([1, 0]);
-    expect(browser).not.toHaveBeenCalled();
     expect(mock.log).toHaveBeenCalledWith(
       "info",
       "catalog",
@@ -148,21 +146,19 @@ describe.runIf(process.env.JAVM_HTTP_INTEGRATION === "1")("JavBus 302 适配器�
   it("验证入口只请求一次即结束，日志不输出 Location 或会话数据", async () => {
     mode = "verification";
     await expect(
-      createCatalogHttp(network, async () => {}, browser)(url, new AbortController().signal),
+      createCatalogHttp(network, async () => {})(url, new AbortController().signal),
     ).rejects.toThrow("验证或登录入口");
     expect(paths).toEqual(["/star/safe"]);
-    expect(browser).not.toHaveBeenCalled();
     expect(JSON.stringify(mock.log.mock.calls)).not.toContain("private");
   });
   it("第二跳慢响应可取消，退出前移除原生传输和响应文件", async () => {
     mode = "slow";
     const abort = new AbortController();
-    const pending = createCatalogHttp(network, async () => {}, browser)(url, abort.signal);
+    const pending = createCatalogHttp(network, async () => {})(url, abort.signal);
     const rejected = expect(pending).rejects.toThrow("安全取消");
     await vi.waitFor(() => expect(slow).toBeDefined());
     abort.abort(new Error("安全取消"));
     await rejected;
     expect(paths).toEqual(["/star/safe", "/star/safe/"]);
-    expect(browser).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { parseAvwikiCsv } from "../frontend/src/services/catalog/avwikiCsv";
 import {
   javbusEntryFromEntity,
   javbusEntryKey,
@@ -38,16 +37,6 @@ const seed: DiscoverySeed = {
   genres: [],
   actors: [],
   entities: [],
-  avwikiCollectedAt: now,
-  avwikiDirectories: {
-    actresses: [
-      { id: "987", name: "安全演员原名", label: "安全演员译名", aliases: ["安全演员别名"] },
-    ],
-    maleActors: [],
-    directors: [],
-    studios: [],
-    series: [],
-  },
 };
 const row = (id = "safe", name = "安全演员原名", count?: number): JavbusCatalogEntry =>
   javbusEntryFromEntity(
@@ -100,11 +89,7 @@ function processor(): CatalogProcessor {
           task.payload.videoCounts,
         );
       case "javbusPlan": {
-        const plan = planJavbusLookup(
-          task.payload.dimension,
-          task.payload.name,
-          seed.avwikiDirectories?.actresses,
-        );
+        const plan = planJavbusLookup(task.payload.dimension, task.payload.name);
         plan.entities = resolveJavbusCatalogEntities(
           current.javbusEntries ?? [],
           task.payload.dimension,
@@ -376,9 +361,6 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
     expect(() =>
       parseJavbusCsv(csv.replace("2026-10-11T06:00:00.000Z", "2026-10-11"), "actresses", now),
     ).toThrow("CSV 无效");
-    const legacy =
-      "\uFEFFsource,kind,source_id,name_original,name_zh,aliases,translation_status,source_url\r\navwikidb,actor,987,安全演员原名,安全演员译名,安全演员别名,reviewed,https://avwikidb.com/actor/987/\r\n";
-    expect(parseAvwikiCsv(legacy, "actresses")).toEqual(seed.avwikiDirectories!.actresses);
   });
   it("新的数量可以减少，旧页或无数量页面不能覆盖已校对名称和较新的数量", () => {
     const old = {
@@ -408,34 +390,6 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
       "新的安全校对名称",
     );
   });
-  it("旧缓存保留 CSV 名称和网站顺序，新记录只按明确别名关联且独立保存来源身份", () => {
-    const base = loadDiscovery(seed, null, now),
-      old = JSON.parse(base.cache);
-    old.version = 5;
-    delete old.javbusEntries;
-    old.catalogs.actresses.names = ["安全旧名单", "安全演员原名"];
-    const loaded = loadDiscovery(seed, JSON.stringify(old), now);
-    expect(loaded.catalogs.actresses.names).toEqual(old.catalogs.actresses.names);
-    expect(loaded.catalogs.actresses.videoCounts).toEqual({});
-    const updated = mergeDiscovery(
-      seed,
-      loaded.cache,
-      { javbusRecords: [row("safe", "安全演员别名", 12)] },
-      now,
-    );
-    expect(updated.catalogs.actresses.names).toEqual(["安全演员原名", "安全旧名单"]);
-    expect(updated.catalogs.actresses.labels?.["安全演员原名"]).toBe("安全演员译名");
-    expect(updated.catalogs.actresses.videoCounts?.["安全演员原名"]).toBe(12);
-    const entities = resolveJavbusCatalogEntities(updated.javbusEntries!, "actresses", [
-      "安全演员别名",
-    ]);
-    expect(entities[0]?.url).toBe(`${origin}/star/safe`);
-    expect(entities[0]?.id).toBe("star:safe");
-    expect(entities[0]?.url).not.toContain("987");
-    expect(loadDiscovery(seed, updated.cache, now).catalogs.actresses.videoCounts).toEqual({
-      安全演员原名: 12,
-    });
-  });
   it("同名不同 ID 的数量不合计；两个明确分区均有数量时才合计", () => {
     const base = loadDiscovery(seed, null, now);
     const a = row("a1", "安全同名演员", 10),
@@ -455,21 +409,15 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
         .videoCounts?.[a.name],
     ).toBe(30);
   });
-  it("新来源 CSV 的中文名可显示，不能覆盖保留 CSV 的人工名称", () => {
+  it("CSV 的中文名可显示，校对后的名称随更新生效", () => {
     const base = loadDiscovery(seed, null, now);
     const translated = {
       ...row("new", "安全新来源原名", 10),
       label: "安全新来源中文名",
       translationStatus: "reviewed" as const,
     };
-    const old = {
-      ...row("safe", "安全演员原名", 12),
-      label: "安全其他译名",
-      translationStatus: "reviewed" as const,
-    };
-    const data = mergeDiscovery(seed, base.cache, { javbusRecords: [translated, old] }, now);
+    const data = mergeDiscovery(seed, base.cache, { javbusRecords: [translated] }, now);
     expect(data.catalogs.actresses.labels?.[translated.name]).toBe(translated.label);
-    expect(data.catalogs.actresses.labels?.[old.name]).toBe("安全演员译名");
     expect(data.catalogs.actresses.videoCounts?.[translated.name]).toBe(10);
     const revised = mergeDiscovery(
       seed,

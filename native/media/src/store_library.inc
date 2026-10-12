@@ -146,6 +146,7 @@ Json Store::decorate(Json result) {
         const auto provenance=Json::parse(work["provenance"].get<std::string>());
         work["metadata_edited"]=!provenance.value("_manual",Json::object()).empty();
         work["year"]=provenance.value("year",0);
+        work["preview"]=provenance.value("_preview",Json::object());
         work["media_files"]=rows(db_,"SELECT m.id,path,file_size,width,height,duration_ms,codec,missing,s.url AS stream_url,COALESCE(p.part_number,0) AS part,COALESCE(p.total,0) AS parts FROM media_files m LEFT JOIN stream_targets s ON s.media_id=m.id LEFT JOIN media_parts p ON p.media_id=m.id WHERE work_id=? ORDER BY missing,CASE WHEN p.part_number>0 THEN p.part_number ELSE 100 END,created_at,m.id",{id});
         for(auto& file:work["media_files"]) {file["subtitles"]=Json::array();for(const auto& sub:rows(db_,"SELECT path FROM media_subtitles WHERE media_id=? ORDER BY path_key LIMIT 16",{file["id"]})) file["subtitles"].push_back(sub["path"]);}
         work["nfo_files"]=rows(db_,"SELECT path,canonical FROM nfo_documents WHERE work_id=? AND stamp<>'' ORDER BY canonical DESC,path_key",{id});

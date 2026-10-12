@@ -2,7 +2,7 @@
 
 2026-10-09，按用户要求参考旧版依赖，离线运行包停止使用 Gyan essentials 通用构建。
 
-当前 `javm-lite-2` 已按用户要求移除 ffprobe，验证与交付见 [移除 ffprobe](../verification/2026-10-09-remove-ffprobe.md)。
+`javm-lite-2` 已按用户要求移除 ffprobe，验证与交付见 [移除 ffprobe](../verification/2026-10-09-remove-ffprobe.md)。2026-10-12 的 `javm-lite-3` 增加 `crypto` 协议：HLS 改由 curl 下载后，AES-128 分片要由 FFmpeg 在本地解密，见 [ADR 0007](0007-video-downloads.md)。
 
 ## 来源和边界
 
@@ -11,7 +11,7 @@
 当前使用同版本的 [FFmpeg 官方原始源代码](https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz)，参考旧包中锁定的视频解码器列表与裁剪方式，增加下载所需的 MP4 无损封装、AAC ADTS 转换与 `pipe` 进度输出。当前 `javm-lite-2` 按用户要求移除 ffprobe，音视频探测通过官方 Extension 复用已有 MediaInfo。不修改上游源码。
 
 - 保留原生视频解码与 JPEG 编码、缩放等抽帧滤镜，所有可用的内置解封装器和解析器。
-- 只保留 `file` / `pipe` 协议和 `image2` / `image2pipe` / `mov` / `mp4` 输出；其中 MOV 为 MP4 的构建依赖。
+- 只保留 `file` / `pipe` / `crypto` 协议和 `image2` / `image2pipe` / `mov` / `mp4` 输出；其中 MOV 为 MP4 的构建依赖。`crypto` 只解密本地文件，使用 FFmpeg 内置 AES，不引入网络或外部库。
 - 只保留 MJPEG 编码器；音视频下载使用 `-c copy`，不转码。
 - 关闭自动探测外部库、网络、硬件加速、设备、ffplay 和音频重采样。不引入外部编码库、网络库或运行时 DLL。
 - 与旧精简配置相同，依赖未启用外部库的解码器不会纳入实际构建；不能将参考列表中的每个名称等同于已启用能力。

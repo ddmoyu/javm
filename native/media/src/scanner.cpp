@@ -173,7 +173,12 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
     }
     if (method == "library.cancel") { cancelled_ = true; return Json::object(); }
     if (method == "library.shutdown") { shutdown(); return Json::object(); }
-    if(method.starts_with("library.instance.")) return store_.applicationInstance(method,params);
+    if(method.starts_with("library.instance.")) {
+        auto result=store_.applicationInstance(method,params);
+        // 主实例接管时重置了遗留扫描状态，刷新构造时缓存的目录列表。
+        if(method=="library.instance.claim" && result.value("primary",false)) refreshDirectories();
+        return result;
+    }
     if (importing_) throw std::runtime_error("正在导入旧数据，请等待导入完成后再操作媒体库");
     if(method.starts_with("library.files.")) {
         std::lock_guard lock(startMutex_);
@@ -240,6 +245,8 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
         return result;
     }
     if (method == "library.catalogAppend") return store_.catalogAppend(params);
+    if (method == "library.catalogSeed") return store_.catalogSeed(params);
+    if (method == "library.catalogEntries") return store_.catalogEntries(params);
     if (method == "library.summary") return store_.summary();
     if (method == "library.video") return store_.video(params.at("id"));
     if (method == "library.playback.get") return store_.playbackPosition(params);

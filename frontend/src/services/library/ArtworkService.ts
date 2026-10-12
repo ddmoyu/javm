@@ -31,7 +31,7 @@ export interface ArtworkTarget {
   poster: string;
   code: string;
   title: string;
-  source: { provider?: string; id?: string; homepage?: string };
+  source: { provider?: string; id?: string; homepage?: string; origin?: "metatube" };
   videos: { id: string; path: string; file_stamp: string; duration_ms: number }[];
 }
 export interface ArtworkTools {

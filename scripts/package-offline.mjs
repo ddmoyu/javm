@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { verifyFfmpegLite } from "./verify-ffmpeg-lite.mjs";
 import { verifyMediaInfoLite } from "./verify-mediainfo-lite.mjs";
+import { verifyMetatubeLite } from "./metatube-lite-profile.mjs";
 
 if (process.platform !== "win32") throw new Error("Offline packaging requires Windows x64.");
 const root = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -40,17 +41,7 @@ const hash = async (file) => {
 };
 // MetaTube is a required package component, never a first-run download.
 const metatubeDirectory = path.join(desktop, "bin/tools/metatube");
-const metatube = JSON.parse(await readFile(path.join(metatubeDirectory, "installed.json"), "utf8"));
-const metatubeBinary = path.join(metatubeDirectory, "metatube-server.exe");
-if (
-  metatube.version !== dependencies.metatube.version ||
-  metatube.sourceSha256 !== dependencies.metatube.sha256 ||
-  metatube.bytes !== (await stat(metatubeBinary)).size ||
-  metatube.sha256 !== (await hash(metatubeBinary))
-)
-  throw new Error(
-    "Bundled MetaTube is missing or stale. Run pnpm offline:setup and pnpm desktop:build.",
-  );
+await verifyMetatubeLite(metatubeDirectory, dependencies.metatube);
 // Refuse a package assembled from the development Debug binary.
 for (const [binary, candidate] of [
   ["javm_database.exe", path.join(desktop, "bin/javm_database.exe")],
@@ -90,14 +81,7 @@ await copy(path.join(desktop, "javm-win_x64.exe"), "JAVM.exe");
 for (const file of ["javm_database.exe", "MediaInfo.dll"]) {
   await copy(path.join(desktop, "bin", file), `bin/${file}`);
 }
-for (const file of [
-  "MediaInfo.html",
-  "ZenLib.txt",
-  "zlib.txt",
-  "pugixml.txt",
-  "N_m3u8DL-RE.txt",
-  "curl.txt",
-]) {
+for (const file of ["MediaInfo.html", "ZenLib.txt", "zlib.txt", "pugixml.txt", "curl.txt"]) {
   await collectDocument(licenseDocuments, path.join(root, "bin/licenses", file), file);
 }
 for (const file of ["COPYING.LGPLv2.1", "COPYING.LGPLv3", "LICENSE.md"])
@@ -127,15 +111,22 @@ for (const file of ["CMakeLists.txt", "write-receipt.cmake"])
 for (const file of [
   "ffmpeg.exe",
   "curl.exe",
-  "N_m3u8DL-RE.exe",
   "metatube/metatube-server.exe",
   "metatube/installed.json",
 ]) {
   await copy(path.join(desktop, "bin/tools", file), `bin/tools/${file}`);
 }
-await copy(path.join(root, "resources/icon.png"), "resources/icon.png");
+// 窗口和托盘读取 EXE 内嵌图标，不再分发重复的 resources/icon.png。
 for (const file of ["MetaTube.txt", "Neutralino.txt", "phosphor-icons-react.txt"])
   await collectDocument(licenseDocuments, path.join(root, "resources/licenses", file), file);
+for (const file of ["MetaTube.txt", "gorm-datatypes.txt", "useragent.txt", "modifications.txt"])
+  await collectDocument(
+    licenseDocuments,
+    path.join(root, "bin/licenses/metatube-lite", file),
+    `MetaTube lite / ${file}`,
+  );
+for (const file of ["build-metatube-lite.mjs", "metatube-lite/source-lock.json"])
+  await collectDocument(buildDocuments, path.join(root, "scripts", file), `MetaTube lite / ${file}`);
 await collectDocument(
   buildDocuments,
   path.join(root, "scripts/build-curl.ps1"),

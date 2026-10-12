@@ -16,22 +16,22 @@ import { Poster } from "../../components/Cover";
 import { Empty, Pill } from "../../components/ui";
 import { FilmDetail } from "../films/FilmDetail";
 import { movieDetailsToFilm } from "../resources/movieDetailsFilm";
-import type { AvwikiWorksService } from "../../services/catalog/AvwikiWorksService";
+import type { OnlineWorksService } from "../../services/catalog/OnlineWorksService";
 import type { WorksDimension } from "../../services/catalog/javbusWorks";
-import type { AvwikiWork } from "../../services/catalog/avwikiWorks";
+import type { OnlineWork } from "../../services/catalog/onlineWorks";
 import { ResourceLookupButton } from "../resources/ResourceSearch";
 import { publicMessage } from "../../services/publicMessage";
 import { onlineWorkChoices } from "./onlineWorkChoices";
 
 const noSubscribe = () => () => {};
 
-const candidateOf = (work: AvwikiWork) => ({
-  provider: work.url.startsWith("https://www.javbus.com/") ? "JavBus" : "AVWikiDB",
+const candidateOf = (work: OnlineWork) => ({
+  provider: "JavBus",
   id: work.code,
   code: work.code,
   title: work.title,
 });
-function summaryFilm(work: AvwikiWork) {
+function summaryFilm(work: OnlineWork) {
   const candidate = candidateOf(work);
   return movieDetailsToFilm(
     {
@@ -51,7 +51,7 @@ export function OnlineWorks({
   name,
   active,
 }: {
-  service: AvwikiWorksService;
+  service: OnlineWorksService;
   dimension: WorksDimension;
   name: string;
   active: boolean;

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "applicationId": 1245921620,
+  "rows": 8766,
+  "bytes": 823296,
+  "sha256": "927b9a9d13db07fddb1c195f32376ac9da4ebeecc41f3039bb9bcf2e40027c63",
+  "inventory": [
+    {
+      "dimension": "actresses",
+      "sourceRows": 75303,
+      "rows": 7804,
+      "removed": 67499,
+      "sourceSha256": "003f5fd392a1391f763b243232b8a70f4372abd43b05151ba0acb7a366b5d784"
+    },
+    {
+      "dimension": "maleActors",
+      "sourceRows": 0,
+      "rows": 0,
+      "removed": 0,
+      "sourceSha256": "830da0262837425b382fae2653b41718898429765614162fbbcde56e3beb2fef"
+    },
+    {
+      "dimension": "directors",
+      "sourceRows": 0,
+      "rows": 0,
+      "removed": 0,
+      "sourceSha256": "830da0262837425b382fae2653b41718898429765614162fbbcde56e3beb2fef"
+    },
+    {
+      "dimension": "studios",
+      "sourceRows": 94,
+      "rows": 94,
+      "removed": 0,
+      "sourceSha256": "34dc12dbe8f6459948e06db7de2346f72e15f75d7b09a3b4fd11e0eda1463a08"
+    },
+    {
+      "dimension": "labels",
+      "sourceRows": 137,
+      "rows": 137,
+      "removed": 0,
+      "sourceSha256": "16e78af1c50dd336faec0dfefa24c88a385af4ff8b2d75a421ca5d285298e6dc"
+    },
+    {
+      "dimension": "series",
+      "sourceRows": 0,
+      "rows": 0,
+      "removed": 0,
+      "sourceSha256": "830da0262837425b382fae2653b41718898429765614162fbbcde56e3beb2fef"
+    },
+    {
+      "dimension": "genres",
+      "sourceRows": 731,
+      "rows": 731,
+      "removed": 0,
+      "sourceSha256": "2f687923b5825bdf6b332cecfc52f76c565e41ed5be48ccf67a8fc3a99eefb9e"
+    }
+  ]
+}

@@ -22,7 +22,7 @@ export async function withSafeCatalogBrowser<T>(
   run: (browser: Pick<CdpConnection, "send" | "on">, signal: AbortSignal) => Promise<T>,
 ) {
   const project = path.resolve(import.meta.dirname, "../..");
-  const root = await mkdtemp(path.join(project, ".tmp/avwiki-challenge-safe-"));
+  const root = await mkdtemp(path.join(project, ".tmp/catalog-browser-safe-"));
   const config = hiddenWebviewConfig("http://127.0.0.1:1", "");
   config.modes.window.webviewArgs +=
     ' --host-resolver-rules="MAP * ~NOTFOUND" --disable-background-networking';
@@ -232,7 +232,7 @@ export async function withSafeCatalogBrowser<T>(
     const temporary = path.resolve(project, ".tmp");
     if (
       path.dirname(root) !== temporary ||
-      !path.basename(root).startsWith("avwiki-challenge-safe-")
+      !path.basename(root).startsWith("catalog-browser-safe-")
     )
       // oxlint-disable-next-line no-unsafe-finally -- 路径校验失败必须阻止递归清理及测试成功。
       throw new Error("Unsafe temporary root");

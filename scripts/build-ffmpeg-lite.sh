@@ -17,7 +17,7 @@ video_decoders=$(tr -d '\r' < "$reference_dir/build-info/video-decoders.txt" | p
   --disable-programs --enable-ffmpeg --disable-ffprobe --enable-small \
   --disable-shared --enable-static --disable-everything \
   --enable-avcodec --enable-avformat --enable-avutil --enable-swscale --enable-avfilter \
-  --enable-protocol=file,pipe --enable-demuxers --enable-parsers \
+  --enable-protocol=file,pipe,crypto --enable-demuxers --enable-parsers \
   --enable-decoder="$video_decoders,aac,aac_fixed,ac3,eac3,mp3,flac,vorbis,dca,alac" \
   --enable-muxer=image2,image2pipe,mp4 --enable-encoder=mjpeg \
   --enable-filter=buffer,buffersink,format,fps,scale,select \

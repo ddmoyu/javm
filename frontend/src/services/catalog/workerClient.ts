@@ -1,22 +1,19 @@
 import type { FacetQuery, FacetValue, PageRequest, QueryPage } from "../../contracts/library";
 import type { GenreLane } from "./catalogData";
-import type { AvwikiDimension } from "./avwikiCsv";
-import type { AvwikiEntity, AvwikiWork, AvwikiWorksPage } from "./avwikiWorks";
+import type { OnlineEntity, OnlineWork, OnlineWorksPage } from "./onlineWorks";
 import type { MovieDetails } from "../metadata/MetaTubeService";
 import type { JavbusPlan, WorksDimension } from "./javbusWorks";
 import type { JavbusCatalogDimension, JavbusCatalogEntry } from "./javbusCatalog";
-import type {
-  ActorDirectoryDimension,
-  Additions,
-  CrawlCursor,
-  DiscoveryData,
-  DiscoveryUpdate,
-} from "./discoveryData";
+import type { Additions, CrawlCursor, DiscoveryData, DiscoveryUpdate } from "./discoveryData";
 
 interface Tasks {
+  javbusSeedAppend: {
+    input: { entries: JavbusCatalogEntry[]; reset: boolean; done: boolean };
+    output: boolean;
+  };
   javbusActorSearch: {
     input: { html: string; url: string; page: number };
-    output: { items: AvwikiEntity[]; nextPage: number | null };
+    output: { items: OnlineEntity[]; nextPage: number | null };
   };
   javbusImportCsv: {
     input: { files: Partial<Record<JavbusCatalogDimension, string>> };
@@ -32,42 +29,17 @@ interface Tasks {
     input: { name: string; dimension: WorksDimension };
     output: JavbusPlan;
   };
-  javbusActors: { input: { html: string; names: string[] }; output: AvwikiEntity[] };
+  javbusActors: { input: { html: string; names: string[] }; output: OnlineEntity[] };
   javbusFacets: {
     input: { html: string; names: string[]; dimension: WorksDimension };
-    output: AvwikiEntity[];
+    output: OnlineEntity[];
   };
-  javbusWorks: { input: { html: string; url: string; page: number }; output: AvwikiWorksPage };
-  javbusDetails: { input: { html: string; work: AvwikiWork }; output: MovieDetails };
+  javbusWorks: { input: { html: string; url: string; page: number }; output: OnlineWorksPage };
+  javbusDetails: { input: { html: string; work: OnlineWork }; output: MovieDetails };
   discoveryLoad: { input: { cache: string | null }; output: DiscoveryData };
   discoveryMerge: { input: { cache: string; update: DiscoveryUpdate }; output: DiscoveryData };
   listing: { input: { html: string; lane: GenreLane }; output: CrawlCursor };
   entities: { input: { html: string }; output: Additions };
-  actorDirectory: {
-    input: { html: string; dimension: ActorDirectoryDimension; page: number };
-    output: { names: string[]; nextPage: number | null };
-  };
-  directory: {
-    input: { html: string; dimension: AvwikiDimension; page: number };
-    output: {
-      names: string[];
-      nextPage: number | null;
-      portraits?: Record<string, string>;
-      entries?: Record<string, string>;
-    };
-  };
-  workEntities: {
-    input: { name: string; dimension: AvwikiDimension };
-    output: AvwikiEntity[];
-  };
-  works: {
-    input: { html: string; entity: AvwikiEntity; page: number };
-    output: AvwikiWorksPage;
-  };
-  workDetails: {
-    input: { html: string; work: AvwikiWork };
-    output: MovieDetails;
-  };
   portraits: {
     input: { names: string[]; dimension: "actresses" | "maleActors"; fallback?: boolean };
     output: Record<string, string[]>;
@@ -89,8 +61,13 @@ export type CatalogRequest = {
 export interface CatalogProcessor {
   run<K extends keyof Tasks>(operation: K, payload: Tasks[K]["input"]): Promise<Tasks[K]["output"]>;
   close(): void;
+  onFailure?(handler: () => void): void;
 }
 export class CatalogWorkerClient implements CatalogProcessor {
+  private failed?: () => void;
+  onFailure(handler: () => void) {
+    this.failed = handler;
+  }
   private worker?: Worker;
   private sequence = 0;
   private pending = new Map<
@@ -109,6 +86,7 @@ export class CatalogWorkerClient implements CatalogProcessor {
       task.reject(new Error(message));
     }
     this.pending.clear();
+    this.failed?.();
   }
   run<K extends keyof Tasks>(
     operation: K,

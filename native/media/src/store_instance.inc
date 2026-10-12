@@ -14,7 +14,9 @@ Json Store::applicationInstance(const std::string& method,const Json& params) {
         if(!healthy()) {if(primary) mainInstance_=handle;else CloseHandle(handle);return {{"primary",primary}};}
         try {
             Transaction transaction(db_);
-            if(primary) run(db_,"DELETE FROM app_launches");else run(db_,"DELETE FROM app_launches WHERE created<unixepoch()-300");
+            // 只有主实例能把遗留的扫描状态标为中断；第二次启动不得改写主实例正在进行的扫描。
+            if(primary) {run(db_,"DELETE FROM app_launches");run(db_,"UPDATE directories SET state='interrupted',error='上次扫描中断，可重新扫描' WHERE state='scanning'");}
+            else run(db_,"DELETE FROM app_launches WHERE created<unixepoch()-300");
             if(rows(db_,"SELECT count(*) AS count FROM app_launches")[0]["count"].get<int>()>=32) throw std::runtime_error("启动请求队列已满，请稍后重试");
             if(!primary || !args.empty()) run(db_,"INSERT INTO app_launches(payload) VALUES(?)",{args.dump()});
             transaction.commit();if(primary) mainInstance_=handle;else CloseHandle(handle);

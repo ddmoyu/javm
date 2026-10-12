@@ -125,7 +125,6 @@ try {
   await downloads.updateSettings({
     ...downloads.getSnapshot().settings,
     directory: `${root}/output`,
-    hlsPath: `${root}/bin/tools/N_m3u8DL-RE.exe`,
     ffmpegPath: `${root}/bin/tools/ffmpeg.exe`,
     curlPath: `${root}/bin/tools/curl.exe`,
   });

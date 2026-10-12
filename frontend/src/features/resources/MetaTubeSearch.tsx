@@ -18,7 +18,6 @@ import type { MovieSearchGroup } from "../../services/metadata/mergeMovieCandida
 import { normalizeCode } from "../../services/streamResolution/sources";
 import { requireMovieDetails, searchMovieMetadata } from "../../services/metadata/movieSearch";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
-import { isCatalogCandidate } from "../../services/metadata/MovieMetadataResolver";
 
 export function MetaTubeSearch({
   initialQuery = "",
@@ -35,7 +34,7 @@ export function MetaTubeSearch({
   onLookupResources?: (code: string, trigger: HTMLButtonElement) => void;
   allowResourceLookup?: boolean;
 }) {
-  const { metatube, library } = useWorkspace();
+  const { metatube } = useWorkspace();
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
   const [query, setQuery] = useState(initialQuery),
     [error, setError] = useState("");
@@ -63,11 +62,9 @@ export function MetaTubeSearch({
   );
   // 只复用本次搜索中看过的详情，不预取全部候选；新搜索或卸载后释放。
   const detailsCache = useRef(new Map<string, MovieDetails>());
-  const lookup = library.catalog?.movieLookup;
   const candidateKey = (candidate: MovieCandidate) =>
     JSON.stringify([candidate.provider, candidate.id]);
   const remember = (candidate: MovieCandidate, details: MovieDetails) => {
-    library.catalog?.movieDetails.remember(details);
     if (detailsCache.current.size >= 50)
       detailsCache.current.delete(detailsCache.current.keys().next().value!);
     detailsCache.current.set(candidateKey(candidate), details);
@@ -88,8 +85,7 @@ export function MetaTubeSearch({
     try {
       const found = await searchMovieMetadata(
         {
-          search: (value) => metatube.search(value),
-          lookupByCode: lookup?.available ? (code, signal) => lookup.read(code, signal) : undefined,
+          search: (value) => metatube.search(value, abort.signal),
         },
         query,
         abort.signal,
@@ -134,13 +130,10 @@ export function MetaTubeSearch({
         if (cancelled.current || current !== revision.current) return;
         try {
           const key = candidateKey(candidate);
-          let result =
-            detailsCache.current.get(key) ?? library.catalog?.movieDetails.candidate(candidate);
+          let result = detailsCache.current.get(key);
           if (!result) {
             result = requireMovieDetails(
-              isCatalogCandidate(candidate) && lookup?.available
-                ? await lookup.read(candidate.code, abort.signal)
-                : await metatube.details(candidate),
+              await metatube.details(candidate, abort.signal),
               candidate,
             );
             remember(candidate, result);
@@ -164,42 +157,6 @@ export function MetaTubeSearch({
         code = normalizeCode(group.candidate.code);
       } catch {
         /* 无番号时不猜测。 */
-      }
-      if (code && lookup?.available) {
-        try {
-          const result = await lookup.read(code, abort.signal);
-          const candidate = {
-            provider: result.provider,
-            id: result.id,
-            code,
-            title: result.fields.title || "",
-          };
-          requireMovieDetails(result, candidate);
-          if (cancelled.current || current !== revision.current) return;
-          remember(candidate, result);
-          setResults((previous) =>
-            previous.map((item) =>
-              item.key === group.key
-                ? {
-                    ...item,
-                    candidate,
-                    candidates: [
-                      candidate,
-                      ...item.candidates.filter(
-                        (value) => candidateKey(value) !== candidateKey(candidate),
-                      ),
-                    ],
-                  }
-                : item,
-            ),
-          );
-          if (trigger.isConnected && trigger.getClientRects().length)
-            onSelect(result, candidate, trigger);
-          return;
-        } catch (reason) {
-          if (reason instanceof StopUnconfirmedError) throw reason;
-          last = reason;
-        }
       }
       if (cancelled.current || current !== revision.current) return;
       setResourceCode(allowResourceLookup ? code : undefined);
@@ -327,11 +284,7 @@ export function MetaTubeSearch({
                   void (
                     onApply
                       ? onApply(item)
-                      : onCollect!(
-                          item,
-                          detailsCache.current.get(candidateKey(item)) ??
-                            library.catalog?.movieDetails.candidate(item),
-                        )
+                      : onCollect!(item, detailsCache.current.get(candidateKey(item)))
                   )
                     .catch((reason: unknown) => setError(serviceError(reason)))
                     .finally(() => setSaving(null));

@@ -134,11 +134,8 @@ export function createScrapeService(
     },
     refresh: () => library.refreshAfterImport(),
   };
-  const sources = new MovieMetadataResolver(
-    metatube,
-    library.catalog?.movieDetails,
-    library.catalog?.scrapeLookup,
-  );
+  // 刮削只采用 MetaTube；缓存独立于发现页，不能复用或回退到目录站详情。
+  const sources = new MovieMetadataResolver(metatube);
   const pipeline = createMetadataPipeline(sources, available);
   const service = new ScrapeService(adapter, pipeline, available, ai?.recognizeForScrape);
   service.pipeline = pipeline;

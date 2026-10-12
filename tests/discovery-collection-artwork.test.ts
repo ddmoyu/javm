@@ -5,7 +5,7 @@ import { ArtworkService } from "../frontend/src/services/library/ArtworkService"
 import type { ArtworkTools } from "../frontend/src/services/library/ArtworkService";
 import type { NativeVideo } from "../frontend/src/contracts/library";
 import type { MovieDetails } from "../frontend/src/services/metadata/MetaTubeService";
-import { AvwikiWorksService } from "../frontend/src/services/catalog/AvwikiWorksService";
+import { OnlineWorksService } from "../frontend/src/services/catalog/OnlineWorksService";
 import type { CatalogProcessor } from "../frontend/src/services/catalog/workerClient";
 
 // 所有来源、图片、文件和数据库均为安全 mock，不读取用户资料或发出网络请求。
@@ -282,23 +282,20 @@ describe("发现收藏保存图片", () => {
 });
 
 describe("已收藏作品重新读取图片来源", () => {
-  it.each([
-    ["https://www.javbus.com/SAFE-001_2026-01-01", "javbusDetails"],
-    ["https://avwikidb.com/work/SAFE-001/", "workDetails"],
-  ])("从保存的网页读取详情，使用对应解析器：%s", async (url, operation) => {
+  it("从保存的 JavBus 网页读取详情", async () => {
+    const url = "https://www.javbus.com/SAFE-001_2026-01-01";
     const run = vi.fn(async () => details);
     const fetch = vi.fn(async () => "安全合成页面");
-    const service = new AvwikiWorksService(
+    const service = new OnlineWorksService(
       { run: run as CatalogProcessor["run"], close: vi.fn() },
       fetch,
       async () => {},
-      "JavBus",
     );
     const work = { url, code: "SAFE-001", title: "安全自然纪录片" };
     const signal = new AbortController().signal;
     expect(await service.readDetails(work, signal)).toBe(details);
     expect(fetch).toHaveBeenCalledWith(url, signal);
-    expect(run).toHaveBeenCalledWith(operation, { html: "安全合成页面", work });
+    expect(run).toHaveBeenCalledWith("javbusDetails", { html: "安全合成页面", work });
     expect(service.getSnapshot().detail).toBeNull();
     await service.shutdown();
   });

@@ -57,24 +57,12 @@ $curl = Prepare 'curl'
 & (Join-Path $PSScriptRoot 'build-curl.ps1') -SourceDirectory $curl
 if ($LASTEXITCODE -ne 0) { throw 'Unicode curl build failed' }
 Copy-Item -LiteralPath (Join-Path $curl 'COPYING') -Destination (Join-Path $licenses 'curl.txt') -Force
-$downloader = Prepare 'downloader'
-$binary = @(Get-ChildItem -LiteralPath $downloader -Recurse -File -Filter 'N_m3u8DL-RE.exe')
-if ($binary.Count -ne 1) { throw 'Downloader executable missing or ambiguous' }
-Copy-Item -LiteralPath $binary[0].FullName -Destination (Join-Path $toolsDir 'N_m3u8DL-RE.exe') -Force
-Copy-Item -LiteralPath (Join-Path $project 'resources/licenses/N_m3u8DL-RE.txt') -Destination (Join-Path $licenses 'N_m3u8DL-RE.txt') -Force
-$metatube = Prepare 'metatube'
-$metaDir = Join-Path $toolsDir 'metatube'
-New-Item -ItemType Directory -Force -Path $metaDir | Out-Null
-Copy-Item -LiteralPath (Join-Path $metatube 'metatube-server-windows-amd64.exe') -Destination (Join-Path $metaDir 'metatube-server.exe') -Force
-$metaBinary = Join-Path $metaDir 'metatube-server.exe'
-[IO.File]::WriteAllText((Join-Path $metaDir 'installed.json'), (@{
-    version=$dependencies.metatube.version
-    sourceSha256=$dependencies.metatube.sha256
-    sha256=(Sha256 $metaBinary)
-    bytes=(Get-Item -LiteralPath $metaBinary).Length
-} | ConvertTo-Json))
+$metaArguments = @('--use-env-proxy', (Join-Path $PSScriptRoot 'build-metatube-lite.mjs'), '--install')
+if ($Offline) { $metaArguments += '--offline' }
+& node @metaArguments
+if ($LASTEXITCODE -ne 0) { throw 'MetaTube lite build failed' }
 Copy-Item -Path (Join-Path $project 'resources/licenses/*') -Destination $licenses -Force
-foreach ($entry in @(@('ffmpeg.exe','-version'), @('curl.exe','--version'), @('N_m3u8DL-RE.exe','--version'))) {
+foreach ($entry in @(@('ffmpeg.exe','-version'), @('curl.exe','--version'))) {
     $output = & (Join-Path $toolsDir $entry[0]) $entry[1]
     if ($LASTEXITCODE -ne 0) { throw "Bundled tool failed: $($entry[0])" }
     $output | Select-Object -First 1

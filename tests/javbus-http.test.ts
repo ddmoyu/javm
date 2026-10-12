@@ -32,8 +32,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 it("JavBus 搜索、实体和详情走常驻 HTTP，传入代理和导航请求头并清理响应文件", async () => {
-  const browser = vi.fn();
-  const fetch = createCatalogHttp(network, async () => {}, browser);
+  const fetch = createCatalogHttp(network, async () => {});
   for (const path of [
     "/searchstar/%E7%A4%BA%E4%BE%8B",
     "/uncensored/star/safe/2",
@@ -57,10 +56,8 @@ it("JavBus 搜索、实体和详情走常驻 HTTP，传入代理和导航请求�
     );
   }
   expect(mock.remove).toHaveBeenCalledTimes(5);
-  expect(browser).not.toHaveBeenCalled();
 });
-it("JavBus 403 自动结束，不误入只支持 AVWikiDB 的隐藏读取器；日志不带来源 URL", async () => {
-  const browser = vi.fn();
+it("JavBus 403 自动结束，不启动隐藏读取器；日志不带来源 URL", async () => {
   mock.request.mockResolvedValue({
     exitCode: 0,
     status: 403,
@@ -69,13 +66,11 @@ it("JavBus 403 自动结束，不误入只支持 AVWikiDB 的隐藏读取器；�
     effectiveUrl: "https://www.javbus.com/TEST-001",
   });
   await expect(
-    createCatalogHttp(
-      network,
-      async () => {},
-      browser,
-    )("https://www.javbus.com/TEST-001", new AbortController().signal),
+    createCatalogHttp(network, async () => {})(
+      "https://www.javbus.com/TEST-001",
+      new AbortController().signal,
+    ),
   ).rejects.toThrow("作品来源拒绝访问（HTTP 403）");
-  expect(browser).not.toHaveBeenCalled();
   expect(mock.read).not.toHaveBeenCalled();
   expect(mock.remove).toHaveBeenCalledOnce();
   expect(JSON.stringify(mock.log.mock.calls)).not.toContain("TEST-001");

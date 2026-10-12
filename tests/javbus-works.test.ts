@@ -10,12 +10,11 @@ import {
   parseJavbusWorkDetails,
   planJavbusLookup,
 } from "../frontend/src/services/catalog/javbusWorks";
-import { AvwikiWorksService } from "../frontend/src/services/catalog/AvwikiWorksService";
+import { OnlineWorksService } from "../frontend/src/services/catalog/OnlineWorksService";
 import type {
   CatalogProcessor,
   CatalogRequest,
 } from "../frontend/src/services/catalog/workerClient";
-import type { AvwikiEntry } from "../frontend/src/services/catalog/avwikiCsv";
 import type { GenreEntry } from "../frontend/src/services/catalog/catalogData";
 import { catalogEntries, loadCatalog } from "../frontend/src/services/catalog/catalogData";
 import { StopUnconfirmedError } from "../frontend/src/services/downloads/ports";
@@ -26,12 +25,7 @@ import {
 
 // 全部页面为手写安全样例。网址仅作为 mock 路由，不打开网页或下载图片。
 const name = "示例演员甲";
-const entry: AvwikiEntry = {
-  id: "a987",
-  name: `${name}（示例旧名）`,
-  label: "示例译名",
-  aliases: ["示例别名"],
-};
+const entry = { name: `${name}（示例旧名）` };
 const genres: GenreEntry[] = [
   { lane: "censored", id: "safe", name: "安全示例分类", category: "示例" },
 ];
@@ -65,7 +59,7 @@ function processor(): CatalogProcessor {
   ) => {
     const task = { operation, payload } as CatalogRequest;
     if (task.operation === "javbusPlan")
-      return planJavbusLookup(task.payload.dimension, task.payload.name, [entry], genres);
+      return planJavbusLookup(task.payload.dimension, task.payload.name, genres);
     if (task.operation === "javbusActors")
       return parseJavbusActors(task.payload.html, task.payload.names);
     if (task.operation === "javbusFacets")
@@ -78,7 +72,7 @@ function processor(): CatalogProcessor {
   };
   return { run: run as CatalogProcessor["run"], close() {} };
 }
-const services: AvwikiWorksService[] = [];
+const services: OnlineWorksService[] = [];
 afterEach(async () => {
   for (const service of services.splice(0)) await service.shutdown();
   vi.useRealTimers();
@@ -92,11 +86,11 @@ const fetchPage = async (url: string, signal: AbortSignal) => {
   return listing(url.endsWith("/2") ? 2 : 1, new URL(url).pathname.replace(/\/2$/, ""));
 };
 function fixture(fetch = vi.fn(fetchPage)) {
-  const service = new AvwikiWorksService(processor(), fetch, async () => {}, "JavBus");
+  const service = new OnlineWorksService(processor(), fetch, async () => {});
   services.push(service);
   return { service, fetch };
 }
-const ready = async (service: AvwikiWorksService) =>
+const ready = async (service: OnlineWorksService) =>
   vi.waitFor(() => {
     expect(service.getSnapshot().loading).toBe(false);
     expect(service.getSnapshot().error).toBe("");
@@ -133,9 +127,9 @@ describe("JavBus 作品路径（安全合成数据）", () => {
       expect(isJavbusCatalogUrl(url)).toBe(false);
     expect(() => javbusEntityUrl(entity, 0)).toThrow("地址无效");
   });
-  it("保留 CSV 原始名称和别名，但绝不把 CSV 编号当成 JavBus 编号", () => {
-    const plan = planJavbusLookup("actresses", entry.label, [entry]);
-    expect(plan.names).toEqual(expect.arrayContaining([name, "示例旧名", "示例别名", "示例译名"]));
+  it("名称括号内的别名参与匹配，但不从名称推测 JavBus 编号", () => {
+    const plan = planJavbusLookup("actresses", `${name}（示例旧名、示例别名）`);
+    expect(plan.names).toEqual(expect.arrayContaining([name, "示例旧名", "示例别名"]));
     expect(plan.entities).toEqual([]);
     expect(plan.queries.length).toBeLessThanOrEqual(3);
     expect(parseJavbusActors(actors(), plan.names)).toEqual([entity]);
@@ -146,7 +140,7 @@ describe("JavBus 作品路径（安全合成数据）", () => {
   it("分类复用经过校验的来源编号，增加分类入口而不替换 CSV 名单", () => {
     const cached = loadCatalog(genres, null, Date.now());
     expect(catalogEntries([], cached.cache, Date.now())).toEqual(genres);
-    const plan = planJavbusLookup("genres", genres[0]!.name, [], genres);
+    const plan = planJavbusLookup("genres", genres[0]!.name, genres);
     expect(plan.entities[0]?.url).toBe(`${origin}/genre/safe`);
     expect(discoverCategories).toContain("分类");
     expect(categoryForFacet("分类", genres[0]!.name)).toBe("分类");
@@ -196,7 +190,6 @@ describe("JavBus 作品路径（安全合成数据）", () => {
     const { service, fetch } = fixture();
     service.select("actresses", entry.name);
     await ready(service);
-    expect(service.getSnapshot().source).toBe("JavBus");
     expect(service.getSnapshot().entity?.id).toBe("star:sample");
     service.loadPage(2);
     await vi.waitFor(() => expect(service.getSnapshot().result?.page).toBe(2));

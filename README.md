@@ -30,6 +30,7 @@ MetaTube 刮削已贯通下载与片库：搜索结果可“收藏并保存资�
 - pnpm 12.10.1，依赖使用一份 `pnpm-lock.yaml`。
 - Windows 桌面运行需要 WebView2 Runtime。
 - 原生构建需要 Visual Studio C++ 工具链、CMake 3.25+、Ninja。
+- 精简 MetaTube 构建需要 PATH 中的 Go；脚本锁定并自动选择 Go 1.25.0。Go 仅用于构建，不随运行包分发。
 - 准备离线包还需要 Git Bash 与 PATH 中的 NASM；精简 FFmpeg 使用 MSVC 静态构建，GNU Make 由脚本下载并校验。这些仅用于构建，不随运行包分发。
 - 首次安装依赖、下载 Neutralino 宿主和配置 SQLite 需要联网。
 
@@ -55,7 +56,10 @@ pnpm preview              # 预览前端生产构建：http://127.0.0.1:4173
 
 ```powershell
 pnpm desktop:setup        # 下载配置中锁定的官方宿主
-pnpm downloads:setup      # 准备 HLS 下载器；完整运行依赖使用 offline:setup
+pnpm metatube:build       # 编译精简 MetaTube，对比 EXE 和相同压缩参数的 ZIP 体积
+pnpm metatube:verify      # 仅验证精简 MetaTube，使用隔离数据库和安全虚构数据
+pnpm metatube:build --install # 编译并安装到 bin/tools/metatube
+pnpm downloads:setup      # 复制已有 FFmpeg 到 bin/tools；完整运行依赖使用 offline:setup
 pnpm desktop:dev          # 构建扩展，启动前端开发服务器与 Neutralino 窗口
 pnpm desktop:build        # 构建扩展和前端，打包桌面目录：dist/desktop
 pnpm desktop:offline      # 校验运行依赖并生成完整 Windows x64 离线包：dist/offline
@@ -71,13 +75,13 @@ pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部�
 
 公开 HLS 样本地址、旧版解析的参考范围和实测结果见 [公开流验证记录](docs/verification/2026-10-09-public-hls-streams.md)。联网样本测试保留原始日志及最终媒体文件，不进入普通测试或自动 CI。
 
-本地运行请使用 `pnpm desktop:offline` 生成的 ZIP，完整解压后双击 **`JAVM.exe`**。随包提供 Release 静态运行库数据库扩展、MediaInfo、N_m3u8DL-RE、FFmpeg、curl 和 MetaTube，无需另装 Node.js、pnpm 或开发工具。界面由官方 Neutralino 宿主调用系统已安装的 **Evergreen WebView2 Runtime**，包内不再携带固定版本运行时，也不覆盖系统的运行时选择。Windows 11 预装，绝大多数 Windows 10 已安装；缺少时需先安装[微软 WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)，无网设备可提前准备其离线安装程序。
+本地运行请使用 `pnpm desktop:offline` 生成的 ZIP，完整解压后双击 **`JAVM.exe`**。随包提供 Release 静态运行库数据库扩展、MediaInfo、FFmpeg、curl 和 MetaTube，无需另装 Node.js、pnpm 或开发工具。界面由官方 Neutralino 宿主调用系统已安装的 **Evergreen WebView2 Runtime**，包内不再携带固定版本运行时，也不覆盖系统的运行时选择。Windows 11 预装，绝大多数 Windows 10 已安装；缺少时需先安装[微软 WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)，无网设备可提前准备其离线安装程序。
 
 适用于 Windows 10/11 x64；满足上述系统前提后，本地片库、扫描和播放可离线使用。网络下载、MetaTube 在线资料和 AI 服务仍需要网络，AI 需要自行配置接口。个人数据仍保存在当前 Windows 用户的数据目录，不随软件包分发。
 
 FFmpeg 采用参考老版 `ddmoyu/ffmepg` 裁剪配置的 **8.0.1 精简构建**，保留 JPEG 抽帧、MP4 无损合并与进度输出，关闭网络、硬件加速与视频转码。媒体轨道和时长检查复用内置 MediaInfo，不再构建或分发 ffprobe。打包会校验构建凭据、二进制哈希、体积和实际能力，拒绝混入完整版。来源与复现方式见 [精简 FFmpeg](docs/decisions/0013-lightweight-ffmpeg.md)。
 
-依赖版本、下载地址和 SHA-256 锁定在 `scripts/offline-dependencies.json`，首次准备需要联网，缓存齐全后可运行 `pnpm offline:setup --Offline` 复用。离线包每次写入新的时间戳目录，不覆盖已有运行目录；附带中文说明、第三方许可证、文件清单、校验脚本及 ZIP 校验值。`dist/offline/latest.json` 指向最近一次输出。WebView2 由系统安装及更新；启动器只负责应用入口和资源目录，不配置 WebView2 路径或修改其目录权限。
+依赖版本、下载地址和 SHA-256 锁定在 `scripts/offline-dependencies.json`，首次准备需要联网，缓存齐全后可运行 `pnpm offline:setup --Offline` 复用。离线包每次写入新的时间戳目录，不覆盖已有运行目录；包内只有 `JAVM.exe` 和 `bin` 运行依赖目录，窗口和托盘图标已嵌入 EXE，不另带 `resources` 目录。中文说明和校验脚本保留在开发目录，第三方许可证、构建记录和文件清单位于 `build/offline-manifests`，ZIP 旁附带 `.sha256` 校验值。`dist/offline/latest.json` 指向最近一次输出。WebView2 由系统安装及更新，程序不配置其路径或修改其目录权限。
 
 `desktop:build` 输出的基础目录仍位于 `dist/desktop/javm`，主程序为 `javm-win_x64.exe`，前端资源嵌入 EXE。完整运行环境以 `desktop:offline` 输出为准。原生发布构建使用独立的 `windows-release` preset，不携带 Debug CRT。
 

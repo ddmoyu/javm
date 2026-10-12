@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -32,6 +32,8 @@ const copy = async (relative) => {
 try {
   await copy("dist/frontend");
   await copy("bin/neutralino-win_x64.exe");
+  // neu 将窗口/托盘图标及 EXE 图标嵌入主程序，只需放入构建暂存区。
+  await copy("resources/icon.png");
   for (const item of config.cli.copyItems || []) await copy(item);
   await writeFile(path.join(stage, "neutralino.config.json"), JSON.stringify(config, null, 2));
   const cli = require.resolve("@neutralinojs/neu/bin/neu.js");
@@ -47,8 +49,18 @@ try {
     force: true,
   });
   // Retire obsolete generated files left by older desktop builds.
-  for (const file of ["bin/tools/ffprobe.exe", "bin/licenses/ffmpeg-lite/ffprobe.exe-version.txt"])
+  for (const file of [
+    "bin/tools/ffprobe.exe",
+    "bin/licenses/ffmpeg-lite/ffprobe.exe-version.txt",
+    "resources/icon.png",
+  ])
     await rm(path.join(root, "dist/desktop/javm", file), { force: true });
+  const resourcesDirectory = path.join(root, "dist/desktop/javm/resources");
+  try {
+    if ((await readdir(resourcesDirectory)).length === 0) await rmdir(resourcesDirectory);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
   console.log("Windows desktop package: dist/desktop/javm and dist/desktop/javm-release.zip");
 } finally {
   const resolved = path.resolve(stage);

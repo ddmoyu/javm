@@ -342,7 +342,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                         pendingPosition.current = { top: 0 };
                       }}
                     >
-                      {(dimension === "女演员" || dimension === "男演员") && (
+                      {dimension === "女演员" && (
                         <Avatar
                           component="span"
                           size={34}

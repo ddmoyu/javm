@@ -154,18 +154,22 @@ export function createArtworkService(
     },
     async details(target, signal) {
       const source = target.source;
-      if (source.provider === "JavBus" || source.provider === "AVWikiDB") {
-        const origin =
-          source.provider === "JavBus" ? "https://www.javbus.com" : "https://avwikidb.com";
-        if (!source.homepage || new URL(source.homepage).origin !== origin || !library.catalog)
+      if (source.provider === "JavBus" && source.origin !== "metatube") {
+        if (
+          !source.homepage ||
+          new URL(source.homepage).origin !== "https://www.javbus.com" ||
+          !library.catalog
+        )
           throw new Error("作品缺少有效的来源网页，请重新从发现页保存资料。");
         return library.catalog.works.readDetails(
           { url: source.homepage, code: target.code, title: target.title },
           signal,
         );
       }
+      if (source.origin !== "metatube")
+        throw new Error("作品尚未手动刮削，请先使用“刮削资料”获取封面与预览。");
       let candidate =
-        target.source.provider && target.source.id
+        target.source.provider && target.source.provider !== "AVWikiDB" && target.source.id
           ? {
               provider: target.source.provider,
               id: target.source.id,

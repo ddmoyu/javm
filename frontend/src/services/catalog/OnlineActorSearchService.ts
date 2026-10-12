@@ -1,12 +1,12 @@
 import { Observable } from "../metadata/shared";
 import type { CatalogProcessor } from "./workerClient";
-import type { AvwikiEntity } from "./avwikiWorks";
+import type { OnlineEntity } from "./onlineWorks";
 import type { GenreLane } from "./catalogData";
 import { javbusSearchUrl } from "./javbusWorks";
 import { StopUnconfirmedError } from "../downloads/ports";
-import { CatalogReadCancellation } from "./browserDiagnostics";
+import { CatalogReadCancellation } from "./readCancellation";
 interface Result {
-  items: AvwikiEntity[];
+  items: OnlineEntity[];
   next: Partial<Record<GenreLane, number | null>>;
   errors: Partial<Record<GenreLane, string>>;
 }

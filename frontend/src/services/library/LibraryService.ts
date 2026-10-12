@@ -23,6 +23,7 @@ import type { ArtworkService } from "./ArtworkService";
 import { artworkSources } from "./ArtworkService";
 import type { FileOrganizationService } from "./FileOrganizationService";
 import type { MovieDetails } from "../metadata/MetaTubeService";
+import { movieTrailers } from "../metadata/movieTrailers";
 import type { ScrapeTarget } from "../scraping/ScrapeService";
 import { publicMessage } from "../publicMessage";
 
@@ -98,27 +99,34 @@ export function toFilm(video: NativeVideo, asset: (path: string) => string | und
     createdAt: video.created_at,
     actor: video.actors[0],
     coverUrl: artwork.length ? asset(artwork[0]!) : undefined,
+    trailers: movieTrailers(video.preview ?? {}),
     artwork: artwork.flatMap((path) => {
       const src = asset(path);
       return src ? [{ src, path }] : [];
     }),
-    screenshots: (video.screenshots ?? []).flatMap((shot) => {
-      const src = asset(shot.path);
-      return src
-        ? [
-            {
-              src,
-              path: shot.path,
-              id: shot.id,
-              timestamp:
-                shot.seconds > 0
-                  ? `${Math.floor(shot.seconds / 60)}:${String(Math.floor(shot.seconds % 60)).padStart(2, "0")}`
-                  : undefined,
-            },
-          ]
-        : [];
-    }),
+    screenshots: video.screenshots?.length
+      ? video.screenshots.flatMap((shot) => {
+          const src = asset(shot.path);
+          return src
+            ? [
+                {
+                  src,
+                  path: shot.path,
+                  id: shot.id,
+                  timestamp:
+                    shot.seconds > 0
+                      ? `${Math.floor(shot.seconds / 60)}:${String(Math.floor(shot.seconds % 60)).padStart(2, "0")}`
+                      : undefined,
+                },
+              ]
+            : [];
+        })
+      : (video.preview?.previewImages ?? []).map((src, index) => ({
+          src,
+          title: `预览图 ${index + 1}`,
+        })),
     metadata: {
+      homepage: video.preview?.homepage,
       plot: video.plot ?? "",
       originalTitle: video.original_title ?? "",
       premiered: video.premiered ?? "",
@@ -288,23 +296,33 @@ export class LibraryService {
     return view;
   }
   private async syncCatalog(dimension: CatalogDimension) {
+    await this.catalog!.ensureNativeSeed();
     const current = this.catalog!.getSnapshot();
     const previous = this.catalogSync.get(dimension);
     if (previous?.revision === current.revision) return previous.work;
-    const { names, videoCounts } = current.catalogs[dimension];
+    const list = this.catalog!.nativeSeed
+      ? current.nativeOverrides?.[dimension]
+      : current.catalogs[dimension];
+    if (!list) throw new Error("内置目录尚未就绪，请重试。");
+    const { names, videoCounts } = list;
+    const positions = this.catalog!.nativeSeed
+      ? current.nativeOverrides![dimension].positions
+      : undefined;
     if (previous && previous.names === names && previous.videoCounts === videoCounts) {
       previous.revision = current.revision;
       return previous.work;
     }
     const work = (async () => {
       await previous?.work.catch(() => {});
-      // 官方 Extension 分批导入临时表；翻页只传筛选条件，不重复搬运完整演员名单。
-      for (let offset = 0; offset < names.length; offset += 500) {
+      // 内置 SQLite 直接查询；仅增量记录进入临时覆盖表，空批次用于清理旧覆盖。
+      for (let offset = 0; offset < Math.max(1, names.length); offset += 500) {
         if (this.stopped) return;
         await this.port!.request("library.catalogAppend", {
           dimension,
           offset,
+          reset: offset === 0,
           names: names.slice(offset, offset + 500),
+          ...(positions ? { positions: positions.slice(offset, offset + 500) } : {}),
           videoCounts: names
             .slice(offset, offset + 500)
             .map((name) =>
@@ -506,7 +524,8 @@ export class LibraryService {
     if (!details.fields.code || !details.fields.title)
       return Promise.reject(new Error("来源没有完整的番号和标题。"));
     const operation = async () => {
-      this.catalog?.movieDetails.remember(details);
+      // 目录站与 MetaTube 可能使用相同 provider/id，禁止把刮削结果混入发现页缓存。
+      if (details.origin !== "metatube") this.catalog?.movieDetails.remember(details);
       await this.initialize();
       const port = this.requirePort();
       const jobId = crypto.randomUUID();

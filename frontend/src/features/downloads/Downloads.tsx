@@ -51,7 +51,8 @@ export function Downloads() {
   const [filter, setFilter] = useState("all");
   const [resultPage, setResultPage] = useState(1);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [removeId, setRemoveId] = useState<string | null>(null);
+  const [removal, setRemoval] = useState<{ id: string; files: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [busy, setBusy] = useState<Set<string>>(() => new Set());
   const active = (task: DownloadTask) => isRunning(task.status) || task.status === "queued";
@@ -118,8 +119,133 @@ export function Downloads() {
       );
     return null;
   };
+  const menuItems = (task: DownloadTask) => (
+    <>
+      <Menu.Item
+        disabled={active(task) || busy.has(task.id)}
+        leftSection={<Icon name="edit" />}
+        onClick={() => setEditId(task.id)}
+      >
+        修改名称／轨道
+      </Menu.Item>
+      <Menu.Item leftSection={<Icon name="info" />} onClick={() => setDetailId(task.id)}>
+        任务详情
+      </Menu.Item>
+      <Menu.Item
+        leftSection={<Icon name="folder" />}
+        onClick={() => void perform(task.id, () => downloads.open(task.id, true))}
+      >
+        打开目录
+      </Menu.Item>
+      {task.status === "completed" && scraping && (
+        <Menu.Item
+          leftSection={<Icon name="scan" />}
+          disabled={!!byDownload.get(task.id) && activeScrape(byDownload.get(task.id)!)}
+          onClick={() =>
+            void perform(task.id, async () => {
+              const job = byDownload.get(task.id);
+              if (job?.status === "needsInput") {
+                if (showScrapeQueue) showScrapeQueue();
+                else go("scraper");
+                return;
+              }
+              if (job) await scraping.retry(job.id);
+              else await scraping.enqueueDownload(task);
+            })
+          }
+        >
+          {byDownload.get(task.id)?.status === "needsInput" ? "确认刮削资料" : "重试刮削"}
+        </Menu.Item>
+      )}
+      {task.status !== "completed" && task.status !== "cancelled" && (
+        <Menu.Item
+          disabled={busy.has(task.id)}
+          leftSection={<Icon name="stop" />}
+          onClick={() => void perform(task.id, () => downloads.cancel(task.id))}
+        >
+          停止任务
+        </Menu.Item>
+      )}
+      <Menu.Divider />
+      <Menu.Item
+        leftSection={<Icon name="trash" />}
+        onClick={() => setRemoval({ id: task.id, files: false })}
+      >
+        移除任务（保留文件）
+      </Menu.Item>
+      {task.status !== "completed" && (
+        <Menu.Item
+          color="red"
+          leftSection={<Icon name="trash" />}
+          onClick={() => setRemoval({ id: task.id, files: true })}
+        >
+          删除任务和文件
+        </Menu.Item>
+      )}
+    </>
+  );
+  const contextTask = contextMenu && tasks.find((task) => task.id === contextMenu.id);
+  const removalTask = removal && tasks.find((task) => task.id === removal.id);
   return (
     <div className="fill-column">
+      <Menu
+        opened={!!contextTask}
+        onChange={(opened) => {
+          if (!opened) setContextMenu(null);
+        }}
+        position="bottom-start"
+        offset={2}
+        withinPortal
+      >
+        <Menu.Target>
+          <div
+            aria-hidden
+            style={{
+              position: "fixed",
+              left: contextMenu?.x ?? 0,
+              top: contextMenu?.y ?? 0,
+              width: 0,
+              height: 0,
+            }}
+          />
+        </Menu.Target>
+        <Menu.Dropdown>
+          {contextTask && (
+            <>
+              <Menu.Label>{contextTask.name}</Menu.Label>
+              {active(contextTask) ? (
+                <Menu.Item
+                  disabled={busy.has(contextTask.id)}
+                  leftSection={<Icon name="pause" />}
+                  onClick={() =>
+                    void perform(contextTask.id, () => downloads.pause(contextTask.id))
+                  }
+                >
+                  暂停
+                </Menu.Item>
+              ) : canResume(contextTask.status) ? (
+                <Menu.Item
+                  disabled={busy.has(contextTask.id)}
+                  leftSection={<Icon name="play" />}
+                  onClick={() =>
+                    void perform(contextTask.id, () => downloads.resume(contextTask.id))
+                  }
+                >
+                  {contextTask.status === "failed" ? "重试" : "继续"}
+                </Menu.Item>
+              ) : contextTask.status === "completed" ? (
+                <Menu.Item
+                  leftSection={<Icon name="play" />}
+                  onClick={() => playSource(contextTask.output, { title: contextTask.name })}
+                >
+                  播放
+                </Menu.Item>
+              ) : null}
+              {menuItems(contextTask)}
+            </>
+          )}
+        </Menu.Dropdown>
+      </Menu>
       {editId && tasks.find((task) => task.id === editId) && (
         <EditDownloadModal
           task={tasks.find((task) => task.id === editId)!}
@@ -242,7 +368,13 @@ export function Downloads() {
           </Table.Thead>
           <Table.Tbody>
             {visibleTasks.map((task) => (
-              <Table.Tr key={task.id}>
+              <Table.Tr
+                key={task.id}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setContextMenu({ id: task.id, x: event.clientX, y: event.clientY });
+                }}
+              >
                 <Table.Td>
                   <Text size="sm" fw={600} truncate>
                     {task.name}
@@ -308,68 +440,7 @@ export function Downloads() {
                           <Icon name="dots" />
                         </ActionIcon>
                       </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item
-                          disabled={active(task) || busy.has(task.id)}
-                          leftSection={<Icon name="edit" />}
-                          onClick={() => setEditId(task.id)}
-                        >
-                          修改名称／轨道
-                        </Menu.Item>
-                        <Menu.Item
-                          leftSection={<Icon name="info" />}
-                          onClick={() => setDetailId(task.id)}
-                        >
-                          任务详情
-                        </Menu.Item>
-                        <Menu.Item
-                          leftSection={<Icon name="folder" />}
-                          onClick={() => void perform(task.id, () => downloads.open(task.id, true))}
-                        >
-                          打开目录
-                        </Menu.Item>
-                        {task.status === "completed" && scraping && (
-                          <Menu.Item
-                            leftSection={<Icon name="scan" />}
-                            disabled={
-                              !!byDownload.get(task.id) && activeScrape(byDownload.get(task.id)!)
-                            }
-                            onClick={() =>
-                              void perform(task.id, async () => {
-                                const job = byDownload.get(task.id);
-                                if (job?.status === "needsInput") {
-                                  if (showScrapeQueue) showScrapeQueue();
-                                  else go("scraper");
-                                  return;
-                                }
-                                if (job) await scraping.retry(job.id);
-                                else await scraping.enqueueDownload(task);
-                              })
-                            }
-                          >
-                            {byDownload.get(task.id)?.status === "needsInput"
-                              ? "确认刮削资料"
-                              : "重试刮削"}
-                          </Menu.Item>
-                        )}
-                        {task.status !== "completed" && task.status !== "cancelled" && (
-                          <Menu.Item
-                            disabled={busy.has(task.id)}
-                            leftSection={<Icon name="stop" />}
-                            onClick={() => void perform(task.id, () => downloads.cancel(task.id))}
-                          >
-                            停止任务
-                          </Menu.Item>
-                        )}
-                        <Menu.Divider />
-                        <Menu.Item
-                          color="red"
-                          leftSection={<Icon name="trash" />}
-                          onClick={() => setRemoveId(task.id)}
-                        >
-                          移除记录
-                        </Menu.Item>
-                      </Menu.Dropdown>
+                      <Menu.Dropdown>{menuItems(task)}</Menu.Dropdown>
                     </Menu>
                   </Group>
                 </Table.Td>
@@ -468,28 +539,41 @@ export function Downloads() {
           </Stack>
         )}
       </Drawer>
-      <Modal opened={!!removeId} onClose={() => setRemoveId(null)} title="移除下载记录" centered>
-        <Stack>
-          <Text size="sm">已下载的视频和临时文件会保留；正在运行的任务会先停止。</Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setRemoveId(null)}>
-              取消
-            </Button>
-            <Button
-              color="red"
-              loading={!!removeId && busy.has(removeId)}
-              onClick={() => {
-                if (removeId)
-                  void perform(removeId, async () => {
-                    await downloads.remove(removeId);
-                    setRemoveId(null);
-                  });
-              }}
-            >
-              移除记录
-            </Button>
-          </Group>
-        </Stack>
+      <Modal
+        opened={!!removalTask}
+        onClose={() => setRemoval(null)}
+        title={removal?.files ? "删除任务和文件" : "移除下载任务"}
+        centered
+      >
+        {removal && removalTask && (
+          <Stack>
+            <Text size="sm" fw={600} truncate>
+              {removalTask.name}
+            </Text>
+            <Text size="sm">
+              {removal.files
+                ? "将停止任务并删除未完成的下载数据和临时文件，任务目录为空时一并删除。此操作无法撤销。"
+                : "已下载的视频和临时文件会保留；正在运行的任务会先停止。"}
+            </Text>
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setRemoval(null)}>
+                取消
+              </Button>
+              <Button
+                color="red"
+                loading={busy.has(removal.id)}
+                onClick={() =>
+                  void perform(removal.id, async () => {
+                    await downloads.remove(removal.id, removal.files);
+                    setRemoval(null);
+                  })
+                }
+              >
+                {removal.files ? "删除任务和文件" : "移除任务"}
+              </Button>
+            </Group>
+          </Stack>
+        )}
       </Modal>
     </div>
   );

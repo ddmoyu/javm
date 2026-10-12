@@ -15,7 +15,21 @@ import type { PageRequest } from "../frontend/src/contracts/library";
 it("发现名单每次读取一百条，仅保留当前页，不预取相邻页", async () => {
   const names = Array.from({ length: 75303 }, (_, index) => `安全演员${index}`);
   const data = loadDiscovery(
-    { genres: [], actors: [], actorDirectories: { actresses: names }, entities: [] },
+    {
+      genres: [],
+      actors: [],
+      entities: [],
+      javbusEntries: names.map((name, index) => ({
+        dimension: "actresses",
+        lane: "censored",
+        id: `safe-${index}`,
+        name,
+        label: name,
+        aliases: [],
+        translationStatus: "pending",
+        category: "",
+      })),
+    },
     null,
     Date.now(),
   );

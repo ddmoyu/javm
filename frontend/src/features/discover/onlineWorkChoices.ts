@@ -1,7 +1,7 @@
-import type { AvwikiEntity } from "../../services/catalog/avwikiWorks";
+import type { OnlineEntity } from "../../services/catalog/onlineWorks";
 import type { WorksDimension } from "../../services/catalog/javbusWorks";
 
-function genreLane(entity: AvwikiEntity) {
+function genreLane(entity: OnlineEntity) {
   try {
     const url = new URL(entity.url);
     if (url.origin !== "https://www.javbus.com") return;
@@ -12,7 +12,7 @@ function genreLane(entity: AvwikiEntity) {
   }
 }
 
-export function onlineWorkChoices(dimension: WorksDimension, entities: AvwikiEntity[]) {
+export function onlineWorkChoices(dimension: WorksDimension, entities: OnlineEntity[]) {
   const lanes = dimension === "genres" ? entities.map(genreLane) : [];
   const partitioned = lanes.length > 0 && lanes.every((lane) => lane !== undefined);
   const positions = new Map<string, number>();

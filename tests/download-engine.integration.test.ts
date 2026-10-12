@@ -25,6 +25,7 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
   let proxyAddress = "";
   const proxyRequests: string[] = [];
   const directRequests: string[] = [];
+  const requests: string[] = [];
   let ranged = false;
   let slowRequests = 0;
   let peakSlowRequests = 0;
@@ -34,10 +35,26 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
   const server = createServer((request, response) => {
     void (async () => {
       const pathname = new URL(request.url!, "http://localhost").pathname;
+      requests.push(pathname);
       if (pathname.startsWith("/proxy-only/")) {
         directRequests.push(pathname);
         response.writeHead(403);
         response.end("direct access unavailable");
+        return;
+      }
+      if (pathname === "/empty.m3u8") {
+        response.writeHead(200, { "Content-Type": "application/vnd.apple.mpegurl" });
+        response.end();
+        return;
+      }
+      if (pathname === "/blocked-page.ts") {
+        response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        response.end("<!DOCTYPE html><title>Access denied</title>");
+        return;
+      }
+      if (pathname.startsWith("/moved/")) {
+        response.writeHead(302, { Location: pathname.slice("/moved".length) });
+        response.end();
         return;
       }
       if (pathname === "/forbidden.mp4") {
@@ -185,8 +202,6 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
       execFileSync("where.exe", ["curl.exe"], { encoding: "utf8", windowsHide: true })
         .trim()
         .split(/\r?\n/)[0]!;
-    tools["N_m3u8DL-RE"] =
-      process.env.JAVM_DOWNLOADER || path.resolve(root, "../../bin/tools/N_m3u8DL-RE.exe");
     // Fixture encoding is a development tool; production FFmpeg only needs remuxing.
     const fixtureFfmpeg = process.env.JAVM_FIXTURE_FFMPEG || tools.ffmpeg;
     execFileSync(
@@ -291,6 +306,67 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
       path.join(root, "master.m3u8"),
       '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Main",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,RESOLUTION=320x180,CODECS="avc1.64000c,mp4a.40.2",AUDIO="audio"\nvideo.m3u8\n',
     );
+    // AES-128 fixture: a fixed test key, served by the loopback fixture server only.
+    await fs.writeFile(path.join(root, "key.bin"), Buffer.alloc(16, 7));
+    await fs.writeFile(
+      path.join(root, "key.info"),
+      `key.bin\n${path.join(root, "key.bin")}\n00000000000000000000000000000001\n`,
+    );
+    execFileSync(
+      fixtureFfmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        path.join(root, "fixture.mp4"),
+        "-c",
+        "copy",
+        "-hls_time",
+        "1",
+        "-hls_list_size",
+        "0",
+        "-hls_key_info_file",
+        path.join(root, "key.info"),
+        "-hls_segment_filename",
+        path.join(root, "encrypted%02d.ts"),
+        path.join(root, "encrypted.m3u8"),
+      ],
+      { windowsHide: true },
+    );
+    await fs.writeFile(
+      path.join(root, "broken.m3u8"),
+      "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:1,\nsegment00.ts\n#EXTINF:1,\nforbidden.mp4\n#EXT-X-ENDLIST\n",
+    );
+    await fs.writeFile(
+      path.join(root, "live.m3u8"),
+      "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:1,\nsegment00.ts\n",
+    );
+    // 地址里带方括号的分片：curl 默认会把 [..] 当作通配范围。
+    await fs.copyFile(path.join(root, "segment00.ts"), path.join(root, "segment[00].ts"));
+    await fs.writeFile(
+      path.join(root, "brackets.m3u8"),
+      (await fs.readFile(path.join(root, "playlist.m3u8"), "utf8")).replace(
+        "segment00.ts",
+        "segment[00].ts",
+      ),
+    );
+    await fs.writeFile(
+      path.join(root, "fallback-master.m3u8"),
+      "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=9000000\nmissing-variant.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\nplaylist.m3u8\n",
+    );
+    await fs.writeFile(
+      path.join(root, "blocked.m3u8"),
+      "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:1,\nsegment00.ts\n#EXTINF:1,\nblocked-page.ts\n#EXT-X-ENDLIST\n",
+    );
+    await fs.writeFile(
+      path.join(root, "encrypted-inline.m3u8"),
+      (await fs.readFile(path.join(root, "encrypted.m3u8"), "utf8")).replace(
+        'URI="key.bin"',
+        `URI="data:text/plain;base64,${Buffer.alloc(16, 7).toString("base64")}"`,
+      ),
+    );
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
     if (!address || typeof address === "string") throw new Error("fixture server unavailable");
@@ -324,6 +400,7 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
         },
         read: (file) => fs.readFile(file, "utf8"),
         write: (file, data) => fs.writeFile(file, data, "utf8"),
+        writeBinary: (file, data) => fs.writeFile(file, data),
         async list(folder) {
           return (await fs.readdir(folder, { withFileTypes: true }))
             .filter((entry) => entry.isFile())
@@ -378,9 +455,6 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
       const count = proxyRequests.length;
       const directCount = directRequests.length;
       const task = taskFor(`proxy-only/${file}`);
-      // N_m3u8DL-RE's custom proxy deliberately bypasses loopback hosts.
-      // The reserved .invalid name fails direct DNS and is served locally by our proxy.
-      if (file.endsWith("m3u8")) task.url = `http://javm-download.invalid/proxy-only/${file}`;
       const messages: string[] = [];
       try {
         await new ToolDownloadEngine(host, async () => proxyAddress).run(
@@ -407,8 +481,7 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
           ),
         );
       }
-      if (!file.endsWith("m3u8"))
-        expect(directRequests.slice(directCount)).toContain(`/proxy-only/${file}`);
+      expect(directRequests.slice(directCount)).toContain(`/proxy-only/${file}`);
       expect(proxyRequests.slice(count)).toContain(`/proxy-only/${file}`);
       expect(messages.filter((line) => line === "直连失败，正在通过网络代理重试。")).toHaveLength(
         1,
@@ -671,6 +744,230 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
     expect(task.phase).toBe("merge");
     expect((await fs.stat(task.inputs[0]!)).size).toBeGreaterThan(10000);
     task.url = `${base}/forbidden.mp4`;
+    await execute(task);
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 60000);
+  it("downloads AES-128 HLS with curl and decrypts locally during the merge", async () => {
+    const task = taskFor("encrypted.m3u8");
+    await execute(task);
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, audio: true });
+    expect(result.durationMs).toBeGreaterThan(11000);
+  }, 60000);
+  it("refuses encrypted HLS when FFmpeg lacks the crypto protocol", async () => {
+    const task = taskFor("encrypted.m3u8");
+    const limited = new ToolDownloadEngine({
+      ...host,
+      run: async (file, args, ...rest) =>
+        args.includes("-protocols")
+          ? { exitCode: 0, stdOut: "Input:\n  file\n  pipe\n", stdErr: "" }
+          : run(file, args, ...rest),
+    });
+    await expect(
+      limited.run(
+        task,
+        { ...defaultDownloadSettings, directory: root },
+        AbortSignal.timeout(30000),
+        () => {},
+        async () => {},
+      ),
+    ).rejects.toThrow("AES-128");
+    await expect(fs.stat(task.output)).rejects.toThrow();
+  }, 30000);
+  it("resumes HLS by downloading only segments missing after a pause", async () => {
+    const task = taskFor("slow-hls/playlist.m3u8");
+    const controller = new AbortController();
+    const first = requests.length;
+    const pending = execute(task, controller.signal, (update) => {
+      if ((update.progress ?? 0) > 0) controller.abort();
+    });
+    await expect(pending).rejects.toThrow();
+    const segments = (await fs.readFile(path.join(root, "playlist.m3u8"), "utf8"))
+      .split(/\r?\n/)
+      .filter((line) => line.endsWith(".ts")).length;
+    const state = JSON.parse(
+      await fs.readFile(path.join(task.workDirectory, "hls", "state.json"), "utf8"),
+    ) as { completed: Record<string, number> };
+    const kept = Object.keys(state.completed).length;
+    expect(kept).toBeGreaterThan(0);
+    expect(kept).toBeLessThan(segments);
+    const resumed = requests.length;
+    await execute(task);
+    const fetched = requests.slice(resumed).filter((item) => item.endsWith(".ts")).length;
+    expect(fetched).toBeLessThanOrEqual(segments - kept);
+    expect(requests.slice(first).length).toBeGreaterThan(fetched);
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 90000);
+  it("reports a forbidden HLS segment without publishing an output", async () => {
+    const task = taskFor("broken.m3u8");
+    await expect(execute(task)).rejects.toThrow(/HLS 分片未能下载，HTTP 403/);
+    await expect(fs.stat(task.output)).rejects.toThrow();
+  }, 30000);
+  it("rejects live HLS playlists", async () => {
+    const task = taskFor("live.m3u8");
+    await expect(execute(task)).rejects.toThrow("直播流");
+  }, 30000);
+  it("falls back to the next variant when the best one is unavailable", async () => {
+    const task = taskFor("fallback-master.m3u8");
+    const lines: string[] = [];
+    await execute(task, AbortSignal.timeout(60000), (update) => {
+      if (update.line) lines.push(update.line);
+    });
+    expect(lines).toContain("当前清晰度不可用，正在尝试下一个清晰度。");
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, audio: true });
+  }, 60000);
+  it("follows playlist redirects and resolves segments against the final address", async () => {
+    const first = requests.length;
+    const task = taskFor("moved/playlist.m3u8");
+    await execute(task);
+    expect(requests.slice(first)).toContain("/segment00.ts");
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 60000);
+  it("rejects a small HTML block page served as a segment", async () => {
+    const task = taskFor("blocked.m3u8");
+    await expect(execute(task)).rejects.toThrow("返回了网页");
+    await expect(fs.stat(path.join(task.workDirectory, "hls", "v-seg-00001.ts"))).rejects.toThrow();
+    await expect(fs.stat(task.output)).rejects.toThrow();
+  }, 30000);
+  it("reports an empty playlist response clearly", async () => {
+    const task = taskFor("empty.m3u8");
+    await expect(execute(task)).rejects.toThrow("空的 HLS 播放列表");
+  }, 30000);
+  it("decrypts HLS whose key is embedded as a data: URI", async () => {
+    const first = requests.length;
+    const task = taskFor("encrypted-inline.m3u8");
+    await execute(task);
+    expect(requests.slice(first)).not.toContain("/key.bin");
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, audio: true });
+  }, 60000);
+  it("re-downloads missing segments when a merge-phase task lost its files", async () => {
+    const task = taskFor("playlist.m3u8");
+    const failing = new ToolDownloadEngine({
+      ...host,
+      run: async (file, args, ...rest) =>
+        args.includes("-progress")
+          ? { exitCode: 1, stdOut: "", stdErr: "simulated mux failure" }
+          : run(file, args, ...rest),
+    });
+    await expect(
+      failing.run(
+        task,
+        { ...defaultDownloadSettings, directory: root },
+        AbortSignal.timeout(30000),
+        () => {},
+        async (phase, inputs) => {
+          task.phase = phase;
+          if (inputs) task.inputs = inputs;
+        },
+      ),
+    ).rejects.toThrow("合并");
+    expect(task.phase).toBe("merge");
+    const hls = path.join(task.workDirectory, "hls");
+    const segment = (await fs.readdir(hls)).find((name) => name.endsWith(".ts"))!;
+    await fs.rm(path.join(hls, segment));
+    const lines: string[] = [];
+    const first = requests.length;
+    await execute(task, AbortSignal.timeout(60000), (update) => {
+      if (update.line) lines.push(update.line);
+    });
+    expect(lines).toContain("合并所需的分片不完整，正在重新下载缺失部分。");
+    expect(requests.slice(first).filter((item) => item.endsWith(".ts"))).toHaveLength(1);
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 60000);
+  it("re-downloads a segment that was truncated after it had been recorded", async () => {
+    const task = taskFor("playlist.m3u8");
+    const failing = new ToolDownloadEngine({
+      ...host,
+      run: async (file, args, ...rest) =>
+        args.includes("-progress")
+          ? { exitCode: 1, stdOut: "", stdErr: "simulated mux failure" }
+          : run(file, args, ...rest),
+    });
+    await expect(
+      failing.run(
+        task,
+        { ...defaultDownloadSettings, directory: root },
+        AbortSignal.timeout(30000),
+        () => {},
+        async (phase, inputs) => {
+          task.phase = phase;
+          if (inputs) task.inputs = inputs;
+        },
+      ),
+    ).rejects.toThrow("合并");
+    const hls = path.join(task.workDirectory, "hls");
+    const segment = (await fs.readdir(hls)).find((name) => name.endsWith(".ts"))!;
+    // 文件仍在，但只剩一半字节：仅检查存在性会把它当成完整分片。
+    const bytes = await fs.readFile(path.join(hls, segment));
+    await fs.writeFile(path.join(hls, segment), bytes.subarray(0, bytes.length >> 1));
+    const lines: string[] = [];
+    const first = requests.length;
+    await execute(task, AbortSignal.timeout(60000), (update) => {
+      if (update.line) lines.push(update.line);
+    });
+    expect(lines).toContain("合并所需的分片不完整，正在重新下载缺失部分。");
+    expect(requests.slice(first).filter((item) => item.endsWith(".ts"))).toHaveLength(1);
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 60000);
+  it("downloads segment addresses containing brackets literally", async () => {
+    const first = requests.length;
+    const task = taskFor("brackets.m3u8");
+    await execute(task);
+    expect(requests.slice(first)).toContain("/segment[00].ts");
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 60000);
+  it("does not trust existing segments when the progress record is gone before merging", async () => {
+    const task = taskFor("playlist.m3u8");
+    const failing = new ToolDownloadEngine({
+      ...host,
+      run: async (file, args, ...rest) =>
+        args.includes("-progress")
+          ? { exitCode: 1, stdOut: "", stdErr: "simulated mux failure" }
+          : run(file, args, ...rest),
+    });
+    await expect(
+      failing.run(
+        task,
+        { ...defaultDownloadSettings, directory: root },
+        AbortSignal.timeout(30000),
+        () => {},
+        async (phase, inputs) => {
+          task.phase = phase;
+          if (inputs) task.inputs = inputs;
+        },
+      ),
+    ).rejects.toThrow("合并");
+    const hls = path.join(task.workDirectory, "hls");
+    const segments = (await fs.readdir(hls)).filter((name) => name.endsWith(".ts")).length;
+    // 没有完成记录时无法区分完整分片和写了一半的分片，必须全部重新下载。
+    await fs.rm(path.join(hls, "state.json"));
+    const lines: string[] = [];
+    const first = requests.length;
+    await execute(task, AbortSignal.timeout(60000), (update) => {
+      if (update.line) lines.push(update.line);
+    });
+    expect(lines).toContain("合并所需的分片不完整，正在重新下载缺失部分。");
+    expect(requests.slice(first).filter((item) => item.endsWith(".ts"))).toHaveLength(segments);
+    expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
+  }, 60000);
+  it("recovers from a truncated progress record left by a forced exit", async () => {
+    const task = taskFor("playlist.m3u8");
+    const hls = path.join(task.workDirectory, "hls");
+    await fs.mkdir(hls, { recursive: true });
+    // 被强制结束时可能只写入一半的 JSON，以及不属于当前计划的旧文件记录。
+    await fs.writeFile(path.join(hls, "state.json"), '{"fingerprint":"x","completed":{"v-seg');
+    await fs.writeFile(path.join(hls, "v-seg-00000.ts"), "partial");
+    await execute(task);
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, audio: true });
+  }, 60000);
+  it("reports a missing local playlist instead of crashing during merge", async () => {
+    const task = taskFor("playlist.m3u8");
+    task.phase = "merge";
+    task.inputs = [path.join(task.workDirectory, "hls", "video.m3u8")];
+    // 缺失的本地播放列表会触发重新下载，而不是抛出文件不存在的原始错误。
     await execute(task);
     expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
   }, 60000);

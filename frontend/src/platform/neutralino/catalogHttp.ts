@@ -1,6 +1,5 @@
 import { filesystem, os } from "@neutralinojs/lib";
 import { CATALOG_BYTES } from "../../services/catalog/catalogData";
-import { isAvwikiWorksUrl } from "../../services/catalog/avwikiWorks";
 import { isJavbusWorksUrl } from "../../services/catalog/javbusWorks";
 import {
   isJavbusFetchUrl,
@@ -12,30 +11,14 @@ import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { logEvent } from "../../services/logging/events";
 import { requestHttp } from "./http";
 
-export type CatalogBrowserFetch = (
-  url: string,
-  signal: AbortSignal,
-  proxy: string,
-) => Promise<string>;
-
 export function createCatalogHttp(
   network: NetworkSettingsService,
   beforeFetch: () => Promise<unknown>,
-  browserFetch?: CatalogBrowserFetch,
 ) {
   return async (url: string, signal: AbortSignal) => {
     const parsed = new URL(url);
-    const works = isAvwikiWorksUrl(url);
-    const javbus = isJavbusFetchUrl(url);
-    const subject = works || isJavbusWorksUrl(url) ? "作品" : "名单";
-    const actorDirectory =
-      parsed.origin === "https://avwikidb.com" &&
-      !parsed.username &&
-      !parsed.password &&
-      /^\/(actor|histrion|director|maker|series)\/$/.test(parsed.pathname) &&
-      (!parsed.search || /^\?page=(?:[1-9]\d{0,2}|1000)$/.test(parsed.search)) &&
-      !parsed.hash;
-    if (!actorDirectory && !works && !javbus) throw new Error(`${subject}来源地址无效。`);
+    const subject = isJavbusWorksUrl(url) ? "作品" : "名单";
+    if (!isJavbusFetchUrl(url)) throw new Error(`${subject}来源地址无效。`);
     let directory = "",
       deferCleanup = false;
     const cleanup = async () => {
@@ -49,23 +32,11 @@ export function createCatalogHttp(
       directory = `${await os.getPath("temp")}/javm-catalog-${crypto.randomUUID()}`;
       await filesystem.createDirectory(directory);
       const response = `${directory}/response`;
-      const avwiki = parsed.origin === "https://avwikidb.com";
-      const headers = avwiki
-        ? [
-            "Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-            "Accept-Language: ja,en;q=0.8",
-            `Referer: ${parsed.origin}/`,
-            `User-Agent: ${navigator.userAgent}`,
-            "Sec-Fetch-Dest: document",
-            "Sec-Fetch-Mode: navigate",
-            "Sec-Fetch-Site: same-origin",
-            "Upgrade-Insecure-Requests: 1",
-          ]
-        : [
-            "Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-            "Accept-Language: zh-CN,zh;q=0.9",
-            `Referer: ${parsed.origin}/`,
-          ];
+      const headers = [
+        "Accept: text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        "Accept-Language: zh-CN,zh;q=0.9",
+        `Referer: ${parsed.origin}/`,
+      ];
       const request: HttpRequest = {
         purpose: "catalog",
         url,
@@ -81,22 +52,25 @@ export function createCatalogHttp(
         timeoutMs: 25_000,
         // 目录与作品服务已有缓存；手动刷新必须真实读取，403 不缓存。
       };
-      const result = javbus
-        ? await requestJavbusWithRedirects(request, signal, requestHttp, (diagnostic) => {
-            logEvent(
-              diagnostic.reason === "follow" ? "info" : "warn",
-              "catalog",
-              "javbus_redirect",
-              diagnostic.reason === "follow" ? "JavBus 正在跟随站内跳转" : "JavBus 跳转已结束",
-              { source: "javbus", subject, ...diagnostic },
-            );
-          })
-        : await requestHttp(request, signal);
+      const result = await requestJavbusWithRedirects(
+        request,
+        signal,
+        requestHttp,
+        (diagnostic) => {
+          logEvent(
+            diagnostic.reason === "follow" ? "info" : "warn",
+            "catalog",
+            "javbus_redirect",
+            diagnostic.reason === "follow" ? "JavBus 正在跟随站内跳转" : "JavBus 跳转已结束",
+            { source: "javbus", subject, ...diagnostic },
+          );
+        },
+      );
       signal.throwIfAborted();
       const status = result.status;
       // 不输出 stderr、网页、URL、Cookie 或代理地址，只记录固定阶段和数字状态。
       const diagnostic = {
-        source: avwiki ? "avwikidb" : "javbus",
+        source: "javbus",
         subject,
         exitCode: result.exitCode,
         status,
@@ -118,19 +92,6 @@ export function createCatalogHttp(
         throw new Error(
           `${subject}${reason[result.exitCode] ?? "请求失败"}（curl ${result.exitCode}）。${result.exitCode === 35 ? "请检查系统设置中的网络代理。" : "请稍后重试。"}`,
         );
-      }
-      if (status === 403 && works && browserFetch) {
-        logEvent(
-          "info",
-          "catalog",
-          "browser_fallback",
-          "作品请求被拒绝，正在使用隐藏浏览器读取",
-          diagnostic,
-        );
-        const html = await browserFetch(url, signal, proxy);
-        signal.throwIfAborted();
-        logEvent("info", "catalog", "browser_completed", "隐藏浏览器已完成作品读取并退出");
-        return html;
       }
       if (status !== 200) {
         logEvent("warn", "catalog", "http_rejected", `${subject}来源未返回正常响应`, diagnostic);
