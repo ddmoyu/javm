@@ -48,7 +48,7 @@ const cancelled: ResolutionOutcome = {
   fallbackEligible: false,
 };
 
-function fixture(initial: ResourcePreferences | null = null) {
+function fixture(initial: ResourcePreferences | null = null, availableSources = sources) {
   let preferences = initial;
   const jobs: { request: ResolutionRequest; finish: (value: ResolutionOutcome) => void }[] = [];
   const submit = (request: ResolutionRequest): ResolutionHandle => {
@@ -78,7 +78,7 @@ function fixture(initial: ResourcePreferences | null = null) {
   const service = new ResourceSearchService(
     resolution,
     { add, directory: () => "safe-downloads" },
-    sources,
+    availableSources,
     archive,
   );
   return { service, jobs, archive, add, preferences: () => preferences };
@@ -158,13 +158,22 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
   });
 
   it("取消清空剩余队列，保留链接和已开始的复制且不记为来源失败", async () => {
-    const f = fixture();
+    const available = [
+      ...sources,
+      ...Array.from({ length: bounds.webviews }, (_, index) => ({
+        id: `queued-${index}`,
+        name: `安全排队来源 ${index}`,
+        template: `${base}/queued-${index}/{code}`,
+      })),
+    ];
+    const f = fixture(null, available);
     try {
       await f.service.initialize();
       f.service.search("SAFE-001");
-      const started = f.jobs.length;
       f.jobs[0]!.finish(success);
       await vi.waitFor(() => expect(f.service.getSnapshot().rows[0]?.stream).toBe(stream));
+      const started = f.jobs.filter((job) => job.request.provider === "webview").length;
+      expect(started).toBeLessThan(available.length);
       const copy = f.service.copyResult("a");
       f.service.cancel();
       f.jobs.at(-1)!.finish(success);
