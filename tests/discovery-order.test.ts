@@ -54,7 +54,7 @@ describe("发现目录来源顺序", () => {
     expect(restored.catalogs.actresses.names).toEqual([...names, "旧缓存示例"]);
     expect(restored.directoryEntries?.actresses).toEqual({ "9": "旧缓存示例" });
     expect(restored.directoryPages.actresses).toBe(1);
-    expect(JSON.parse(restored.cache).version).toBe(5);
+    expect(JSON.parse(restored.cache).version).toBe(6);
   });
 
   it("续页、重启及新一轮更新保持顺序，跨页重复去重且保留未刷新条目", () => {

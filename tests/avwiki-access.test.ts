@@ -256,7 +256,11 @@ describe("发现作品访问失败修复（安全 mock）", () => {
         "root",
       );
     expect(other.send).toHaveBeenCalledWith("Target.closeTarget", { targetId: "popup" }, undefined);
-    expect(other.send).toHaveBeenCalledWith("Browser.setDownloadBehavior", { behavior: "deny" });
+    expect(other.send).toHaveBeenCalledWith(
+      "Browser.setDownloadBehavior",
+      { behavior: "deny" },
+      undefined,
+    );
   });
   it("人工验证、身份跳转和超过上限的结果都自动结束读取", async () => {
     for (const condition of ["interactive", "redirect", "large", "unicode"]) {

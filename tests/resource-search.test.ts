@@ -4,7 +4,7 @@ import { ResolutionService } from "../frontend/src/services/streamResolution/Res
 import { ResolutionHttpSession } from "../frontend/src/services/streamResolution/http";
 import { parsePlaylist } from "../frontend/src/services/streamResolution/parsers";
 import { normalizeCode, sourceRequest } from "../frontend/src/services/streamResolution/sources";
-import { ResolutionError } from "../frontend/src/services/streamResolution/shared";
+import { bounds, ResolutionError } from "../frontend/src/services/streamResolution/shared";
 import type {
   ResolutionWebviewPort,
   ResolutionParser,
@@ -30,7 +30,7 @@ const http: ResolutionHttpPort = async (request) => ({
   headers: {},
   body: request.url.endsWith(".m3u8")
     ? new TextEncoder().encode(
-        "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\nsegment.bin\n#EXT-X-ENDLIST",
+        "#EXTM3U\n#EXT-X-TARGETDURATION:600\n#EXTINF:600,\nsegment.bin\n#EXT-X-ENDLIST",
       ).buffer
     : new Uint8Array([0x47, 0, 1, 2]).buffer,
 });
@@ -80,7 +80,7 @@ describe("资源查找闭环（全部为安全 mock）", () => {
       await resolution.shutdown();
     }
   });
-  it("取消后立即重查同一番号会创建新任务，且始终只有一个 WebView", async () => {
+  it("取消后立即重查同一番号会创建新任务，并遵守 WebView 并发上限", async () => {
     let started = 0,
       live = 0,
       maximum = 0;
@@ -105,7 +105,7 @@ describe("资源查找闭环（全部为安全 mock）", () => {
       expect(await first.result).toMatchObject({ ok: false, code: "cancelled" });
       expect(await second.result).toMatchObject({ ok: true });
       expect(started).toBe(2);
-      expect(maximum).toBe(1);
+      expect(maximum).toBeLessThanOrEqual(bounds.webviews);
     } finally {
       await resolution.shutdown();
     }
@@ -120,11 +120,13 @@ describe("资源查找闭环（全部为安全 mock）", () => {
     const resolution = new ResolutionService({ http: transport, parser, webview });
     try {
       const first = resolution.submit(sourceRequest(source, "DEMO-001"));
-      const second = resolution.submit(sourceRequest(source, "DEMO-002"));
       expect(await first.result).toMatchObject({ code: "cleanup_failed" });
+      const blocked = resolution.submit(sourceRequest(source, "DEMO-002"));
+      expect(await blocked.result).toMatchObject({ code: "cleanup_failed" });
       expect(transport).not.toHaveBeenCalled();
       expect(webview).toHaveBeenCalledTimes(1);
       await resolution.retryCleanup();
+      const second = resolution.submit(sourceRequest(source, "DEMO-002"));
       expect(await second.result).toMatchObject({ ok: true });
       expect(cleanup).toHaveBeenCalledTimes(1);
     } finally {

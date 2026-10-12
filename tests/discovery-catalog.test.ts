@@ -120,9 +120,9 @@ describe("六类发现名单", () => {
     });
     await catalog.initialize();
     const before = catalog.getSnapshot().catalogs;
-    await catalog.refresh("labels");
+    await catalog.refresh("genres");
     expect(catalog.getSnapshot().catalogs).toBe(before);
-    expect(catalog.getSnapshot().errors.entities).toContain("302");
+    expect(catalog.getSnapshot().errors.genres).toContain("302");
     expect(port.write).not.toHaveBeenCalled();
     expect(() => parseEntities('<form action="/verify">private payload</form>')).toThrow(
       "有效资料",
@@ -131,31 +131,34 @@ describe("六类发现名单", () => {
       "有效目录",
     );
   });
-  it("增量更新最多读取八份资料，五类同时合并，游标和待处理队列可恢复", async () => {
+  it("本地资料维度刷新共享任务，不再遍历作品或推进旧游标", async () => {
     vi.useFakeTimers();
     const { catalog, port } = service();
     const updating = catalog.refresh("studios");
     expect(catalog.refresh("labels")).toBe(updating);
     await updating;
-    expect(port.fetch).toHaveBeenCalledTimes(9);
-    expect(catalog.getSnapshot().catalogs.labels.names).toContain("新增发行商");
+    expect(port.fetch).not.toHaveBeenCalled();
+    expect(catalog.getSnapshot().catalogs.labels.names).toEqual(["合成labels"]);
     expect(catalog.getSnapshot().catalogs.studios.names).not.toContain("新增发行商");
     const cache = vi.mocked(port.write).mock.calls[0]![0];
     const saved = loadDiscovery(seed, cache, Date.now());
-    expect(saved.cursors.censored.pending).toHaveLength(2);
-    expect(saved.cursors.censored.page).toBe("/page/2");
-    expect(saved.lane).toBe("uncensored");
+    expect(saved.cursors).toEqual(loadDiscovery(seed, null, Date.now()).cursors);
+    expect(saved.lane).toBe("censored");
     expect(saved.catalogs.genres.names).toEqual(["中文分类"]);
   });
-  it("AVWikiDB 演员目录只读取名字，异常响应不覆盖缓存", async () => {
+  it("停止演员批量采集后仍可查询已有名字，异常目录仍被拒绝", async () => {
     vi.useFakeTimers();
-    const { catalog } = service();
+    const { catalog, port } = service();
+    await catalog.initialize();
     await catalog.refresh("actresses");
-    expect(catalog.getSnapshot().catalogs.actresses.names).toHaveLength(101);
-    expect((await catalog.query({ dimension: "actresses", query: "演员99" }, first)).total).toBe(1);
-    expect(() => parseActorDirectory('{"Content":{}}', "actresses", 1)).toThrow("完整目录");
+    expect(port.fetch).not.toHaveBeenCalled();
+    expect(catalog.getSnapshot().catalogs.actresses.names).toEqual(["合成女演员"]);
+    expect(
+      (await catalog.query({ dimension: "actresses", query: "合成女演员" }, first)).total,
+    ).toBe(1);
+    expect(() => parseActorDirectory('{"Content":{}}', "actresses", 1)).toThrow("目录主列表");
   });
-  it("取消增量更新不保存半份名单或推进游标，其他更新不会并发启动", async () => {
+  it("取消分类更新不保存半份名单，其他更新不会并发启动", async () => {
     vi.useFakeTimers();
     let started!: () => void;
     const fetching = new Promise<void>((resolve) => {
@@ -172,17 +175,17 @@ describe("六类发现名单", () => {
           );
         }),
     });
-    const pending = catalog.refresh("directors");
+    const pending = catalog.refresh("genres");
     await fetching;
-    expect(catalog.refresh("actors")).toBe(pending);
+    expect(catalog.refresh("labels")).toBe(pending);
     catalog.cancel();
     await pending;
     expect(catalog.getSnapshot().updating).toBeNull();
-    expect(catalog.getSnapshot().errors.entities).toBe("");
+    expect(catalog.getSnapshot().errors.genres).toBe("");
     expect(port.write).not.toHaveBeenCalled();
     expect(catalog.getSnapshot().catalogs.directors.names).toHaveLength(1);
   });
-  it("保存失败仍可分页查询本次合并内容，并提示未持久化", async () => {
+  it("本地名单保存失败仍可分页查询，并提示未持久化", async () => {
     vi.useFakeTimers();
     const { catalog } = service({
       write: async () => {
@@ -192,8 +195,8 @@ describe("六类发现名单", () => {
     await catalog.refresh("studios");
     expect(catalog.getSnapshot().warning).toContain("保存失败");
     expect(
-      (await catalog.query({ dimension: "labels", names: ["新增发行商"] }, first)).items,
-    ).toEqual([{ name: "新增发行商", count: 0 }]);
+      (await catalog.query({ dimension: "labels", names: ["合成labels"] }, first)).items,
+    ).toEqual([{ name: "合成labels", count: 0 }]);
   });
   it("拒绝站外分页及脚本伪造链接，保留中文与专有名词", () => {
     const data = parseEntities(

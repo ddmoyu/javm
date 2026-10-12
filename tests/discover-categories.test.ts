@@ -64,7 +64,7 @@ describe("发现分类", () => {
       ),
     ).toThrow();
   });
-  it("男女目录分开更新，每批最多八页，分页位置恢复且不请求 GFriends", async () => {
+  it("已有男女名单保持可用，手动刷新也不重新批量采集", async () => {
     vi.useFakeTimers();
     const run = async (
       operation: CatalogRequest["operation"],
@@ -97,16 +97,12 @@ describe("发现分类", () => {
       fetch,
     });
     try {
-      const pending = catalog.refresh("actresses");
-      expect(catalog.refresh("maleActors")).toBe(pending);
-      await pending;
-      expect(fetch).toHaveBeenCalledTimes(8);
-      expect(catalog.getSnapshot().catalogs.actresses.names).toHaveLength(801);
+      await catalog.initialize();
+      await Promise.all([catalog.refresh("actresses"), catalog.refresh("maleActors")]);
+      expect(fetch).not.toHaveBeenCalled();
+      expect(write).not.toHaveBeenCalled();
+      expect(catalog.getSnapshot().catalogs.actresses.names).toEqual(["合成女演员"]);
       expect(catalog.getSnapshot().catalogs.maleActors.names).toEqual(["合成男演员"]);
-      expect(loadDiscovery(seed, write.mock.calls[0]![0], Date.now()).actorPages.actresses).toBe(9);
-      await catalog.refresh("maleActors");
-      expect(catalog.getSnapshot().catalogs.maleActors.names).toContain("新增合成男演员");
-      expect(catalog.getSnapshot().catalogs.actresses.names).not.toContain("新增合成男演员");
     } finally {
       await catalog.shutdown();
     }

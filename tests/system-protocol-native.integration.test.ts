@@ -10,6 +10,7 @@ import type {
 
 describe.runIf(process.platform === "win32")("隔离 HKCU 测试键中的链接注册", () => {
   it("检查、注册、替换前冲突验证和解除只操作测试键，特殊路径不执行命令", async () => {
+    await fs.mkdir(".tmp", { recursive: true });
     const root = path.resolve(await fs.mkdtemp(".tmp/protocol-safe-"));
     const entry = path.join(root, "中文 $() & ' 空格", "JAVM.exe");
     await fs.mkdir(path.dirname(entry));

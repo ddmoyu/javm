@@ -48,7 +48,7 @@ describe("媒体库服务", () => {
       coverUrl: "/cover",
       metadata: { fileName: "TEST-001.mp4", actors: ["测试演员"] },
     });
-    expect(film.files).toHaveLength(3);
+    expect(film.files?.map((file) => file.name)).toEqual(["poster.jpg"]);
   });
   it("浏览器不生成目录和影片，也不伪造导入成功", async () => {
     const service = new LibraryService();

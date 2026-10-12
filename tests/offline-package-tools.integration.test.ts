@@ -36,6 +36,7 @@ describe.runIf(process.platform === "win32")("离线包校验（无安装、注�
   }, 30000);
 
   it("按清单核对安全假文件，拒绝内容改动与目录穿越", async () => {
+    await fs.mkdir(".tmp", { recursive: true });
     const root = path.resolve(await fs.mkdtemp(".tmp/package-tools-"));
     const content = Buffer.from("Safe fixture; this is not an executable.");
     const files = ["JAVM.exe", "javm-win_x64.exe", "bin/javm_database.exe"];

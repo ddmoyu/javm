@@ -153,7 +153,10 @@ it("详情已加载的封面及预览图直接用于收藏，即使离线也不�
   await service.fetch("safe", true, true, details);
   expect(service.getSnapshot()).toMatchObject({ processed: 3, total: 3, error: "", warning: "" });
   expect(committed.map((image) => image.kind)).toEqual(["poster", "screenshot", "screenshot"]);
-  for (const image of committed) expect(fixture.files.get(image.path)).toEqual(fixture.bytes);
+  for (const image of committed)
+    expect(Buffer.from(fixture.files.get(image.path)!).equals(Buffer.from(fixture.bytes))).toBe(
+      true,
+    );
   for (const file of cachedFiles) expect(fixture.files.has(file)).toBe(true);
   expect(fixture.requests).toHaveLength(3);
 });

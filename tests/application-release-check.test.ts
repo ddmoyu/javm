@@ -4,6 +4,17 @@ import {
   ApplicationUpdateService,
 } from "../frontend/src/services/settings/ApplicationUpdateService";
 describe("官方发布检查（安全 mock，无下载或安装）", () => {
+  it("alpha 可以升级到同号正式版，正式版不会收到 alpha", () => {
+    const release = {
+      tag_name: "v1.0.0",
+      html_url: "https://github.com/ddmoyu/javm/releases/tag/v1.0.0",
+      assets: [{ name: "JAVM-1.0.0-windows-x64-offline-safe.zip" }],
+    };
+    expect(compatibleRelease(release, "1.0.0-alpha.1")).toMatchObject({ version: "1.0.0" });
+    expect(
+      compatibleRelease({ ...release, tag_name: "v1.0.1-alpha.1", prerelease: true }, "1.0.0"),
+    ).toBeNull();
+  });
   it("忽略旧版和预发布，仅接受当前离线包命名及官方页面", () => {
     const release = {
       tag_name: "v1.1.0",
