@@ -1,4 +1,6 @@
 if(JAVM_USE_PREBUILT_DEPENDENCIES)
+    # A new component fingerprint must replace a cached SDK from an older release.
+    set(CURL_DIR "${JAVM_PREBUILT_CURL}/sdk/lib/cmake/CURL" CACHE PATH "Verified CURL component SDK" FORCE)
     find_package(CURL CONFIG REQUIRED PATHS "${JAVM_PREBUILT_CURL}/sdk/lib/cmake/CURL" NO_DEFAULT_PATH)
     set(JAVM_CURL_LICENSE "${JAVM_PREBUILT_CURL}/licenses/curl.txt")
 else()
