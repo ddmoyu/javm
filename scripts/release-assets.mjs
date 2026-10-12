@@ -31,7 +31,17 @@ await writeFile(
   path.join(output, "THIRD-PARTY-NOTICES.html"),
   `<!doctype html><meta charset="utf-8"><title>JAVM third-party notices</title><h1>JAVM ${escape(pkg.version)}</h1><p>Corresponding dependency sources and build recipes: <a href="https://github.com/${dependencyLock.repository}/releases/tag/${dependencyLock.tag}">${dependencyLock.tag}</a></p>${manifest.licenseNotices.map((entry) => `<h2>${escape(entry.components.join(", "))}</h2><pre>${escape(entry.text)}</pre>`).join("\n")}`,
 );
-const assets = await inventory(output);
+const allowed = new Set([
+  path.basename(bundle.archive),
+  `JAVM-${pkg.version}-windows-x64-setup.exe`,
+  `JAVM-${pkg.version}-build-manifest.json`,
+  "THIRD-PARTY-NOTICES.html",
+]);
+const assets = (await inventory(output)).filter((file) => file.path !== "SHA256SUMS");
+if (assets.some((file) => !allowed.has(file.path)))
+  throw new Error(
+    "Release output contains stale or unexpected files; use a clean dist/release directory",
+  );
 if (
   !assets.some((file) => file.path.endsWith("-setup.exe")) ||
   !assets.some((file) => file.path.endsWith(".zip"))

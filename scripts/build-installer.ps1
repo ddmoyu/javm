@@ -1,4 +1,7 @@
 $ErrorActionPreference = 'Stop'
+# pnpm may preserve PowerShell 7 module paths when starting Windows PowerShell.
+# Load the matching built-in module to avoid duplicate type definitions.
+Import-Module (Join-Path $PSHOME 'Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1') -ErrorAction Stop
 $project = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $package = Get-Content -LiteralPath (Join-Path $project 'package.json') -Raw | ConvertFrom-Json
 $latest = Get-Content -LiteralPath (Join-Path $project 'dist/offline/latest.json') -Raw | ConvertFrom-Json
