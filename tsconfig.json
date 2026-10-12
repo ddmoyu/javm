@@ -21,10 +21,6 @@
     "frontend/vite.config.ts",
     "vite.config.ts",
     "tests/**/*.ts",
-    "tests/**/*.tsx",
-    "docs/prototypes/javm-ui/**/*.ts",
-    "docs/prototypes/javm-ui/**/*.tsx",
-    "docs/prototypes/javm-mantine/**/*.ts",
-    "docs/prototypes/javm-mantine/**/*.tsx"
+    "tests/**/*.tsx"
   ]
 }

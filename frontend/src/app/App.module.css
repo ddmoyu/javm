@@ -1,6 +1,0 @@
-.main {
-  min-height: 100dvh;
-  display: grid;
-  align-items: center;
-  padding-block: var(--mantine-spacing-xl);
-}

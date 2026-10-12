@@ -38,11 +38,9 @@ try {
     & $env:ComSpec /d /s /c "chcp 65001 >nul && call `"$vcvarsPath`" >nul && `"$cmakePath`"$freshOption --preset $preset -DCMAKE_MAKE_PROGRAM=`"$ninjaPath`" && `"$cmakePath`" --build --preset $preset"
     if ($LASTEXITCODE -ne 0) { throw "Native build failed with exit code $LASTEXITCODE" }
     # Incremental builds may skip POST_BUILD after switching Debug/Release.
-    # Always deploy executables from the selected configuration.
-    foreach ($binary in @('JAVM.exe', 'javm_database.exe')) {
-        Copy-Item -LiteralPath (Join-Path $projectRoot "build/native/$preset/bin/$binary") `
-            -Destination (Join-Path $projectRoot "bin/$binary") -Force
-    }
+    # Deploy the database executable; packaging uses the official Neutralino host.
+    Copy-Item -LiteralPath (Join-Path $projectRoot "build/native/$preset/bin/javm_database.exe") `
+        -Destination (Join-Path $projectRoot 'bin/javm_database.exe') -Force
 }
 finally {
     Pop-Location

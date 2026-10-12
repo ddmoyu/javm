@@ -5,10 +5,6 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "prototype": "vp dev --config docs/prototypes/javm-ui/vite.config.ts",
-    "prototype:build": "vp build --config docs/prototypes/javm-ui/vite.config.ts",
-    "prototype:velvet": "vp dev --config docs/prototypes/javm-mantine/vite.config.ts",
-    "prototype:velvet:build": "vp build --config docs/prototypes/javm-mantine/vite.config.ts",
     "dev": "vp dev",
     "build": "vp build",
     "preview": "vp preview",
