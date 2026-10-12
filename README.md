@@ -76,7 +76,7 @@ pnpm test:player-window   # 验证独立无边框播放器及窗口生命周期
 pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部程序启动
 ```
 
-不要同时运行 `pnpm dev` 和 `pnpm desktop:dev`，二者使用同一个开发端口。`desktop:build` 是工程打包验证入口，尚不是通过发布验收的安装包。
+不要同时运行 `pnpm dev` 和 `pnpm desktop:dev`，二者使用同一个开发端口。`desktop:build` 是工程打包入口；正式便携 ZIP 和 Inno Setup 安装包由手动 GitHub Actions 构建和验收，详见 [Windows 版本发布](docs/RELEASING.md)。
 
 公开 HLS 样本地址、旧版解析的参考范围和实测结果见 [公开流验证记录](docs/verification/2026-10-09-public-hls-streams.md)。联网样本测试保留原始日志及最终媒体文件，不进入普通测试或自动 CI。
 
@@ -86,7 +86,7 @@ pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部�
 
 FFmpeg 采用参考老版 `ddmoyu/ffmepg` 裁剪配置的 **8.0.1 精简构建**，保留 JPEG 抽帧、MP4 无损合并与进度输出，关闭网络、硬件加速与视频转码。媒体轨道和时长检查复用内置 MediaInfo，不再构建或分发 ffprobe。打包会校验构建凭据、二进制哈希、体积和实际能力，拒绝混入完整版。来源与复现方式见 [精简 FFmpeg](docs/decisions/0013-lightweight-ffmpeg.md)。
 
-依赖版本、下载地址和 SHA-256 锁定在 `scripts/offline-dependencies.json`，首次准备需要联网，缓存齐全后可运行 `pnpm offline:setup --Offline` 复用。离线包每次写入新的时间戳目录，不覆盖已有运行目录；附带中文说明、第三方许可证、文件清单、校验脚本及 ZIP 校验值。`dist/offline/latest.json` 指向最近一次输出。WebView2 由系统安装及更新；启动器只负责应用入口和资源目录，不配置 WebView2 路径或修改其目录权限。
+依赖源码版本、下载地址和 SHA-256 锁定在 `scripts/offline-dependencies.json`，本地首次准备需要联网，缓存齐全后可运行 `pnpm offline:setup --Offline` 复用。Actions 单独构建精简依赖，通过 `scripts/dependency-bundle.json` 锁定资产供应用发布复用。离线包每次写入新的时间戳目录，不覆盖已有运行目录；运行目录只含入口和运行文件，构建清单、许可说明和校验值单独提供。`dist/offline/latest.json` 指向最近一次输出。WebView2 由系统安装及更新；应用入口不配置 WebView2 路径或修改其目录权限。
 
 `desktop:build` 输出的基础目录仍位于 `dist/desktop/javm`，主程序为 `javm-win_x64.exe`，前端资源嵌入 EXE。完整运行环境以 `desktop:offline` 输出为准。原生发布构建使用独立的 `windows-release` preset，不携带 Debug CRT。
 
@@ -129,7 +129,7 @@ docs/                     重构约定、选型和验证记录
 - 0.5.3 迁移已用合成数据库验证；维度收藏与别名提供归档恢复，旧任务保留且不自动执行。日常片库备份覆盖资料和关联记录，不包含媒体文件、下载库或设置。安全桌面完整流程和恢复验证见[模块闭环记录](docs/verification/2026-10-11-module-closure.md)；NAS、慢盘及完整发行环境仍需独立验收。
 - 桌面窗口使用官方窗口 API，首次启动居中显示；关闭窗口可按设置留在托盘继续任务，显式退出先停止任务并保存状态。已验证对应事件处理器，长期托盘队列和系统级交互仍需独立验收，见 [后台运行验证](docs/verification/2026-10-10-background-running.md)。
 - `pnpm test` 包含查询规则、空资料边界、下载状态机与播放会话测试；`pnpm test:downloads` 覆盖实际下载、合并、进程退出与 SQLite，`pnpm test:playback` 覆盖合成素材的真实播放。通过测试不代表网站、所有编解码器或发布包已全面验收。
-- GitHub Actions 仅保留手动触发。提交、推送和 PR 不自动运行检查；旧发布工作流已移除，不自动创建 Release。
+- GitHub Actions 仅允许手动触发。提交、推送和 PR 不自动运行检查；发布流程默认仅验证，显式开启发布才创建 Release。
 - `pnpm test:metadata` 使用隔离的桌面宿主和本机模拟接口验证真实传输与加密存储，并运行已准备的包内 MetaTube，验证按需启动、驻留及宿主退出后的进程回收。测试不使用真实片库或供应商密钥，初始验证见 [资料辅助验证](docs/verification/2026-10-09-metatube-ai.md)。
 - 版本组合、选择原因与阶段差异见 [初始化决策](docs/decisions/0001-initialization.md)。
 
