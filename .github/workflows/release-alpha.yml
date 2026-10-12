@@ -1,0 +1,75 @@
+name: JAVM Alpha 便携包
+
+on:
+  push:
+    tags: ["v*-alpha.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: alpha-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: 核对版本标签和 dev 源码
+        run: node scripts/release-alpha.mjs verify-source
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test
+      - name: 下载并校验已发布组件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm offline:setup
+      - run: pnpm desktop:setup
+      - name: 构建完整便携包
+        run: |
+          pnpm desktop:build
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed' }
+          node scripts/package-offline.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Portable packaging failed' }
+      - name: 解压运行并验证安全样例
+        run: pnpm test:offline
+      - name: 整理发布附件和验证记录
+        run: node scripts/release-alpha.mjs prepare
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: javm-alpha-windows-x64
+          path: build/alpha-release/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          name: javm-alpha-windows-x64
+          path: build/alpha-release
+      - name: 上传、回读验证并公开 Alpha Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-alpha.mjs publish

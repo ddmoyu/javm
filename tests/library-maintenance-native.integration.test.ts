@@ -84,9 +84,7 @@ describe.runIf(enabled)("片库清理：仅隔离合成文件与数据库", () =
   it("删除实体视频，保留旁路文件、作品、NFO、封面并更新目录计数", async () => {
     const before = await host.request<LibraryStatus>("library.status");
     const plan = await prepare();
-    expect(plan.files.map((file) => path.basename(file.path))).toEqual(
-      ["a.mp4"],
-    );
+    expect(plan.files.map((file) => path.basename(file.path))).toEqual(["a.mp4"]);
     expect(plan.files.some((file) => file.path.endsWith("shared.jpg"))).toBe(false);
     await expect(host.request("library.scan", { id: "directory" })).rejects.toThrow("正在清理");
     await expect(

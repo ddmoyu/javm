@@ -5,15 +5,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { canonical, safePath, sha256, inventory, verifyPayload } from "./components.mjs";
 
-test("构建输入不受 JSON 键顺序影响", () => {
+await test("构建输入不受 JSON 键顺序影响", () => {
   assert.equal(canonical({ b: 2, a: { y: 2, x: 1 } }), canonical({ a: { x: 1, y: 2 }, b: 2 }));
 });
-test("拒绝绝对路径、回溯、盘符和 Windows 分隔符", () => {
+await test("拒绝绝对路径、回溯、盘符和 Windows 分隔符", () => {
   for (const name of ["../a", "/a", "C:/a", "runtime/../a", "runtime\\a", "runtime//a"]) {
     assert.throws(() => safePath(tmpdir(), name));
   }
 });
-test("验证真实文件内容、配方及未列入的文件", async () => {
+await test("验证真实文件内容、配方及未列入的文件", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "javm-component-test-"));
   await mkdir(path.join(directory, "runtime"));
   await writeFile(path.join(directory, "runtime/safe.txt"), "safe fixture");
@@ -40,7 +40,7 @@ test("验证真实文件内容、配方及未列入的文件", async () => {
   await writeFile(path.join(directory, "runtime/extra.txt"), "unexpected");
   await assert.rejects(verifyPayload(directory, manifest, spec, "windows-x64"));
 });
-test("拒绝大小写重名条目", async () => {
+await test("拒绝大小写重名条目", async () => {
   const directory = await mkdtemp(path.join(tmpdir(), "javm-component-case-"));
   await mkdir(path.join(directory, "runtime"));
   await writeFile(path.join(directory, "runtime/safe.txt"), "safe");

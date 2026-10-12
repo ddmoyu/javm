@@ -177,11 +177,13 @@ describe("发现收藏保存图片", () => {
     });
     expect(saved.coverUrl).toBeDefined();
     expect(saved.screenshots).toHaveLength(1);
-    expect(vi.mocked(f.tools.download).mock.calls.map(([url]) => url)).toEqual([
-      details.coverUrl,
-      details.coverCandidates![0],
-      details.previewImages![0],
-    ]);
+    const urls = vi.mocked(f.tools.download).mock.calls.map(([url]) => url);
+    expect(urls.toSorted()).toEqual(
+      [details.coverUrl, details.coverCandidates![0], details.previewImages![0]].toSorted(),
+    );
+    expect(urls.indexOf(details.coverCandidates![0]!)).toBeGreaterThan(
+      urls.indexOf(details.coverUrl!),
+    );
   });
 
   it("部分图片失败保留成功图片、收藏和文字，并反馈重试入口", async () => {
@@ -240,19 +242,19 @@ describe("发现收藏保存图片", () => {
 
   it("取消收藏图片会清理临时文件，拒绝并发收藏，保留文字资料", async () => {
     const f = fixture();
-    let finish!: () => void;
+    const finishes: (() => void)[] = [];
     vi.mocked(f.tools.download).mockImplementation(
       () =>
         new Promise<void>((resolve) => {
-          finish = resolve;
+          finishes.push(resolve);
         }),
     );
     const warning = vi.fn();
     const pending = f.library.collectMetadata(details, warning);
-    await vi.waitFor(() => expect(finish).toBeDefined());
+    await vi.waitFor(() => expect(finishes).toHaveLength(3));
     await expect(f.library.collectMetadata(details)).rejects.toThrow("等待");
     f.library.artwork!.cancel();
-    finish();
+    for (const finish of finishes) finish();
     const saved = await pending;
     expect(saved.favorite).toBe(true);
     expect(saved.coverUrl).toBeUndefined();

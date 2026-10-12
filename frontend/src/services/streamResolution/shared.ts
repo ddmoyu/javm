@@ -46,10 +46,7 @@ export const bounds = {
   queue: 32,
   active: 10,
   // 隐藏取流实例并行上限：按逻辑处理器留出余量，最少 2 个，最多 8 个。
-  webviews: Math.max(
-    2,
-    Math.min(8, (globalThis.navigator?.hardwareConcurrency ?? 4) - 2),
-  ),
+  webviews: Math.max(2, Math.min(8, (globalThis.navigator?.hardwareConcurrency ?? 4) - 2)),
   perSource: 2,
   queueMs: 120_000,
   httpMs: 30_000,

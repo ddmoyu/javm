@@ -26,10 +26,10 @@ Neutralino 支持隐藏窗口配置。本机验证表明，6.10.0 的常规启�
 
 诊断脚本：[probe-hidden-webview.ps1](../../scripts/probe-hidden-webview.ps1)。使用独立目录、独立 WebView2 profile、本地文字页面 `DEMO-001`，关闭扩展与日志，不启动 JAVM 主界面，不访问真实数据库或内容站点。外部页面请求被限制到不可用的本机代理，只有本机地址绕过；脚本不接受外部 URL。页面仅写入场景标记，由页面或监督器结束进程。
 
-| 启动方式 | 可见窗口采样 / 显示事件 | 前台事件 | 完成标记与正常退出 |
-| --- | --- | --- | --- |
-| .NET ProcessStartInfo，`CreateNoWindow=true`、`WindowStyle=Hidden`，Neutralino `hidden=true` | 有 / 有 | 有，事件发生时窗口可见 | 是 |
-| Win32 CreateProcess，`STARTF_USESHOWWINDOW`、`SW_HIDE`，Neutralino `hidden=true` | 无 / 无 | 一次，事件发生时窗口不可见；轮询未采到它成为前台 | 是 |
+| 启动方式                                                                                     | 可见窗口采样 / 显示事件 | 前台事件                                         | 完成标记与正常退出 |
+| -------------------------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------ | ------------------ |
+| .NET ProcessStartInfo，`CreateNoWindow=true`、`WindowStyle=Hidden`，Neutralino `hidden=true` | 有 / 有                 | 有，事件发生时窗口可见                           | 是                 |
+| Win32 CreateProcess，`STARTF_USESHOWWINDOW`、`SW_HIDE`，Neutralino `hidden=true`             | 无 / 无                 | 一次，事件发生时窗口不可见；轮询未采到它成为前台 | 是                 |
 
 Win32 的首次 ShowWindow 会受启动信息控制，符合[微软说明](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-showwindow)。这解释了两种启动方式的差异。两次运行最终的前台窗口均与开始时一致，退出后未发现属于这两个 profile 的 Neutralino / WebView2 进程。
 
@@ -43,11 +43,11 @@ Win32 的首次 ShowWindow 会受启动信息控制，符合[微软说明](https
 
 补测使用挂起创建，在恢复主线程前设置目标 PID 与事件观察，避免漏记窗口创建初期事件。窗口轮询每 10 毫秒执行一次，并监听该 PID 的 SHOW 和前台事件；焦点事件只记录，不作为失败条件。
 
-| 安全 mock 场景 | 可见窗口采样 / SHOW 事件 | 前台事件 / 前台采样 | 退出结果 |
-| --- | --- | --- | --- |
-| 正常完成标记 | 无 / 0 | 1 / 有 | 页面正常退出 |
-| 无候选标记 | 无 / 0 | 1 / 有 | 页面报告 `no_candidates` 后退出 |
-| 页面持续等待 | 无 / 0 | 1 / 有 | 20 秒到期，监督器结束本任务进程树 |
+| 安全 mock 场景 | 可见窗口采样 / SHOW 事件 | 前台事件 / 前台采样 | 退出结果                          |
+| -------------- | ------------------------ | ------------------- | --------------------------------- |
+| 正常完成标记   | 无 / 0                   | 1 / 有              | 页面正常退出                      |
+| 无候选标记     | 无 / 0                   | 1 / 有              | 页面报告 `no_candidates` 后退出   |
+| 页面持续等待   | 无 / 0                   | 1 / 有              | 20 秒到期，监督器结束本任务进程树 |
 
 三次运行最终前台窗口均与开始时相同；按本次 profile 路径检查，未发现遗留 Neutralino / WebView2 进程。报告分别保存在：
 
@@ -67,12 +67,12 @@ powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy B
 
 ## C 与 C++ 候选
 
-| 方案 | 从创建起隐藏的依据 | 获取资源链接 | 适用判断 |
-| --- | --- | --- | --- |
+| 方案                                 | 从创建起隐藏的依据                                                                                                       | 获取资源链接                                                                                           | 适用判断                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
 | `webview/webview` 0.12.0，MIT，C/C++ | 传入自己创建且从不 ShowWindow 的 HWND。Windows 后端仅在 `m_owns_window` 为真时显示、聚焦顶层窗口；默认传空句柄会显示窗口 | 可通过 `webview_get_native_handle(...BROWSER_CONTROLLER)` 获取 WebView2 controller，再订阅原生网络事件 | 如官方能力不足，优先考虑的轻量备选；使用独立进程，不替换主界面的 Neutralino |
-| `saucer` 8.0.5，MIT，C++ | Win32 创建使用的标准样式不含 `WS_VISIBLE`，`show()` 是独立操作 | 稳定原生接口暴露 `ICoreWebView2_2*` 与 controller | 备选；功能与 C++ 依赖面比本次小型取流宿主更大 |
-| Microsoft WebView2 Win32 SDK | 自建隐藏 HWND，并在导航前将 controller 的 `IsVisible` 设为 false | 官方请求、响应事件和脚本注入 API | Windows 专用实现最直接；需要自行管理 COM、消息循环、权限和退出 |
-| CEF | `SetAsWindowless` 与 `windowless_rendering_enabled` 明确支持无浏览器窗口渲染 | `OnBeforeResourceLoad`、`OnResourceResponse` | 功能充足，但需分发与维护 Chromium，不作为本次首选 |
+| `saucer` 8.0.5，MIT，C++             | Win32 创建使用的标准样式不含 `WS_VISIBLE`，`show()` 是独立操作                                                           | 稳定原生接口暴露 `ICoreWebView2_2*` 与 controller                                                      | 备选；功能与 C++ 依赖面比本次小型取流宿主更大                               |
+| Microsoft WebView2 Win32 SDK         | 自建隐藏 HWND，并在导航前将 controller 的 `IsVisible` 设为 false                                                         | 官方请求、响应事件和脚本注入 API                                                                       | Windows 专用实现最直接；需要自行管理 COM、消息循环、权限和退出              |
+| CEF                                  | `SetAsWindowless` 与 `windowless_rendering_enabled` 明确支持无浏览器窗口渲染                                             | `OnBeforeResourceLoad`、`OnResourceResponse`                                                           | 功能充足，但需分发与维护 Chromium，不作为本次首选                           |
 
 源码与 API：
 

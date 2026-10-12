@@ -28,3 +28,11 @@ pnpm offline:setup 查询当前源码配方对应的最新可用组件产物，�
 组件发布核对文件集合、Windows x64 PE、构建配置及哈希。FFmpeg 验证裁剪能力；MetaTube 使用现有安全模拟专项验证；MediaInfo 读取合成的一秒静音 WAV；curl 验证 Unicode 路径和 Schannel 能力标识。所有测试不访问真实内容源或用户数据库。
 
 应用 Alpha 发布执行工程检查、默认测试集、Release 构建与隔离运行包验证，再发布预发布版本。跨平台、真实站点和真实用户数据不属于此轮验证范围。
+
+## Alpha 发布顺序
+
+先将应用版本同步到 package.json 和 neutralino.config.json，提交并推送 dev。等待组件工作流完成，再创建 v版本号-alpha.序号 标签并推送；标签必须指向 dev 已包含的提交。
+
+.github/workflows/release-alpha.yml 核对标签和版本、执行 pnpm check 与 pnpm test、下载匹配配方的组件，再构建和解压验证完整便携包。发布阶段先上传草稿、下载所有附件并比对 SHA-256，全部通过后才公开为预发布。公开标签和附件不覆盖；失败草稿可通过重跑相同标签的工作流恢复。
+
+除 ZIP 外，Release 单独提供文件清单、THIRD-PARTY-NOTICES.txt、verification.json 和 SHA256SUMS；清单包含各组件的来源 Release、指纹、构建提交及附件哈希。运行目录不添加这些开发记录。

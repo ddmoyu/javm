@@ -3,11 +3,7 @@
   "source": "javbus",
   "started_at": "2026-10-11T06:33:53.603Z",
   "status": "cancelled",
-  "requested_fields": [
-    "entity_id",
-    "entity_name",
-    "video_count"
-  ],
+  "requested_fields": ["entity_id", "entity_name", "video_count"],
   "requests": 475,
   "details_inspected": 0,
   "directory_pages": [],

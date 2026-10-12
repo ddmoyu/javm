@@ -27,17 +27,17 @@
 
 优先查看同一 `attempt` 的“隐藏作品读取结束”：
 
-| 字段或原因 | 说明 |
-| --- | --- |
-| `reason: timeout` | 期限内未完成；结合 `idleMs`、未完成请求和页面状态判断停在哪里 |
-| `reason: cancelled` | 调用方取消；`code` 区分替换、关闭视图和退出应用 |
-| `reason: interaction_required` / `authentication_required` / `dialog_required` | 已有业务检测命中相应人工操作标志 |
-| `reason: navigation_rejected` | 主文档跳向不允许的页面或与原实体不匹配 |
-| `reason: cdp_error` | 对照运行诊断中的 `lastCdpCommand`、`lastCdpTarget` |
-| `pendingRequests` / 请求 `event: pending,response` | 结束时尚未收到最终完成事件；response 表示已有响应头 |
-| `kind: challenge_probe` | 挑战探测域名，不能单凭其取消或 DNS 失败判定根因 |
-| `turnstileCode` | 若页面确实输出标准码，可对照官方定义；为空不等于没有验证问题 |
-| `checkboxes` / `visibleCheckboxes` | 普通 DOM 的存在和可见计数，仅是诊断线索，不触发新的自动退出或点击 |
+| 字段或原因                                                                     | 说明                                                              |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| `reason: timeout`                                                              | 期限内未完成；结合 `idleMs`、未完成请求和页面状态判断停在哪里     |
+| `reason: cancelled`                                                            | 调用方取消；`code` 区分替换、关闭视图和退出应用                   |
+| `reason: interaction_required` / `authentication_required` / `dialog_required` | 已有业务检测命中相应人工操作标志                                  |
+| `reason: navigation_rejected`                                                  | 主文档跳向不允许的页面或与原实体不匹配                            |
+| `reason: cdp_error`                                                            | 对照运行诊断中的 `lastCdpCommand`、`lastCdpTarget`                |
+| `pendingRequests` / 请求 `event: pending,response`                             | 结束时尚未收到最终完成事件；response 表示已有响应头               |
+| `kind: challenge_probe`                                                        | 挑战探测域名，不能单凭其取消或 DNS 失败判定根因                   |
+| `turnstileCode`                                                                | 若页面确实输出标准码，可对照官方定义；为空不等于没有验证问题      |
+| `checkboxes` / `visibleCheckboxes`                                             | 普通 DOM 的存在和可见计数，仅是诊断线索，不触发新的自动退出或点击 |
 
 没有观察到复选框不能排除闭合 Shadow DOM、尚未加载完成或其他人工验证形式。采样是有限观察，不是完整浏览器兼容性证明。[Cloudflare 官方错误码说明](https://developers.cloudflare.com/turnstile/troubleshooting/client-side-errors/error-codes/) 区分交互超时、iframe 加载失败、时钟问题和通用挑战失败；必须以实际捕获的数字码为依据。
 

@@ -25,6 +25,10 @@ const video: NativeVideo = {
   favorite: 0,
   missing: 0,
   nfo_path: "C:\\媒体\\TEST-001.nfo",
+  media_files: [
+    { id: "safe-file", path: "C:\\媒体\\TEST-001.mp4", file_size: 1024 ** 3, missing: 0 },
+  ],
+  nfo_files: [{ path: "C:\\媒体\\TEST-001.nfo", canonical: 1 }],
   actors: ["测试演员"],
   genres: ["测试分类"],
   series: "测试系列",

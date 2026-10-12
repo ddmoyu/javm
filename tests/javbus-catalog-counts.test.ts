@@ -471,21 +471,28 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
     expect(entries.map(javbusEntryUrl)).toContain(`${origin}/label/l1`);
     expect(entries.some((entry) => entry.id === "advert")).toBe(false);
   });
-  it("目录续页、两个分区和 CSV 持久化可恢复，汇总更新不请求新详情", async () => {
+  it("重启保留名单、作品数和采集断点，刷新不会继续批量采集", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(now);
-    const fetch = vi.fn(async (url: string) => {
-      if (url === `${origin}/actresses`)
-        return actorCard("safe", "安全演员别名", 12) + '<a href="/actresses/2">下一页</a>';
-      if (url === `${origin}/actresses/2`) return actorCard("zero", "安全零", 0);
-      if (url === `${origin}/uncensored/actresses`)
-        return actorCard("other", "安全其他演员", 20, "/uncensored");
-      throw new Error("不应请求其他来源");
+    const fetch = vi.fn(async () => {
+      throw new Error("不应批量采集");
     });
+    const cached = mergeDiscovery(
+      seed,
+      loadDiscovery(seed, null, now).cache,
+      {
+        javbusRecords: [
+          row("safe", "安全演员别名", 12),
+          row("zero", "安全零", 0),
+          row("other", "安全其他演员", 20),
+        ],
+      },
+      now,
+    );
     const write = vi.fn(async (_cache: string) => {}),
       writeCsv = vi.fn(async (_dimension: string, _csv: string) => {});
     const service = new DiscoveryCatalogService(processor(), {
-      read: async () => null,
+      read: async () => cached.cache,
       write,
       writeCsv,
       fetch,
@@ -493,22 +500,23 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
     services.push(service);
     await service.initialize();
     await service.refresh("actresses");
-    expect(fetch).toHaveBeenCalledTimes(2);
-    await service.refresh("actresses");
-    expect(fetch).toHaveBeenCalledTimes(3);
-    expect(writeCsv).toHaveBeenCalledTimes(2);
-    expect(parseJavbusCsv(writeCsv.mock.calls.at(-1)![1], "actresses", now)).toHaveLength(3);
+    await service.refresh("maleActors");
+    await service.refresh("actors");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(writeCsv).not.toHaveBeenCalled();
     expect(
       (await service.query({ dimension: "actresses", sort: "videoCount" }, first)).items.map(
         (entry) => entry.videoCount,
       ),
     ).toEqual([20, 12, 0]);
-    const saved = write.mock.calls.at(-1)![0];
-    expect(loadDiscovery(seed, saved, now).javbusLane).toBe("censored");
     await service.refresh("directors");
     await service.refresh("studios");
     await service.refresh("labels");
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).not.toHaveBeenCalled();
+    const saved = loadDiscovery(seed, write.mock.calls.at(-1)![0], now);
+    expect(saved.javbusPages).toEqual(cached.javbusPages);
+    expect(saved.javbusLane).toBe(cached.javbusLane);
   });
   it("已保存 ID 直接打开作品，明确总数回写 CSV；缓存命中不更新数量时间", async () => {
     vi.useFakeTimers();
@@ -543,7 +551,7 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
     expect(writeCsv.mock.calls.some(([dimension]) => dimension === "labels")).toBe(true);
     expect(fetch.mock.calls.map(([url]) => url)).toEqual([`${origin}/star/safe`, work.url]);
   });
-  it("取消目录更新不推进游标，也不让迟到响应写入缓存", async () => {
+  it("取消分类更新不推进游标，也不让迟到响应写入缓存", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(now);
     let release!: (html: string) => void;
@@ -558,13 +566,13 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
     });
     services.push(service);
     await service.initialize();
-    const updating = service.refresh("actresses");
+    const updating = service.refresh("genres");
     await flushUntil(() => !!release);
     service.cancel();
-    release(actorCard("late", "安全迟到演员", 999));
+    release('<div class="genre-box"><a href="/genre/late">安全迟到分类</a></div>');
     await updating;
     expect(write).not.toHaveBeenCalled();
-    expect(service.getSnapshot().catalogs.actresses.names).not.toContain("安全迟到演员");
+    expect(service.getSnapshot().catalogs.genres.names).not.toContain("安全迟到分类");
   });
   it("CSV 损坏时保留原文件，后续目录刷新仍不能覆盖人工内容", async () => {
     vi.useFakeTimers();
@@ -580,7 +588,7 @@ describe("JavBus 安全目录、CSV 与网站影片数量", () => {
     services.push(service);
     await service.initialize();
     await service.refresh("actresses");
-    expect(service.getSnapshot().catalogs.actresses.videoCounts?.["安全演员原名"]).toBe(12);
+    expect(service.getSnapshot().catalogs.actresses.videoCounts?.["安全演员原名"]).toBeUndefined();
     expect(service.getSnapshot().warning).toContain("修正后重新启动");
     expect(writeCsv).not.toHaveBeenCalled();
   });

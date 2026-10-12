@@ -5,10 +5,7 @@ import { MediaHost } from "./helpers/mediaHost";
 import { createLibraryFixture } from "./helpers/libraryFixture";
 const enabled = process.platform === "win32" && process.env.JAVM_MEDIA_INTEGRATION === "1";
 describe.runIf(enabled)("分卷关联（安全 STRM，无网络）", () => {
-  let host: MediaHost,
-    root: string,
-    work: string,
-    files: { id: string; part: number }[];
+  let host: MediaHost, root: string, work: string, files: { id: string; part: number }[];
   beforeAll(async () => {
     root = path.resolve(await fs.mkdtemp(".tmp/related-media-"));
     createLibraryFixture(path.join(root, "library.sqlite3")).close();
@@ -47,8 +44,17 @@ describe.runIf(enabled)("分卷关联（安全 STRM，无网络）", () => {
   it("非法分卷与字幕请求均拒绝，磁盘旁路文件保持原样", async () => {
     const sidecar = path.join(root, "SAFE-001-CD1.zh.srt");
     await fs.writeFile(sidecar, "safe archived sidecar");
-    await expect(host.request("library.related.save", { id: files[0]!.id, part: 3, parts: 2 })).rejects.toThrow("参数");
-    await expect(host.request("library.related.save", { id: files[0]!.id, part: 1, parts: 2, subtitles: [sidecar] })).rejects.toThrow("范围");
+    await expect(
+      host.request("library.related.save", { id: files[0]!.id, part: 3, parts: 2 }),
+    ).rejects.toThrow("参数");
+    await expect(
+      host.request("library.related.save", {
+        id: files[0]!.id,
+        part: 1,
+        parts: 2,
+        subtitles: [sidecar],
+      }),
+    ).rejects.toThrow("范围");
     expect(await fs.readFile(sidecar, "utf8")).toBe("safe archived sidecar");
   });
 });

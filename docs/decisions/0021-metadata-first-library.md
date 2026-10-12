@@ -6,16 +6,16 @@
 
 新媒体库为 `%APPDATA%/JAVM/library.sqlite3`，application_id 为 1245793585，schema 从 1 开始。旧版固定来源仍为 `%APPDATA%/com.ddmoyu.javm/javm.db`。不改写或删除此前开发阶段的 `JAVM/javm.db`；若当前新库文件用途、版本或完整性异常，明确报错，不删除重建。
 
-| 对象 | 所有权与约束 |
-| --- | --- |
-| `works` | 作品身份、标题等资料与收藏，不要求有视频 |
-| `work_sources` | MetaTube provider + source ID 唯一映射到作品 |
-| `media_files` | 真实视频资源，规范绝对路径唯一；一部作品可以有多个文件 |
-| `nfo_documents` | 原始 XML、编码、签名及路径；一部作品只有一个规范写入位置，可以保留多个导入来源 |
-| `entities/work_entities` | 演员、分类、标签与作品关联 |
-| `directories` | 扫描管理范围；移除目录不删除作品或文件关联 |
-| `asset_roots` | 已授权本地资料/资源的挂载根，与扫描目录管理独立 |
-| `legacy_records` | 旧表逐行 CBOR 原始记录，包括未知字段和 BLOB；不进入新业务表结构 |
+| 对象                     | 所有权与约束                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `works`                  | 作品身份、标题等资料与收藏，不要求有视频                                       |
+| `work_sources`           | MetaTube provider + source ID 唯一映射到作品                                   |
+| `media_files`            | 真实视频资源，规范绝对路径唯一；一部作品可以有多个文件                         |
+| `nfo_documents`          | 原始 XML、编码、签名及路径；一部作品只有一个规范写入位置，可以保留多个导入来源 |
+| `entities/work_entities` | 演员、分类、标签与作品关联                                                     |
+| `directories`            | 扫描管理范围；移除目录不删除作品或文件关联                                     |
+| `asset_roots`            | 已授权本地资料/资源的挂载根，与扫描目录管理独立                                |
+| `legacy_records`         | 旧表逐行 CBOR 原始记录，包括未知字段和 BLOB；不进入新业务表结构                |
 
 作品的可播放性根据关联资源计算，不存储伪造视频路径：
 

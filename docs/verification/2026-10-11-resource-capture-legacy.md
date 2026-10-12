@@ -21,17 +21,17 @@
 
 仅运行本次新增的 `tests/stream-capture-legacy.integration.test.ts`，没有执行既有测试或全量测试。
 
-| 新增场景 | 结果 |
-| --- | --- |
-| 转义后的脚本配置地址，无实际媒体请求 | 捕获成功并保留所在页面 Referer |
-| 隐藏页面使用动画帧启动播放器 | 捕获成功 |
-| 自动验证 403 后重载、页面含隐藏登录框 | 自动完成后捕获成功 |
-| 跨站 iframe 中点击常见播放器控件 | 捕获成功，保留 iframe 实际 Referer |
-| fetch 返回无后缀、text/plain 的 HLS 清单 | 捕获成功 |
-| XHR 返回无后缀、text/plain 的 HLS 清单 | 捕获成功 |
-| 播放器脚本参数含图片名、动态 Hls 配置 | 脚本加载并捕获成功，图片与弹窗未加载 |
-| 同站 iframe 的媒体属性随即清除 | 捕获成功并保留 iframe Referer |
-| 实际人工验证控件位于封闭 Shadow DOM | 自动结束，没有点击验证控件 |
+| 新增场景                                 | 结果                                 |
+| ---------------------------------------- | ------------------------------------ |
+| 转义后的脚本配置地址，无实际媒体请求     | 捕获成功并保留所在页面 Referer       |
+| 隐藏页面使用动画帧启动播放器             | 捕获成功                             |
+| 自动验证 403 后重载、页面含隐藏登录框    | 自动完成后捕获成功                   |
+| 跨站 iframe 中点击常见播放器控件         | 捕获成功，保留 iframe 实际 Referer   |
+| fetch 返回无后缀、text/plain 的 HLS 清单 | 捕获成功                             |
+| XHR 返回无后缀、text/plain 的 HLS 清单   | 捕获成功                             |
+| 播放器脚本参数含图片名、动态 Hls 配置    | 脚本加载并捕获成功，图片与弹窗未加载 |
+| 同站 iframe 的媒体属性随即清除           | 捕获成功并保留 iframe Referer        |
+| 实际人工验证控件位于封闭 Shadow DOM      | 自动结束，没有点击验证控件           |
 
 执行命令：设置 `JAVM_WEBVIEW_INTEGRATION=1` 后运行 `pnpm test tests/stream-capture-legacy.integration.test.ts`。宿主使用真正的隐藏 Neutralino/WebView2，所有页面、脚本及清单由 CDP 返回安全合成数据，DNS 被禁用。每例均由既有辅助宿主检查窗口可见性并回收进程、删除独立临时 profile。
 

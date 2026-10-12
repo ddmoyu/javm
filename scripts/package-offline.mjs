@@ -7,6 +7,7 @@ import path from "node:path";
 import { verifyFfmpegLite } from "./verify-ffmpeg-lite.mjs";
 import { verifyMediaInfoLite } from "./verify-mediainfo-lite.mjs";
 import { verifyMetatubeLite } from "./metatube-lite-profile.mjs";
+import { components, specification, readJson } from "./third-party/components.mjs";
 
 if (process.platform !== "win32") throw new Error("Offline packaging requires Windows x64.");
 const root = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -41,7 +42,14 @@ const hash = async (file) => {
 };
 // MetaTube is a required package component, never a first-run download.
 const metatubeDirectory = path.join(desktop, "bin/tools/metatube");
-await verifyMetatubeLite(metatubeDirectory, dependencies.metatube);
+const metatubeReceipt = await verifyMetatubeLite(metatubeDirectory, dependencies.metatube);
+const componentReleases = await readJson(path.join(root, "build/dependencies/resolved.json"));
+for (const component of components) {
+  const expected = await specification(component);
+  const resolved = componentReleases.components[component];
+  if (resolved?.fingerprint !== expected.fingerprint || resolved.tag !== expected.tag)
+    throw new Error("Package component does not match its published recipe: " + component);
+}
 // Refuse a package assembled from the development Debug binary.
 for (const [binary, candidate] of [
   ["javm_database.exe", path.join(desktop, "bin/javm_database.exe")],
@@ -71,7 +79,7 @@ const collectDocument = async (documents, source, label) => {
 };
 const serializeDocuments = (documents) =>
   [...documents.entries()].map(([sha256, entry]) => ({
-    components: [...entry.labels].sort(),
+    components: [...entry.labels].sort((a, b) => a.localeCompare(b)),
     sha256,
     text: entry.content,
   }));
@@ -126,7 +134,11 @@ for (const file of ["MetaTube.txt", "gorm-datatypes.txt", "useragent.txt", "modi
     `MetaTube lite / ${file}`,
   );
 for (const file of ["build-metatube-lite.mjs", "metatube-lite/source-lock.json"])
-  await collectDocument(buildDocuments, path.join(root, "scripts", file), `MetaTube lite / ${file}`);
+  await collectDocument(
+    buildDocuments,
+    path.join(root, "scripts", file),
+    `MetaTube lite / ${file}`,
+  );
 await collectDocument(
   buildDocuments,
   path.join(root, "scripts/build-curl.ps1"),
@@ -199,8 +211,16 @@ const manifest = {
   layout: "runtime-only",
   entryPoint: "JAVM.exe",
   builtAt: new Date().toISOString(),
+  source: {
+    commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+    dirty: !!execFileSync("git", ["status", "--porcelain", "--untracked-files=no"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim(),
+  },
   dependencies,
-  buildReceipts: { ffmpeg: ffmpegReceipt, mediainfo: mediaInfoReceipt },
+  componentReleases,
+  buildReceipts: { ffmpeg: ffmpegReceipt, mediainfo: mediaInfoReceipt, metatube: metatubeReceipt },
   frontendDependencies: notices,
   licenseNotices: serializeDocuments(licenseDocuments),
   buildInformation: serializeDocuments(buildDocuments),

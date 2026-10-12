@@ -49,10 +49,11 @@ describe("发现分类", () => {
     expect(current.catalogs.series.names).toEqual([]);
     expect(current.catalogs.labels.names).toContain("旧缓存合成发行商");
     expect(current.catalogs.studios.names).toContain("合成制作商");
-    expect(JSON.parse(current.cache).version).toBe(7);
+    expect(JSON.parse(current.cache).version).toBe(8);
     // 新版本缓存保留 JavBus 目录的网站顺序。
     const saved = JSON.parse(current.cache);
     saved.catalogs.actresses.names = ["合成女演员", "已读取合成女演员"];
+    saved.javbusEntries.push({ ...actress("已读取合成女演员"), id: "safe-2" });
     expect(loadDiscovery(seed, JSON.stringify(saved), Date.now()).catalogs.actresses.names).toEqual(
       ["合成女演员", "已读取合成女演员"],
     );

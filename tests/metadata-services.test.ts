@@ -83,7 +83,7 @@ describe("资料服务配置", () => {
     );
     await expect(settings.require()).rejects.toThrow("无法读取");
     await settings.save(aiConfig);
-    expect(await settings.require()).toEqual(aiConfig);
+    expect(await settings.require()).toEqual(validateAiSettings(aiConfig));
   });
   it("禁止浏览器写入以及 URL 凭据、错误协议、命令头注入", async () => {
     const settings = new Settings(store(), aiConfig, validateAiSettings, false);

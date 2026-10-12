@@ -10,6 +10,8 @@ export default defineConfig({
   },
   fmt: {
     ignorePatterns: [
+      "native/**/*.inc",
+      "frontend/src/services/catalog/builtin-*.json",
       "docs/REFACTOR_PLAN.md",
       "pnpm-lock.yaml",
       "resources/licenses/**",

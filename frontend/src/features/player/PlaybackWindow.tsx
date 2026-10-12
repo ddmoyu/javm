@@ -1,14 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import {
-  Alert,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Text,
-  UnstyledButton,
-} from "@mantine/core";
+import { Alert, Button, Group, Loader, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
 import { Video, VideoPlayer, VideoSkin } from "@videojs/react/video";
 import { HlsJsVideo } from "@videojs/react/media/hlsjs-video";
 import { I18nProvider } from "@videojs/react/i18n";

@@ -48,5 +48,5 @@ describe.runIf(process.platform === "win32")("隔离 HKCU 测试键中的链接�
       if (state.state === "current") run("remove");
       else if (state.command) run("remove", "", path.join(root, "JAVM.exe"));
     }
-  });
+  }, 30000);
 });

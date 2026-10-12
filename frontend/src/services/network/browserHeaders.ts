@@ -32,7 +32,9 @@ export function browserHeaders(
   // 调用方请求头多已规范为小写；HTTP/1.1 浏览器发送标准大小写，部分 CDN 据此拦截小写名。
   for (const [name, value] of Object.entries(request.headers ?? {}))
     headers.set(name.toLowerCase(), [
-      name.toLowerCase().replace(/(^|-)([a-z])/g, (_, dash: string, letter: string) => dash + letter.toUpperCase()),
+      name
+        .toLowerCase()
+        .replace(/(^|-)([a-z])/g, (_, dash: string, letter: string) => dash + letter.toUpperCase()),
       value,
     ]);
   return Object.fromEntries(headers.values());

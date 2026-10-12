@@ -72,7 +72,7 @@ describe("AppData 持久头像缓存", () => {
     const first = createPortraitPort(network, async () => {});
     const signal = new AbortController().signal;
     await first.load(
-      "https://pics.dmm.co.jp/mono/actjpgs/example.jpg",
+      "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/Fixture/Safe.jpg",
       signal,
       "actresses:安全示例",
     );
@@ -97,7 +97,7 @@ describe("AppData 持久头像缓存", () => {
     );
     await expect(
       port.load(
-        "https://pics.dmm.co.jp/mono/actjpgs/example.jpg",
+        "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/Fixture/Safe.jpg",
         new AbortController().signal,
         "actresses:安全示例",
       ),
