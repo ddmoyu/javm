@@ -1,651 +1,99 @@
-name: Release
-
+name: 发布 Windows 版本
 on:
-  push:
-    tags:
-      - "v*.*.*"
-
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 目标版本标签，例如 v1.0.0-alpha.1
+        required: true
+        type: string
+      publish:
+        description: 验证通过后发布 Release（必须已有版本标签）
+        type: boolean
+        default: false
+      source_commit:
+        description: 仅验证时使用的完整 40 位源码提交 SHA
+        type: string
 permissions:
-  contents: write
-
+  contents: read
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
-
 jobs:
-  prepare_release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: windows-latest
-    outputs:
-      release_id: ${{ steps.resolve_release_id.outputs.release_id }}
-      release_body: ${{ steps.release_notes.outputs.release_body }}
-      is_prerelease: ${{ steps.release_meta.outputs.is_prerelease }}
+  release:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      RELEASE_TAG: ${{ inputs.tag }}
+      RELEASE_PUBLISH: ${{ inputs.publish }}
+      SOURCE_COMMIT: ${{ inputs.source_commit }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Resolve release metadata
-        id: release_meta
-        shell: pwsh
+      - name: 校验标签输入
         run: |
-          $tag = "${{ github.ref_name }}"
-
-          if ($tag -match '-') {
-            "is_prerelease=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          } else {
-            "is_prerelease=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          }
-
-      - name: Resolve release notes
-        id: release_notes
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $releaseNotesPath = Join-Path $PWD "docs/releases/$tag.md"
-
-          if (Test-Path $releaseNotesPath) {
-            "body_path=$releaseNotesPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            $releaseBody = Get-Content -Path $releaseNotesPath -Raw -Encoding utf8
-            "release_body<<JAVM_RELEASE_BODY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            $releaseBody | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            "JAVM_RELEASE_BODY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-            exit 0
-          }
-
-          $fallbackPath = Join-Path $PWD 'release-body.md'
-          @(
-            "# JAVM $tag"
-            ''
-            '## 说明'
-            '- 当前版本未提交专用发布日志文件。'
-            "- 请优先在仓库中补充 docs/releases/$tag.md，供 Release 页面直接使用。"
-          ) | Set-Content -Path $fallbackPath -Encoding utf8
-
-          "body_path=$fallbackPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          $releaseBody = Get-Content -Path $fallbackPath -Raw -Encoding utf8
-          "release_body<<JAVM_RELEASE_BODY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          $releaseBody | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "JAVM_RELEASE_BODY" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Create or update GitHub Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
+          if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+(?:-(?:alpha|beta|rc)\.[1-9][0-9]*)?$') { throw '无效版本标签' }
+          if ($env:RELEASE_PUBLISH -ne 'true' -and $env:SOURCE_COMMIT -notmatch '^[a-f0-9]{40}$') { throw '仅验证必须指定完整源码提交 SHA' }
+      - uses: actions/checkout@v7.0.1
         with:
-          body_path: ${{ steps.release_notes.outputs.body_path }}
-          draft: true
-          prerelease: ${{ steps.release_meta.outputs.is_prerelease == 'true' }}
-
-      - name: Resolve release id
-        id: resolve_release_id
-        shell: pwsh
+          ref: ${{ inputs.publish && inputs.tag || inputs.source_commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: 校验发布版本与来源
         run: |
-          $releaseId = '${{ steps.create_release.outputs.id }}'
-
-          if ([string]::IsNullOrWhiteSpace($releaseId)) {
-            throw "未能从 create_release 步骤获取 release id。"
-          }
-
-          "release_id=$releaseId" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-
-      - name: Clean existing release assets
-        shell: pwsh
+          node scripts/validate-release.mjs
+          if ($LASTEXITCODE -ne 0) { throw '版本校验失败' }
+          "RELEASE_COMMIT=$(git rev-parse HEAD)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - run: pnpm install --frozen-lockfile
+      - name: 下载并校验锁定精简依赖
+        run: pnpm dependencies:restore
+      - name: 准备 Neutralino 宿主
+        run: pnpm desktop:setup
+      - name: 类型检查
+        run: pnpm typecheck
+      - name: 完整单元测试
+        run: |
+          New-Item -ItemType Directory -Force -Path .tmp, frontend/.tmp | Out-Null
+          pnpm test
+      - name: Release 原生与前端构建
+        run: pnpm desktop:build
+      - name: 原生 HTTP 与备份恢复验证
         env:
-          GH_TOKEN: ${{ github.token }}
-        timeout-minutes: 5
+          JAVM_MEDIA_INTEGRATION: "1"
+          JAVM_HTTP_INTEGRATION: "1"
+        run: pnpm test tests/http-native.integration.test.ts tests/library-backup-native.integration.test.ts tests/storage-recovery-native.integration.test.ts
+      - name: 构建便携包和安装包
+        run: pnpm release:package
+      - name: 验证打包与安全启动入口
         run: |
-          $repo = '${{ github.repository }}'
-          $releaseId = '${{ steps.resolve_release_id.outputs.release_id }}'
-
-          if ([string]::IsNullOrWhiteSpace($releaseId)) {
-            Write-Host '缺少 release id，跳过资产清理。'
-            exit 0
-          }
-
-          Write-Host "检查 release $releaseId 的已存在资产..."
-
-          try {
-            $assetsJson = gh api "repos/$repo/releases/$releaseId/assets" 2>$null
-
-            if ([string]::IsNullOrWhiteSpace($assetsJson)) {
-              Write-Host 'API 返回空响应，跳过清理。'
-              exit 0
-            }
-
-            $assets = $assetsJson | ConvertFrom-Json
-
-            if ($null -eq $assets -or $assets.Count -eq 0) {
-              Write-Host '该 release 没有已存在的资产。'
-              exit 0
-            }
-
-            foreach ($asset in $assets) {
-              if ($asset.id -and $asset.name) {
-                Write-Host "删除资产: $($asset.name) (ID: $($asset.id))"
-                gh api --method DELETE "repos/$repo/releases/$releaseId/assets/$($asset.id)" 2>$null
-              }
-            }
-          } catch {
-            Write-Host "清理资产时出现异常（可忽略）: $_"
-          }
-
-          # 资产清理为尽力而为：个别 DELETE 返回 404/非 2xx 时 gh 会留下非零 $LASTEXITCODE，
-          # 而 GitHub 的 pwsh 包装器会以 exit $LASTEXITCODE 收尾、把它放大成步骤失败。
-          # 这里显式归零并以 0 收尾，避免清理失败阻断发布。
-          $global:LASTEXITCODE = 0
-          exit 0
-
-  build-release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: prepare_release
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows
-            arch: x64
-            runner: windows-latest
-            rust_target: x86_64-pc-windows-msvc
-            nm3u8_asset_key: win-x64
-            nm3u8_asset_ext: .zip
-            nm3u8_target: N_m3u8DL-RE.exe
-            metatube_os_arch: windows-amd64
-            bundle_targets: nsis
-          # 暂不发布 Windows ARM64：wreq 依赖的 BoringSSL（boring-sys2）在
-          # aarch64-pc-windows-msvc 上无法汇编 ARM64 crypto 汇编（NASM 不支持
-          # ARM64），链接报 40 个 unresolved external。Windows 11 ARM64 可通过
-          # 内置 x64 仿真运行 x64 包，故仅发 x64。
-
-          - platform: macos
-            arch: x64
-            runner: macos-15-intel
-            rust_target: x86_64-apple-darwin
-            nm3u8_asset_key: osx-x64
-            nm3u8_asset_ext: .tar.gz
-            nm3u8_target: N_m3u8DL-RE
-            metatube_os_arch: darwin-amd64
-            bundle_targets: app,dmg
-          - platform: macos
-            arch: arm64
-            runner: macos-15
-            rust_target: aarch64-apple-darwin
-            nm3u8_asset_key: osx-arm64
-            nm3u8_asset_ext: .tar.gz
-            nm3u8_target: N_m3u8DL-RE
-            metatube_os_arch: darwin-arm64
-            bundle_targets: app,dmg
-          - platform: linux
-            arch: x64
-            runner: ubuntu-22.04
-            rust_target: x86_64-unknown-linux-gnu
-            nm3u8_asset_key: linux-x64
-            nm3u8_asset_ext: .tar.gz
-            nm3u8_target: N_m3u8DL-RE
-            metatube_os_arch: linux-amd64
-            bundle_targets: appimage,deb
-          - platform: linux
-            arch: arm64
-            runner: ubuntu-22.04-arm
-            rust_target: aarch64-unknown-linux-gnu
-            nm3u8_asset_key: linux-arm64
-            nm3u8_asset_ext: .tar.gz
-            nm3u8_target: N_m3u8DL-RE
-            metatube_os_arch: linux-arm64
-            bundle_targets: appimage,deb
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+          pnpm test:offline
+          if ($LASTEXITCODE -ne 0) { throw '便携包验证失败' }
+          node scripts/verify-portable-entry.mjs
+      - name: 安装升级和卸载验证
+        run: ./scripts/test-installer.ps1
+      - name: 保存已验证产物
+        uses: actions/upload-artifact@v7.0.2
         with:
-          bun-version: latest
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust_target }}
-
-      - name: Print build environment
-        shell: pwsh
-        run: |
-          Write-Host "::group::构建环境"
-          Write-Host "平台          : ${{ matrix.platform }}-${{ matrix.arch }}"
-          Write-Host "Runner        : ${{ matrix.runner }}"
-          Write-Host "Rust target   : ${{ matrix.rust_target }}"
-          Write-Host "Bundle targets: ${{ matrix.bundle_targets }}"
-          Write-Host "Tag           : ${{ github.ref_name }}"
-          Write-Host "rustc         : $(rustc --version)"
-          Write-Host "cargo         : $(cargo --version)"
-          Write-Host "bun           : $(bun --version)"
-          Write-Host "::endgroup::"
-
-      - name: Install Linux build dependencies
-        if: matrix.platform == 'linux'
-        run: |
-          echo "::group::安装 Linux 系统依赖"
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libjavascriptcoregtk-4.1-dev \
-            libgtk-3-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            patchelf \
-            libxdo-dev \
-            libssl-dev \
-            xdg-utils
-          echo "::endgroup::"
-
-      - name: Cache Rust build artifacts
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            src-tauri -> target
-
-      - name: Validate app versions
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag.Substring(1)
-          $package = Get-Content package.json -Raw | ConvertFrom-Json
-          $tauriConfig = Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json
-          $cargoToml = Get-Content src-tauri/Cargo.toml -Raw
-          $cargoVersionMatch = [regex]::Match($cargoToml, '(?m)^version\s*=\s*"([^"]+)"\s*$')
-
-          if (-not $cargoVersionMatch.Success) {
-            throw '未能从 src-tauri/Cargo.toml 解析 version。'
-          }
-
-          $cargoVersion = $cargoVersionMatch.Groups[1].Value
-          $mismatches = @()
-
-          if ($package.version -ne $version) {
-            $mismatches += "package.json=$($package.version)"
-          }
-
-          if ($tauriConfig.version -ne $version) {
-            $mismatches += "src-tauri/tauri.conf.json=$($tauriConfig.version)"
-          }
-
-          if ($cargoVersion -ne $version) {
-            $mismatches += "src-tauri/Cargo.toml=$cargoVersion"
-          }
-
-          if ($mismatches.Count -gt 0) {
-            throw "版本不一致。tag=$version, $($mismatches -join ', ')"
-          }
-
-          Write-Host "✅ 版本一致性校验通过：package.json / tauri.conf.json / Cargo.toml 均为 $version"
-
-      - name: Install frontend dependencies
-        shell: pwsh
-        run: |
-          Write-Host "::group::安装前端依赖（bun install --frozen-lockfile）"
-          bun install --frozen-lockfile
-          if ($LASTEXITCODE -ne 0) { throw "bun install 失败（exit=$LASTEXITCODE）。" }
-          Write-Host "::endgroup::"
-
-      - name: Validate release updater config
-        shell: pwsh
-        run: |
-          $releaseConfig = Get-Content 'src-tauri/tauri.release.conf.json' -Raw | ConvertFrom-Json
-          $updaterConfig = $releaseConfig.plugins.updater
-
-          if ($null -eq $updaterConfig) {
-            throw 'src-tauri/tauri.release.conf.json 缺少 plugins.updater 配置。'
-          }
-
-          if ([string]::IsNullOrWhiteSpace($updaterConfig.pubkey)) {
-            throw 'src-tauri/tauri.release.conf.json 缺少 updater.pubkey。'
-          }
-
-          if ($null -eq $updaterConfig.endpoints -or $updaterConfig.endpoints.Count -eq 0) {
-            throw 'src-tauri/tauri.release.conf.json 缺少 updater.endpoints。'
-          }
-
-          if ([string]::IsNullOrWhiteSpace('${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}')) {
-            throw '缺少 Secret TAURI_SIGNING_PRIVATE_KEY，无法生成 updater 签名。'
-          }
-
-          Write-Host "✅ updater 配置与签名密钥校验通过（pubkey / endpoints / 私钥 均就绪）"
-
-      - name: Download N_m3u8DL-RE
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          Write-Host "::group::下载 N_m3u8DL-RE sidecar（${{ matrix.nm3u8_asset_key }}${{ matrix.nm3u8_asset_ext }}）"
-          $releaseApi = 'https://api.github.com/repos/nilaoda/N_m3u8DL-RE/releases?per_page=10'
-          $headers = @{
-            'User-Agent' = 'javm-release-workflow'
-            'Accept' = 'application/vnd.github+json'
-            'X-GitHub-Api-Version' = '2022-11-28'
-          }
-
-          if ($env:GITHUB_TOKEN) {
-            $headers['Authorization'] = "Bearer $($env:GITHUB_TOKEN)"
-          }
-
-          try {
-            $releases = Invoke-RestMethod -Headers $headers -Uri $releaseApi
-          } catch {
-            $message = $_.ErrorDetails.Message
-            if ($message -and $message -match 'API rate limit exceeded') {
-              throw '调用 GitHub Releases API 时触发限流。工作流已改为使用 GITHUB_TOKEN 认证；若仍失败，请检查当前仓库 Actions token 权限或稍后重试。'
-            }
-            throw
-          }
-
-          $release = $releases | Where-Object { -not $_.draft } | Select-Object -First 1
-
-          if (-not $release) {
-            throw '未找到 N_m3u8DL-RE 的可用 GitHub Release。'
-          }
-
-          $assetKey = '${{ matrix.nm3u8_asset_key }}'
-          $assetExt = '${{ matrix.nm3u8_asset_ext }}'
-          $escapedAssetKey = [regex]::Escape($assetKey)
-          $escapedAssetExt = [regex]::Escape($assetExt)
-          $assetPattern = "(?:^|_)$escapedAssetKey(?:_|$).*${escapedAssetExt}$"
-          $asset = $release.assets | Where-Object { $_.name -match $assetPattern } | Select-Object -First 1
-
-          if (-not $asset) {
-            throw "未在 Release $($release.tag_name) 中找到资产 key=$assetKey, ext=$assetExt。"
-          }
-
-          $downloadPath = Join-Path $env:RUNNER_TEMP $asset.name
-          $extractDir = Join-Path $env:RUNNER_TEMP 'nm3u8dl-extract'
-          $binDir = Join-Path $PWD 'src-tauri/bin'
-          $targetPath = Join-Path $binDir '${{ matrix.nm3u8_target }}'
-
-          if (Test-Path $extractDir) {
-            Remove-Item $extractDir -Recurse -Force
-          }
-
-          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
-          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-          Get-ChildItem -Path $binDir -File -Filter 'N_m3u8DL-RE*' -ErrorAction SilentlyContinue | Remove-Item -Force
-
-          Write-Host "Downloading $($asset.name) from $($release.tag_name)"
-          Invoke-WebRequest -Headers $headers -Uri $asset.browser_download_url -OutFile $downloadPath
-
-          if ($asset.name.EndsWith('.zip')) {
-            Expand-Archive -Path $downloadPath -DestinationPath $extractDir -Force
-          } else {
-            tar -xzf $downloadPath -C $extractDir
-          }
-
-          $binary = Get-ChildItem -Path $extractDir -Recurse -File | Where-Object {
-            $_.Name -eq 'N_m3u8DL-RE' -or $_.Name -eq 'N_m3u8DL-RE.exe'
-          } | Select-Object -First 1
-
-          if (-not $binary) {
-            throw '解压后未找到 N_m3u8DL-RE 可执行文件。'
-          }
-
-          Copy-Item $binary.FullName $targetPath -Force
-
-          if ('${{ matrix.platform }}' -ne 'windows') {
-            chmod +x $targetPath
-          }
-
-          Write-Host "✅ N_m3u8DL-RE 就绪：$targetPath"
-          Write-Host "::endgroup::"
-
-      - name: Download FFmpeg
-        shell: pwsh
+          name: JAVM-${{ inputs.tag }}-windows-x64
+          path: dist/release/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: 发布全部资产
+        if: inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          Write-Host "::group::下载 FFmpeg sidecar（${{ matrix.platform }}-${{ matrix.arch }}）"
-          $target = '${{ matrix.platform }}-${{ matrix.arch }}'
-          $binDir = Join-Path $PWD 'src-tauri/bin'
-          $downloadDir = Join-Path $env:RUNNER_TEMP 'ffmpeg-download'
-          $extractDir = Join-Path $env:RUNNER_TEMP 'ffmpeg-extract'
-
-          foreach ($d in @($downloadDir, $extractDir)) {
-            if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $d | Out-Null
-          }
-
-          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-          Get-ChildItem -Path $binDir -File -Filter 'ffmpeg*' -ErrorAction SilentlyContinue | Remove-Item -Force
-
-          $releaseTag = gh release list --repo ddmoyu/ffmepg --limit 20 --json tagName --jq '[.[] | select(.tagName | startswith("javm-ffmpeg-"))][0].tagName'
-
-          if (-not $releaseTag) {
-            throw '未找到 ddmoyu/ffmepg 的 javm-ffmpeg-* Release。'
-          }
-
-          Write-Host "Downloading javm-ffmpeg for $target from release $releaseTag"
-          gh release download $releaseTag --repo ddmoyu/ffmepg --pattern "javm-ffmpeg-$target-*.zip" --dir $downloadDir
-
-          $zip = Get-ChildItem "$downloadDir/*.zip" | Select-Object -First 1
-          if (-not $zip) {
-            throw "未找到匹配 javm-ffmpeg-$target-*.zip 的资产。"
-          }
-
-          Expand-Archive -Path $zip.FullName -DestinationPath $extractDir -Force
-
-          $ffmpegBin = if ('${{ matrix.platform }}' -eq 'windows') { 'ffmpeg.exe' } else { 'ffmpeg' }
-          # 必须加 -File：压缩包内除 bin/ffmpeg 可执行文件外，还有同名的 share/ffmpeg 目录，
-          # 不加 -File 时 -First 1 可能误选目录（arm64 即因此失败）。
-          $ffmpeg = Get-ChildItem $extractDir -Recurse -File -Filter $ffmpegBin | Select-Object -First 1
-
-          if (-not $ffmpeg) {
-            throw "解压后未找到 $ffmpegBin。"
-          }
-
-          $targetPath = Join-Path $binDir $ffmpeg.Name
-          Copy-Item $ffmpeg.FullName $targetPath -Force
-
-          if ('${{ matrix.platform }}' -ne 'windows') {
-            chmod +x $targetPath
-          }
-
-          Write-Host "✅ FFmpeg 就绪：$targetPath"
-          Write-Host "::endgroup::"
-
-      - name: Download MetaTube sidecar
-        shell: pwsh
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # ⚠️ 资产命名按 metatube-community/metatube-server-releases 的 os-arch 约定（如 windows-amd64），
-          # 上线前请按实际 Release 资产核对 pattern。本步骤非致命（continue-on-error + 内部 exit 0）：
-          # 缺二进制时 app 运行期 resolve 失败 → 该源回退跳过，不影响自研源与发布。
-          Write-Host "::group::下载 MetaTube sidecar（${{ matrix.metatube_os_arch }}）"
-          $osArch = '${{ matrix.metatube_os_arch }}'
-          $binDir = Join-Path $PWD 'src-tauri/bin'
-          $downloadDir = Join-Path $env:RUNNER_TEMP 'metatube-download'
-          $extractDir = Join-Path $env:RUNNER_TEMP 'metatube-extract'
-          foreach ($d in @($downloadDir, $extractDir)) {
-            if (Test-Path $d) { Remove-Item $d -Recurse -Force }
-            New-Item -ItemType Directory -Force -Path $d | Out-Null
-          }
-          New-Item -ItemType Directory -Force -Path $binDir | Out-Null
-          Get-ChildItem -Path $binDir -File -Filter 'metatube-server*' -ErrorAction SilentlyContinue | Remove-Item -Force
-
-          $binName = if ('${{ matrix.platform }}' -eq 'windows') { 'metatube-server.exe' } else { 'metatube-server' }
-          # 精确匹配基础版 zip：每平台另有 *-v3.zip（仅新 CPU AVX 可用），`*$osArch*` 会误匹配，故用精确名。
-          gh release download --repo metatube-community/metatube-server-releases --pattern "metatube-server-$osArch.zip" --dir $downloadDir
-          $asset = Get-ChildItem $downloadDir -File | Select-Object -First 1
-          if (-not $asset) { Write-Host "::warning::未找到 MetaTube $osArch 资产，跳过打包（运行时回退）"; Write-Host "::endgroup::"; exit 0 }
-
-          if ($asset.Extension -eq '.zip') {
-            Expand-Archive -Path $asset.FullName -DestinationPath $extractDir -Force
-          } elseif ($asset.Name -like '*.tar.gz' -or $asset.Name -like '*.tgz') {
-            tar -xzf $asset.FullName -C $extractDir
-          } else {
-            Copy-Item $asset.FullName (Join-Path $extractDir $asset.Name) -Force
-          }
-
-          # 用 -File 仅选文件，避免误选同名目录（FFmpeg arm64 曾踩此坑）
-          if ('${{ matrix.platform }}' -eq 'windows') {
-            $exe = Get-ChildItem $extractDir -Recurse -File -Filter '*metatube*server*.exe' | Select-Object -First 1
-          } else {
-            $exe = Get-ChildItem $extractDir -Recurse -File | Where-Object { $_.Name -like '*metatube*server*' -and $_.Extension -eq '' } | Select-Object -First 1
-          }
-          if (-not $exe) { Write-Host "::warning::解压后未找到 MetaTube 可执行文件，跳过打包"; Write-Host "::endgroup::"; exit 0 }
-
-          $targetPath = Join-Path $binDir $binName
-          Copy-Item $exe.FullName $targetPath -Force
-          if ('${{ matrix.platform }}' -ne 'windows') { chmod +x $targetPath }
-          Write-Host "✅ MetaTube 就绪：$targetPath"
-          Write-Host "::endgroup::"
-
-      - name: Verify bundled sidecars
-        shell: pwsh
-        run: |
-          $binDir = Join-Path $PWD 'src-tauri/bin'
-          Write-Host "::group::校验 sidecar 二进制"
-          if (-not (Test-Path $binDir)) {
-            throw "未找到 sidecar 目录：$binDir"
-          }
-          $files = Get-ChildItem -Path $binDir -File
-          if (-not $files) {
-            throw "sidecar 目录为空：$binDir"
-          }
-          foreach ($f in $files) {
-            $sizeKb = [math]::Round($f.Length / 1KB, 1)
-            Write-Host ("  {0} ({1} KB)" -f $f.Name, $sizeKb)
-          }
-          if (-not ($files | Where-Object { $_.Name -like 'N_m3u8DL-RE*' })) {
-            throw '校验失败：bin 目录缺少 N_m3u8DL-RE。'
-          }
-          if (-not ($files | Where-Object { $_.Name -like 'ffmpeg*' })) {
-            throw '校验失败：bin 目录缺少 ffmpeg。'
-          }
-          # MetaTube 为非致命可选 sidecar：缺失仅告警（运行时回退跳过该源）
-          if (-not ($files | Where-Object { $_.Name -like 'metatube-server*' })) {
-            Write-Host '::warning::bin 目录缺少 metatube-server，MetaTube 聚合源将回退跳过（不影响自研源）。'
-          } else {
-            Write-Host '✅ MetaTube sidecar 已就位。'
-          }
-          Write-Host "✅ sidecar 校验通过，将被打包进 resources。"
-          Write-Host "::endgroup::"
-
-      - name: Resolve bundle targets
-        id: bundle_targets
-        shell: pwsh
-        run: |
-          $tag = "${{ github.ref_name }}"
-          $version = $tag.Substring(1)
-          $targets = '${{ matrix.bundle_targets }}'
-
-          if ($version -match '-') {
-            if ('${{ matrix.platform }}' -eq 'windows' -and '${{ matrix.arch }}' -ne 'x86') {
-              $targets = 'nsis'
-            }
-          }
-
-          "targets=$targets" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          Write-Host "✅ 本次打包目标：$targets"
-
-      - name: Build Tauri app and upload assets
-        uses: tauri-apps/tauri-action@action-v0.6.2
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # 失败时打印 Rust 调用栈，便于定位编译/打包错误
-          RUST_BACKTRACE: "1"
-        with:
-          releaseId: ${{ needs.prepare_release.outputs.release_id }}
-          tagName: ${{ github.ref_name }}
-          releaseBody: ${{ needs.prepare_release.outputs.release_body }}
-          releaseDraft: true
-          prerelease: ${{ needs.prepare_release.outputs.is_prerelease == 'true' }}
-          projectPath: .
-          tauriScript: bun tauri
-          retryAttempts: 2
-          includeUpdaterJson: true
-          # --verbose 输出 cargo/bundler 详细日志；前端由 beforeBuildCommand（bun run build）构建
-          args: >-
-            --config src-tauri/tauri.release.conf.json
-            --target "${{ matrix.rust_target }}"
-            --bundles "${{ steps.bundle_targets.outputs.targets }}"
-            --verbose
-
-      - name: Summarize release build
-        if: always()
-        shell: pwsh
-        run: |
-          $summary = $env:GITHUB_STEP_SUMMARY
-          $bundleDir = Join-Path $PWD "src-tauri/target/${{ matrix.rust_target }}/release/bundle"
-
-          "## 构建产物 - ${{ matrix.platform }}-${{ matrix.arch }} (${{ job.status }})" | Out-File -FilePath $summary -Append -Encoding utf8
-
-          if (-not (Test-Path $bundleDir)) {
-            "未找到打包目录：``$bundleDir``" | Out-File -FilePath $summary -Append -Encoding utf8
-            return
-          }
-
-          $exts = @('.exe', '.msi', '.dmg', '.deb', '.AppImage', '.sig', '.gz', '.zip')
-          $artifacts = Get-ChildItem -Path $bundleDir -Recurse -File |
-            Where-Object { $exts -contains $_.Extension } |
-            Sort-Object Name
-
-          if (-not $artifacts) {
-            "打包目录中未发现可发布产物。" | Out-File -FilePath $summary -Append -Encoding utf8
-            return
-          }
-
-          "| 文件 | 大小 (MB) |" | Out-File -FilePath $summary -Append -Encoding utf8
-          "| --- | ---: |" | Out-File -FilePath $summary -Append -Encoding utf8
-          foreach ($a in $artifacts) {
-            $sizeMb = [math]::Round($a.Length / 1MB, 2)
-            "| $($a.Name) | $sizeMb |" | Out-File -FilePath $summary -Append -Encoding utf8
-            Write-Host ("产物：{0} ({1} MB)" -f $a.Name, $sizeMb)
-          }
-
-  publish-release:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-release.result == 'success'
-    needs: [prepare_release, build-release]
-    runs-on: windows-latest
-    steps:
-      - name: Publish GitHub Release
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $repo = '${{ github.repository }}'
-          $releaseId = '${{ needs.prepare_release.outputs.release_id }}'
-          $isPrerelease = '${{ needs.prepare_release.outputs.is_prerelease }}'
-
-          if ([string]::IsNullOrWhiteSpace($releaseId)) {
-            throw '缺少 release_id，无法正式发布 GitHub Release。'
-          }
-
-          gh api --method PATCH "repos/$repo/releases/$releaseId" `
-            -F draft=false `
-            -F prerelease=$isPrerelease | Out-Null
-
-  cleanup-release:
-    # 必须用 always()：依赖 job 失败时，不含状态函数的 if 会被 GitHub 隐式 success() 门控跳过，
-    # 导致失败后草稿 Release 无法清理。always() 让本 job 在非成功（含取消）时也执行清理。
-    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.build-release.result != 'success' }}
-    needs: [prepare_release, build-release]
-    runs-on: windows-latest
-    steps:
-      - name: Delete draft release after failed build
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $repo = '${{ github.repository }}'
-          $releaseId = '${{ needs.prepare_release.outputs.release_id }}'
-
-          if ([string]::IsNullOrWhiteSpace($releaseId)) {
-            Write-Host '缺少 release_id，跳过草稿 Release 清理。'
-            exit 0
-          }
-
-          gh api --method DELETE "repos/$repo/releases/$releaseId" 2>$null
-          Write-Host "已清理草稿 release $releaseId（或其已不存在）。"
-          # DELETE 命中已不存在的 release 会返回 404，避免非零退出码使清理 job 变红
-          $global:LASTEXITCODE = 0
-          exit 0
+          $existing = gh release view $env:RELEASE_TAG --repo $env:GITHUB_REPOSITORY --json isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) { throw '该版本已存在，拒绝覆盖发布资产' }
+          $flags = @('--verify-tag', '--title', "JAVM $env:RELEASE_TAG", '--notes-file', "docs/releases/$env:RELEASE_TAG.md")
+          if ($env:RELEASE_TAG.Contains('-')) { $flags += @('--prerelease', '--latest=false') }
+          $assets = @(Get-ChildItem -LiteralPath dist/release -File | ForEach-Object FullName)
+          gh release create $env:RELEASE_TAG @assets @flags --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Release 发布失败' }
