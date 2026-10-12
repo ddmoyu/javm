@@ -2,6 +2,10 @@ param([switch]$Fresh, [switch]$Release)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+if ($Release) {
+    & node (Join-Path $PSScriptRoot 'third-party/install.mjs') --offline
+    if ($LASTEXITCODE -ne 0) { throw 'Published dependencies are missing or invalid. Run pnpm offline:setup first.' }
+}
 $vswherePath = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
 
 if (-not (Test-Path -LiteralPath $vswherePath)) {

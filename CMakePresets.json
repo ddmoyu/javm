@@ -29,7 +29,8 @@
       "inherits": "windows-msvc",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "JAVM_USE_PREBUILT_DEPENDENCIES": true
       }
     }
   ],

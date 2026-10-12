@@ -8,6 +8,13 @@ project(JAVM VERSION "${JAVM_CMAKE_VERSION}" LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+option(JAVM_USE_PREBUILT_DEPENDENCIES "Use verified component Releases" OFF)
+if(JAVM_USE_PREBUILT_DEPENDENCIES)
+    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/build/dependencies/paths.cmake")
+        message(FATAL_ERROR "Run pnpm offline:setup to download the verified component Releases.")
+    endif()
+    include("${PROJECT_SOURCE_DIR}/build/dependencies/paths.cmake")
+endif()
 
 # 中文 MSVC 的 UTF-8 输出可能被 CMake 按 ANSI 误读，导致 Ninja 漏记头文件。
 # 只修正本机实测的乱码前缀，其他语言继续使用 CMake 的检测结果。

@@ -9,10 +9,11 @@ $cmakeRoot = Join-Path $installation.Trim() 'Common7/IDE/CommonExtensions/Micros
 $cmake = Join-Path $cmakeRoot 'CMake/bin/cmake.exe'
 $ninja = Join-Path $cmakeRoot 'Ninja/ninja.exe'
 $build = Join-Path $project 'build/curl-unicode'
+$install = Join-Path $build 'install'
 # The vendor MinGW executable lacks Unicode filename support. Build unmodified
 # official sources with Windows Schannel and /MT; no third-party DLL is needed.
 $options = '-DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBUILD_STATIC_CURL=ON -DCURL_STATIC_CRT=ON -DENABLE_UNICODE=ON -DCURL_USE_SCHANNEL=ON -DCURL_USE_OPENSSL=OFF -DCURL_USE_LIBPSL=OFF -DCURL_USE_LIBSSH2=OFF -DCURL_ZLIB=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF -DUSE_NGHTTP2=OFF -DENABLE_CURL_MANUAL=OFF -DBUILD_LIBCURL_DOCS=OFF -DBUILD_TESTING=OFF -DCURL_USE_PKGCONFIG=OFF'
-& $env:ComSpec /d /s /c "call `"$vcvars`" >nul && `"$cmake`" -S `"$SourceDirectory`" -B `"$build`" -G Ninja -DCMAKE_MAKE_PROGRAM=`"$ninja`" $options && `"$cmake`" --build `"$build`" --target curl --parallel 8"
+& $env:ComSpec /d /s /c "call `"$vcvars`" >nul && `"$cmake`" -S `"$SourceDirectory`" -B `"$build`" -G Ninja -DCMAKE_MAKE_PROGRAM=`"$ninja`" -DCMAKE_INSTALL_PREFIX=`"$install`" $options && `"$cmake`" --build `"$build`" --target curl --parallel 4 && `"$cmake`" --install `"$build`""
 if ($LASTEXITCODE -ne 0) { throw 'curl build failed' }
 $binary = Join-Path $build 'src/curl.exe'
 $version = & $binary --version

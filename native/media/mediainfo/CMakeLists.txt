@@ -1,9 +1,16 @@
 # Keep upstream options scoped to this directory, away from the application.
 include(FetchContent)
-file(READ "${CMAKE_SOURCE_DIR}/scripts/offline-dependencies.json" dependencies)
+if(NOT JAVM_REPOSITORY_ROOT)
+    set(JAVM_REPOSITORY_ROOT "${PROJECT_SOURCE_DIR}")
+endif()
+file(READ "${JAVM_REPOSITORY_ROOT}/scripts/offline-dependencies.json" dependencies)
 string(JSON profile GET "${dependencies}" mediainfo)
 string(JSON source_url GET "${profile}" url)
 string(JSON source_hash GET "${profile}" sha256)
+string(JSON source_file GET "${profile}" file)
+if(EXISTS "${JAVM_REPOSITORY_ROOT}/.tmp/offline-dependencies/${source_file}")
+    set(source_url "${JAVM_REPOSITORY_ROOT}/.tmp/offline-dependencies/${source_file}")
+endif()
 FetchContent_Declare(mediainfo_source
     URL "${source_url}"
     URL_HASH "SHA256=${source_hash}"

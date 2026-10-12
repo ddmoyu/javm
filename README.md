@@ -30,8 +30,8 @@ MetaTube 刮削已贯通下载与片库：搜索结果可“收藏并保存资�
 - pnpm 12.10.1，依赖使用一份 `pnpm-lock.yaml`。
 - Windows 桌面运行需要 WebView2 Runtime。
 - 原生构建需要 Visual Studio C++ 工具链、CMake 3.25+、Ninja。
-- 精简 MetaTube 构建需要 PATH 中的 Go；脚本锁定并自动选择 Go 1.25.0。Go 仅用于构建，不随运行包分发。
-- 准备离线包还需要 Git Bash 与 PATH 中的 NASM；精简 FFmpeg 使用 MSVC 静态构建，GNU Make 由脚本下载并校验。这些仅用于构建，不随运行包分发。
+- 完整包从本仓库的组件 Release 下载精简 FFmpeg、MetaTube、MediaInfo 和 curl，并验证 SHA-256；需要 GitHub CLI，公共下载也可使用已登录账号。
+- 维护组件源码构建时才需要 Go 1.25.0、Git Bash 和 NASM；这些不随运行包分发。独立构建与复用规则见 [第三方组件发布](docs/decisions/0029-third-party-releases.md)。
 - 首次安装依赖、下载 Neutralino 宿主和配置 SQLite 需要联网。
 
 ## 开发命令
@@ -124,7 +124,7 @@ docs/                     重构约定、选型和验证记录
 - 0.5.3 迁移已用合成数据库验证；维度收藏与别名提供归档恢复，旧任务保留且不自动执行。日常片库备份覆盖资料和关联记录，不包含媒体文件、下载库或设置。安全桌面完整流程和恢复验证见[模块闭环记录](docs/verification/2026-10-11-module-closure.md)；NAS、慢盘及完整发行环境仍需独立验收。
 - 桌面窗口使用官方窗口 API，首次启动居中显示；关闭窗口可按设置留在托盘继续任务，显式退出先停止任务并保存状态。已验证对应事件处理器，长期托盘队列和系统级交互仍需独立验收，见 [后台运行验证](docs/verification/2026-10-10-background-running.md)。
 - `pnpm test` 包含查询规则、空资料边界、下载状态机与播放会话测试；`pnpm test:downloads` 覆盖实际下载、合并、进程退出与 SQLite，`pnpm test:playback` 覆盖合成素材的真实播放。通过测试不代表网站、所有编解码器或发布包已全面验收。
-- GitHub Actions 仅保留手动触发。提交、推送和 PR 不自动运行检查；旧发布工作流已移除，不自动创建 Release。
+- 普通工程检查仅手动触发；dev 上的组件配方变更会按指纹独立构建和发布，未修改的组件直接复用。Alpha 标签用于完整便携包发布，组件 Release 不占用仓库 Latest。
 - `pnpm test:metadata` 使用隔离的桌面宿主和本机模拟接口验证真实传输与加密存储，并运行已准备的包内 MetaTube，验证按需启动、驻留及宿主退出后的进程回收。测试不使用真实片库或供应商密钥，初始验证见 [资料辅助验证](docs/verification/2026-10-09-metatube-ai.md)。
 - 版本组合、选择原因与阶段差异见 [初始化决策](docs/decisions/0001-initialization.md)。
 
