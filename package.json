@@ -19,7 +19,7 @@
     "catalog:collect": "node --use-env-proxy scripts/collect-javbus-catalog.mjs",
     "icons:generate": "node scripts/generate-icon-assets.mjs",
     "test": "vp test run --passWithNoTests",
-    "desktop:setup": "neu update",
+    "desktop:setup": "node scripts/setup-desktop.mjs",
     "desktop:dev": "pnpm native:build && neu run",
     "desktop:build": "pnpm native:build --Release && vp build && node scripts/build-desktop.mjs",
     "desktop:offline": "pnpm offline:setup && pnpm desktop:build && node scripts/package-offline.mjs",
