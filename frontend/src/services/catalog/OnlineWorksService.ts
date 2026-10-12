@@ -216,7 +216,13 @@ export class OnlineWorksService extends Observable<Snapshot> {
     });
     this.loadPage(1);
   };
-  private async readPage(entity: OnlineEntity, page: number, signal: AbortSignal, force = false) {
+  private async readPage(
+    entity: OnlineEntity,
+    page: number,
+    signal: AbortSignal,
+    force = false,
+    append = false,
+  ) {
     const dimension = this.snapshot.selection!.dimension;
     const url = javbusEntityUrl(entity, page);
     const cached = force ? undefined : this.cache.get(url);
@@ -237,6 +243,19 @@ export class OnlineWorksService extends Observable<Snapshot> {
     this.cache.delete(url);
     this.cache.set(url, result);
     if (this.cache.size > 8) this.cache.delete(this.cache.keys().next().value!);
+    const previous = this.snapshot.result;
+    if (append && previous && previous.page === page - 1) {
+      // 滚动加载把新页追加到已读列表；跨页重复的作品只保留首次出现。
+      const seen = new Set(previous.items.map((work) => work.url));
+      result = {
+        ...result,
+        items: [...previous.items, ...result.items.filter((work) => !seen.has(work.url))],
+        total: result.total ?? previous.total,
+        ...(result.profile || previous.profile
+          ? { profile: result.profile ?? previous.profile }
+          : {}),
+      };
+    }
     this.publish({ result, page, ready: true });
   }
   loadPage = (page: number, force = false) => {
@@ -245,7 +264,21 @@ export class OnlineWorksService extends Observable<Snapshot> {
     this.publish({ page, loading: true, error: "", detail: null });
     this.run((signal) => this.readPage(entity, page, signal, force));
   };
-  retry = () => (this.snapshot.entity ? this.loadPage(this.snapshot.page, true) : this.resolve());
+  loadMore = () => {
+    const { entity, result, loading, error } = this.snapshot;
+    if (!entity || !result || loading || error || result.nextPage === null) return;
+    const page = result.nextPage;
+    this.publish({ loading: true, error: "" });
+    this.run((signal) => this.readPage(entity, page, signal, false, true));
+  };
+  retryMore = () => {
+    this.publish({ error: "" });
+    this.loadMore();
+  };
+  retry = () =>
+    this.snapshot.entity
+      ? this.loadPage(this.snapshot.error ? this.snapshot.page : 1, true)
+      : this.resolve();
   private async readDetail(work: OnlineWork, signal: AbortSignal) {
     if (this.stopping || !this.fetch) throw new Error("在线作品服务暂不可用。");
     await this.prepare();

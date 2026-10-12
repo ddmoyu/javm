@@ -88,6 +88,8 @@ export interface NativeVideo {
   dir_path: string;
   file_size: number | null;
   poster: string | null;
+  /** 封面由扫描后自动截帧生成，刮削到来源封面时会被替换。 */
+  poster_auto?: boolean;
   thumb?: string | null;
   fanart?: string | null;
   year?: number;

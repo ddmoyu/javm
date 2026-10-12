@@ -117,6 +117,10 @@ if (command === "verify-source") {
   if (release && !release.draft) throw new Error("拒绝覆盖已发布的 Alpha 版本");
   if (!release) {
     const notes = path.join(directory, "notes.md");
+    const changes = (await readFile(path.join(root, "CHANGELOG.md"), "utf8"))
+      .split(/(?=^## )/m)
+      .find((section) => section.startsWith("## " + pkg.version + " "));
+    if (!changes) throw new Error("缺少当前版本的更新日志：" + pkg.version);
     await writeFile(
       notes,
       "JAVM " +
@@ -129,7 +133,8 @@ if (command === "verify-source") {
         commit +
         "\n\n" +
         "附件包含 SHA-256、组件构建身份、许可证和解压验证记录。\n\n" +
-        (await readFile(path.join(root, "CHANGELOG.md"), "utf8")),
+        changes.trim() +
+        "\n",
     );
     gh([
       "release",

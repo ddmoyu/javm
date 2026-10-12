@@ -12,14 +12,22 @@ import {
   transferAccepted,
   HlsPlanError,
   HlsSizeEstimate,
+  applySegmentRanges,
+  imageSignature,
+  isTransportStreamAt,
+  transportStreamOffset,
+  tsPacket,
+  tsSyncPackets,
   spreadOrder,
 } from "../frontend/src/services/downloads/hls";
 import type { HlsResource } from "../frontend/src/services/downloads/hls";
 import { curlContext, curlSafety, headerName } from "../frontend/src/services/downloads/curlConfig";
+import { metatubeDiagnostic } from "../frontend/src/platform/neutralino/metatubeHost";
 import { createHlsPlanner, createPlannerCore } from "../frontend/src/services/downloads/hlsPlanner";
 import { mismatchedFiles, readHlsState } from "../frontend/src/services/downloads/hlsDownload";
 import type { DownloadFiles } from "../frontend/src/services/downloads/ToolDownloadEngine";
 import { canRetryWithProxy, curlExitHint } from "../frontend/src/services/downloads/network";
+import { formatRemaining } from "../frontend/src/services/downloads/progress";
 
 const base = "https://cdn.example.com/show/master.m3u8";
 const master = (text: string) => {
@@ -753,5 +761,95 @@ describe("HLS local file checks", () => {
       fingerprint: "x",
       completed: { "a.ts": 10 },
     });
+  });
+});
+
+describe("segments disguised as images", () => {
+  const png = [
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  ];
+  const transport = (packets: number) => {
+    const bytes = new Uint8Array(packets * tsPacket);
+    for (let packet = 0; packet < packets; packet++) bytes[packet * tsPacket] = 0x47;
+    return bytes;
+  };
+  const join = (...parts: ArrayLike<number>[]) => {
+    const bytes = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+    let offset = 0;
+    for (const part of parts) {
+      bytes.set(part, offset);
+      offset += part.length;
+    }
+    return bytes;
+  };
+  it("recognizes common image headers but not transport streams", () => {
+    expect(imageSignature(Uint8Array.from(png))).toBe("PNG");
+    expect(imageSignature(Uint8Array.from([0xff, 0xd8, 0xff, 0xe0]))).toBe("JPEG");
+    expect(imageSignature(Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]))).toBe("GIF");
+    expect(imageSignature(Uint8Array.from([0x42, 0x4d, 0, 0]))).toBe("BMP");
+    expect(imageSignature(transport(2))).toBeUndefined();
+  });
+  it("finds the first offset with consecutive TS sync bytes after an image header", () => {
+    // 图片头里出现的单个 0x47 不能被误认为 TS 起点。
+    const header = join(png, [0x47, 1, 2, 3], new Uint8Array(500).fill(7));
+    const bytes = join(header, transport(tsSyncPackets + 1));
+    expect(transportStreamOffset(bytes)).toBe(header.length);
+    expect(isTransportStreamAt(bytes, header.length)).toBe(true);
+    expect(isTransportStreamAt(bytes, header.length + 1)).toBe(false);
+    expect(transportStreamOffset(join(header, transport(tsSyncPackets - 1)))).toBe(-1);
+    expect(transportStreamOffset(Uint8Array.from(png))).toBe(-1);
+  });
+  it("adds byte ranges only to the listed segments without existing ranges", () => {
+    const text = [
+      "#EXTM3U",
+      "#EXTINF:4,",
+      "v-seg-00000.ts",
+      "#EXTINF:4,",
+      "#EXT-X-BYTERANGE:100@0",
+      "v-seg-00001.ts",
+      "#EXTINF:4,",
+      "v-seg-00002.ts",
+      "#EXT-X-ENDLIST",
+    ].join("\n");
+    const output = applySegmentRanges(text, {
+      "v-seg-00000.ts": { offset: 70, length: 930 },
+      "v-seg-00001.ts": { offset: 70, length: 30 },
+    });
+    expect(output).toContain("#EXTINF:4,\n#EXT-X-BYTERANGE:930@70\nv-seg-00000.ts");
+    expect(output).toContain("#EXT-X-BYTERANGE:100@0\nv-seg-00001.ts");
+    expect(output).not.toContain("BYTERANGE:30@70");
+    expect(output).toContain("#EXTINF:4,\nv-seg-00002.ts");
+  });
+});
+
+describe("MetaTube diagnostics", () => {
+  it("keeps per-source search summaries and real errors, without database chatter", () => {
+    const summary = metatubeDiagnostic(
+      "[ENGINE] 2026/10/12 22:54:31 github.com/metatube-community/metatube-sdk-go/engine/movie.go:144: Search keyword ABC-123: FANZA(9s):<context deadline exceeded> | MGS(1s):<invalid id>",
+    );
+    expect(summary).toEqual({
+      level: "info",
+      message:
+        "Search keyword ABC-123: FANZA(9s):<context deadline exceeded> | MGS(1s):<invalid id>",
+    });
+    expect(metatubeDiagnostic("[GORM] 2026/10/12 22:54:17 migrator.go:32")).toBeUndefined();
+    expect(
+      metatubeDiagnostic("[0.000ms] [rows:-] SELECT count(*) FROM sqlite_master"),
+    ).toBeUndefined();
+    expect(metatubeDiagnostic("listen tcp 127.0.0.1:1: bind: error")).toMatchObject({
+      level: "warn",
+    });
+  });
+});
+
+describe("download remaining time", () => {
+  it("switches to minutes and hours as the time grows", () => {
+    expect(formatRemaining(0)).toBe("—");
+    expect(formatRemaining(42.2)).toBe("约 43 秒");
+    expect(formatRemaining(60)).toBe("约 1 分钟");
+    expect(formatRemaining(1226)).toBe("约 20 分 26 秒");
+    expect(formatRemaining(3600)).toBe("约 1 小时");
+    expect(formatRemaining(3 * 3600 + 25 * 60 + 9)).toBe("约 3 小时 25 分");
+    expect(formatRemaining(Number.POSITIVE_INFINITY)).toBe("—");
   });
 });

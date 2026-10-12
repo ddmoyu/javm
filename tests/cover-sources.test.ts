@@ -198,13 +198,22 @@ describe("封面后台读取和备用图片（纯安全 mock）", () => {
 });
 
 describe("JavBus 封面候选的解析与传递（虚构文字与地址）", () => {
+  // 只核对虚构番号生成的地址顺序，不请求这些地址。
+  const preferred = [
+    "https://pics.dmm.co.jp/digital/video/safe00001/safe00001pl.jpg",
+    "https://pics.dmm.co.jp/mono/movie/adult/safe00001/safe00001pl.jpg",
+  ];
   it("兼容无链接的封面容器和 HTTP 图片，由后台读取避免混合内容限制", () => {
     const work = { code: "SAFE-001", title: "安全示例", url: "https://www.javbus.com/SAFE-001" };
     const details = parseJavbusWorkDetails(
       `<h3>安全示例</h3><div class="bigImage"><img data-srcset="http://images.example.invalid/large.jpg 2x"></div><div class="info"><p>ID: SAFE-001</p></div>`,
       work,
     );
-    expect(details.coverUrl).toBe("http://images.example.invalid/large.jpg");
+    expect(details.coverUrl).toBe(preferred[0]);
+    expect(details.coverCandidates).toEqual([
+      ...preferred,
+      "http://images.example.invalid/large.jpg",
+    ]);
   });
   it("卡片保留 lazy 图片、src 和 srcset 的备用地址", () => {
     const result = parseJavbusWorks(
@@ -212,8 +221,14 @@ describe("JavBus 封面候选的解析与传递（虚构文字与地址）", () 
       "https://www.javbus.com/star/safe",
       1,
     );
-    expect(result.items[0]?.coverUrl).toBe("https://www.javbus.com/cover.jpg");
-    expect(result.items[0]?.coverCandidates).toHaveLength(4);
+    expect(result.items[0]?.coverUrl).toBe(preferred[0]);
+    expect(result.items[0]?.coverCandidates).toEqual([
+      ...preferred,
+      "https://www.javbus.com/cover.jpg",
+      "https://www.javbus.com/thumb.jpg",
+      "https://www.javbus.com/small.jpg",
+      "https://www.javbus.com/large.jpg",
+    ]);
   });
   it("详情保留大图链接、img 原图及列表封面，转换为 Film 后均可回退", () => {
     const work = {
@@ -228,6 +243,7 @@ describe("JavBus 封面候选的解析与传递（虚构文字与地址）", () 
     );
     const film = movieDetailsToFilm(details, { ...work, id: work.code, provider: "JavBus" });
     expect(film.artwork?.map((value) => value.src)).toEqual([
+      ...preferred,
       "https://images.example.invalid/full.jpg",
       "https://images.example.invalid/medium.jpg",
       work.coverUrl,

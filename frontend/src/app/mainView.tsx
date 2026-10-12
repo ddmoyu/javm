@@ -78,6 +78,26 @@ export function createMainView(runtime: Runtime) {
     () => downloads.getSnapshot().settings.ffmpegPath,
     images,
   );
+  // 片库就绪时与每次扫描结束后，为没有封面的作品自动截帧。
+  if (library.autoCover) {
+    const autoCover = library.autoCover;
+    let ready = false,
+      scanning = false;
+    const check = () => {
+      const snapshot = library.getSnapshot();
+      const now = snapshot.scan?.state === "scanning";
+      if (snapshot.ready && !snapshot.error && (!ready || (scanning && !now)) && !now)
+        autoCover.schedule();
+      if (snapshot.ready) ready = true;
+      scanning = now;
+    };
+    library.subscribe(check);
+    check();
+    observeLogState("artwork", autoCover, (value) => ({
+      state: value.running ? "自动封面运行中" : "自动封面空闲",
+      error: value.error,
+    }));
+  }
   const scraping = createScrapeService(
     runtime,
     metadata.metatube,

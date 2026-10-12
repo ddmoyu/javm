@@ -112,11 +112,6 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
             </Button>
           </Group>
         )}
-        {matching && (
-          <Text size="sm" mb="sm">
-            正在匹配：{matching.name}。选择正确资料后点击“采用并刮削”。
-          </Text>
-        )}
         {selected && (
           <Group mb="md" justify="space-between">
             <Text size="sm">当前影片：{selected.title}</Text>

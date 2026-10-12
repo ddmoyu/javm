@@ -160,8 +160,9 @@ describe.runIf(process.env.JAVM_HTTP_INTEGRATION === "1")(
       expect(await start().done).toMatchObject({ exitCode: 0, status: 200 });
     });
     it("原生排队中的取消不建立额外连接、不创建输出文件", async () => {
-      const holding = Array.from({ length: 4 }, () => start("/slow"));
-      await expect.poll(() => slow.length).toBe(2);
+      // 原生总上限 12、每站 6 个连接：12 个占满总上限，只有 6 个真正连上，第 13 个留在原生队列。
+      const holding = Array.from({ length: 12 }, () => start("/slow"));
+      await expect.poll(() => slow.length).toBe(6);
       const queued = start("/slow");
       expect(await host.request("http.cancel", { id: queued.id })).toEqual({ stopped: true });
       expect(await queued.done).toMatchObject({ exitCode: 42 });

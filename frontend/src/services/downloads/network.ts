@@ -4,6 +4,11 @@ import type { ProcessResult } from "../../platform/neutralino/process";
 // 22 also covers HTTP 403, which region-restricted CDNs answer before a proxy helps.
 const curlNetworkErrors = new Set([5, 6, 7, 16, 18, 22, 28, 35, 52, 55, 56, 60, 92, 95, 96, 97]);
 
+/** curl 退出码是否属于网络类错误（不含 HTTP 状态判断）。 */
+export function isNetworkFailure(code: number) {
+  return code !== 22 && curlNetworkErrors.has(code);
+}
+
 export function canRetryWithProxy(result: ProcessResult) {
   return result.exitCode !== 0 && curlNetworkErrors.has(result.exitCode);
 }

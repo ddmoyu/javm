@@ -30,6 +30,8 @@ interface CollectionProps {
   openFilm: (film: Film) => void;
   play: (film: Film) => void;
   toggleFavorite: (film: Film) => void;
+  /** 卡片最小宽度（像素）；未提供时按版式使用默认值。 */
+  cardWidth?: number;
 }
 
 const GAP = 18;
@@ -269,6 +271,7 @@ export function FilmCollection({
   openFilm,
   play,
   toggleFavorite,
+  cardWidth: minCardWidth,
 }: CollectionProps) {
   const { notice, cardClickToPlay, library } = useWorkspace();
   const activateFilm = useCallback(
@@ -287,7 +290,10 @@ export function FilmCollection({
   const columns = poster
     ? Math.max(
         landscape ? 1 : 2,
-        Math.min(8, Math.floor((geometry.width + GAP) / (landscape ? 300 : 188))),
+        Math.min(
+          minCardWidth ? 16 : 8,
+          Math.floor((geometry.width + GAP) / (minCardWidth ?? (landscape ? 300 : 188))),
+        ),
       )
     : 1;
   const cardWidth = (geometry.width - (columns - 1) * GAP) / columns;

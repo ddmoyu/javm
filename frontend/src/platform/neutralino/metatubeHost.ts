@@ -4,6 +4,20 @@ import type { MetaTubeHost } from "../../services/metadata/MetaTubeService";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { runNativeProcess } from "./process";
 import { runPowerShell } from "./metadataHttp";
+import { logEvent } from "../../services/logging/events";
+import { OutputLines } from "../../services/downloads/progress";
+
+/**
+ * MetaTube 每次查询会输出一行各资料来源的耗时与结果（如 `FANZA(9s):<invalid id>`），
+ * 不含标题等内容。只把这类汇总行和错误行写入应用日志，便于排查“未找到资料”。
+ */
+export function metatubeDiagnostic(line: string) {
+  const engine = /Search keyword|Get movie|Search movie/i.test(line);
+  const failure = /\b(error|panic|fatal|failed)\b/i.test(line) && !/\[GORM\]/.test(line);
+  if (!engine && !failure) return undefined;
+  const message = line.replace(/^\[ENGINE\]\s+\S+\s+\S+\s+\S+:\d+:\s*/, "").slice(0, 2000);
+  return { level: failure && !engine ? ("warn" as const) : ("info" as const), message };
+}
 
 export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHost {
   const root = () => `${window.NL_DATAPATH}/metatube`;
@@ -54,6 +68,14 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
         abort = new AbortController();
       const proxy = await network.getProxy();
       signal.throwIfAborted();
+      const lines = new OutputLines();
+      // 记录本次启动是否走代理（不记录代理地址与凭据），对照来源请求结果。
+      logEvent(
+        "info",
+        "metatube",
+        "network",
+        proxy ? "MetaTube 通过网络代理访问资料来源" : "MetaTube 直连访问资料来源",
+      );
       const exited = runNativeProcess(
         path,
         [
@@ -69,7 +91,12 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
           "20s",
         ],
         abort.signal,
-        undefined,
+        (chunk) => {
+          for (const line of lines.push(chunk)) {
+            const diagnostic = metatubeDiagnostic(line);
+            if (diagnostic) logEvent(diagnostic.level, "metatube", "engine", diagnostic.message);
+          }
+        },
         true,
         { HTTP_PROXY: proxy, HTTPS_PROXY: proxy, ALL_PROXY: "", NO_PROXY: "127.0.0.1,localhost" },
       ).then(() => {});

@@ -22,6 +22,7 @@ import {
   getWindowState,
   refreshWindowState,
   subscribeWindowState,
+  toggleWindowAlwaysOnTop,
 } from "../../platform/neutralino/windowFrame";
 
 function Media({ media }: { media: PreparedPlayback }) {
@@ -154,7 +155,7 @@ export default function PlaybackWindow({
   onClose?: () => Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { maximized } = useSyncExternalStore(subscribeWindowState, getWindowState);
+  const { maximized, alwaysOnTop } = useSyncExternalStore(subscribeWindowState, getWindowState);
   const isExpanded = native ? maximized : expanded;
   const [position, setPosition] = useState({ x: 24, y: 70 });
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
@@ -287,6 +288,17 @@ export default function PlaybackWindow({
           </Text>
         </UnstyledButton>
         <Group gap={0} wrap="nowrap">
+          {native && (
+            <UnstyledButton
+              className="window-button"
+              aria-label={alwaysOnTop ? "取消置顶" : "置顶播放器"}
+              aria-pressed={alwaysOnTop}
+              data-active={alwaysOnTop || undefined}
+              onClick={() => report(toggleWindowAlwaysOnTop())}
+            >
+              <Icon name="pin" size={14} filled={alwaysOnTop} />
+            </UnstyledButton>
+          )}
           {native && (
             <UnstyledButton
               className="window-button"

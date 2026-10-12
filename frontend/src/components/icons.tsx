@@ -46,6 +46,7 @@ import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { PushPinIcon } from "@phosphor-icons/react/dist/csr/PushPin";
 import { BroadcastIcon } from "@phosphor-icons/react/dist/csr/Broadcast";
 import { ScanIcon } from "@phosphor-icons/react/dist/csr/Scan";
 import { ShieldIcon } from "@phosphor-icons/react/dist/csr/Shield";
@@ -145,6 +146,7 @@ const icons = {
   arrowUp: ArrowUpIcon,
   lock: LockSimpleIcon,
   restore: CopySimpleIcon,
+  pin: PushPinIcon,
 } as const satisfies Record<string, PhosphorIcon>;
 
 export type IconName = keyof typeof icons;

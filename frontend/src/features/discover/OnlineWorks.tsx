@@ -1,19 +1,17 @@
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  Alert,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Select,
-  SimpleGrid,
-  Stack,
-  Text,
-  UnstyledButton,
-} from "@mantine/core";
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { Alert, Badge, Button, Group, Loader, Select, Text, UnstyledButton } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
 import { Poster } from "../../components/Cover";
-import { Empty, Pill } from "../../components/ui";
+import { Empty } from "../../components/ui";
+import { VirtualGrid } from "../../components/VirtualGrid";
 import { FilmDetail } from "../films/FilmDetail";
 import { movieDetailsToFilm } from "../resources/movieDetailsFilm";
 import type { OnlineWorksService } from "../../services/catalog/OnlineWorksService";
@@ -21,9 +19,16 @@ import type { WorksDimension } from "../../services/catalog/javbusWorks";
 import type { OnlineWork } from "../../services/catalog/onlineWorks";
 import { ResourceLookupButton } from "../resources/ResourceSearch";
 import { publicMessage } from "../../services/publicMessage";
+import { normalizeCode } from "../../services/scraping/identity";
 import { onlineWorkChoices } from "./onlineWorkChoices";
 
 const noSubscribe = () => () => {};
+const WORK_GAP = 12;
+/** 番号与标题两行文字的高度。 */
+const WORK_META_HEIGHT = 44;
+const workCardHeight = (width: number) => Math.round((width * 2) / 3) + WORK_META_HEIGHT;
+export type OnlineWorkScope = "all" | "missing";
+const filterKey = (value: string) => value.normalize("NFKC").toLowerCase();
 
 const candidateOf = (work: OnlineWork) => ({
   provider: "JavBus",
@@ -50,27 +55,31 @@ export function OnlineWorks({
   dimension,
   name,
   active,
+  filter,
+  scope,
+  localCodes,
+  cardWidth,
 }: {
   service: OnlineWorksService;
   dimension: WorksDimension;
   name: string;
   active: boolean;
+  /** 番号或标题关键词，只过滤已加载的作品。 */
+  filter: string;
+  scope: OnlineWorkScope;
+  /** 本地已收录番号（规范化）；尚未读取时为 null。 */
+  localCodes: ReadonlySet<string> | null;
+  cardWidth: number;
 }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const { library, libraryState, openFilm, resourceSearch, notice } = useWorkspace();
-  const catalog = library.catalog;
   const artwork = library.artwork;
   const artworkState = useSyncExternalStore(
     artwork?.subscribe ?? noSubscribe,
     () => artwork?.getSnapshot() ?? null,
   );
-  const savedCount = useSyncExternalStore(catalog?.subscribe ?? noSubscribe, () => {
-    const counts = catalog?.getSnapshot().catalogs[dimension].videoCounts;
-    return counts && Object.hasOwn(counts, name) ? counts[name] : undefined;
-  });
   const [detailView, setDetailView] = useState<"info" | "links">("info");
   const [collecting, setCollecting] = useState(false);
-  const root = useRef<HTMLDivElement>(null);
   const detailOrigin = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!active) return;
@@ -88,37 +97,41 @@ export function OnlineWorks({
   }, [state.detail]);
   const matches = state.selection?.dimension === dimension && state.selection.name === name;
   const result = matches ? state.result : null;
-  const videoCount =
-    result?.total ?? (matches && state.entities.length > 1 ? undefined : savedCount);
   const detail = matches ? state.detail : null;
   const choices = onlineWorkChoices(dimension, matches ? state.entities : []);
-  const page = (value: number) => {
-    service.loadPage(value);
-    root.current?.scrollIntoView({ block: "start" });
-  };
   const preview = detail
     ? detail.value
       ? movieDetailsToFilm(detail.value, candidateOf(detail.work))
       : summaryFilm(detail.work)
     : null;
+  const isLocal = useCallback(
+    (work: OnlineWork) => !!localCodes?.has(normalizeCode(work.code)),
+    [localCodes],
+  );
+  const keyword = filterKey(filter.trim());
+  // 作品逐页追加，单次过滤至多数千条短文本，不构成长任务。
+  const items = useMemo(() => {
+    const source = result?.items ?? [];
+    if (!keyword && scope === "all") return source;
+    return source.filter(
+      (work) =>
+        (scope === "all" || (!!localCodes && !isLocal(work))) &&
+        (!keyword ||
+          filterKey(work.code).includes(keyword) ||
+          filterKey(work.title).includes(keyword)),
+    );
+  }, [result, keyword, scope, localCodes, isLocal]);
+  const columns = useCallback(
+    (width: number) => Math.max(1, Math.floor((width + WORK_GAP) / (cardWidth + WORK_GAP))),
+    [cardWidth],
+  );
+  const openWork = (work: OnlineWork, view: "info" | "links", origin: HTMLElement | null) => {
+    detailOrigin.current = origin;
+    setDetailView(view);
+    service.open(work);
+  };
   return (
-    <div ref={root} aria-busy={state.loading}>
-      <Group justify="space-between" my="md">
-        <Text size="sm" c="dimmed">
-          {videoCount === undefined ? "作品数量未知" : `${videoCount.toLocaleString()} 部作品`}
-          {result ? ` · 第 ${result.page} 页` : ""}
-        </Text>
-        <Group gap="xs">
-          <Button size="xs" variant="subtle" disabled={state.loading} onClick={service.retry}>
-            刷新作品
-          </Button>
-          {state.loading && (
-            <Button size="xs" variant="default" onClick={service.cancel}>
-              取消
-            </Button>
-          )}
-        </Group>
-      </Group>
+    <div aria-busy={state.loading}>
       {matches && state.entities.length > 1 && (
         <Select
           label={choices.label}
@@ -133,7 +146,7 @@ export function OnlineWorks({
           }}
         />
       )}
-      {matches && state.error && (
+      {matches && state.error && !result?.items.length && (
         <Alert color="red" role="alert" mb="md">
           {publicMessage(state.error)}
           <Button size="xs" variant="subtle" onClick={service.retry}>
@@ -141,106 +154,136 @@ export function OnlineWorks({
           </Button>
         </Alert>
       )}
-      {state.loading && (
+      {state.loading && !result?.items.length && (
         <Group component="output" justify="center" py="md" aria-live="polite">
           <Loader size="sm" />
           <Text size="sm">{state.entity ? "正在读取作品…" : "正在查找条目…"}</Text>
         </Group>
       )}
-      {!!result?.items.length && (
-        <SimpleGrid
-          component="ul"
-          className="facet-grid"
-          aria-label="在线作品列表"
-          type="container"
-          cols={{ base: 2, "600px": 3, "900px": 4, "1200px": 5 }}
-          spacing="md"
-        >
-          {result.items.map((work) => {
-            const film = summaryFilm(work);
+      {scope === "missing" && !localCodes && !!result?.items.length && (
+        <Group component="output" justify="center" py="md">
+          <Loader size="xs" />
+          <Text size="sm" c="dimmed">
+            正在核对本地已收录作品…
+          </Text>
+        </Group>
+      )}
+      {!!items.length && (
+        <VirtualGrid
+          count={items.length}
+          columns={columns}
+          rowHeight={workCardHeight}
+          gap={WORK_GAP}
+          active={active}
+          getKey={(index) => items[index]!.url}
+          onEndReached={service.loadMore}
+          label="在线作品列表"
+          renderItem={(index) => {
+            const work = items[index]!;
+            const local = localCodes ? isLocal(work) : null;
             return (
-              <Paper component="li" key={work.url} withBorder p="sm" radius="md">
-                <Stack gap="xs">
-                  <UnstyledButton
-                    disabled={state.loading}
-                    aria-label={`查看作品 ${work.code}`}
-                    onClick={(event) => {
-                      detailOrigin.current = event.currentTarget;
-                      setDetailView("info");
-                      service.open(work);
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: "relative",
-                        height: 210,
-                        display: "flex",
-                        justifyContent: "center",
-                        overflow: "hidden",
-                      }}
-                    >
-                      <Poster film={film} />
-                    </div>
-                    <Text size="xs" c="dimmed" mt="sm" ff="monospace">
-                      {work.code}
-                    </Text>
-                    <Text size="sm" fw={500} lineClamp={2} title={work.title}>
-                      {work.title}
-                    </Text>
-                  </UnstyledButton>
-                  <Group justify="space-between" gap="xs">
-                    <Pill>在线资料</Pill>
-                    {resourceSearch && (
-                      <ResourceLookupButton
-                        service={resourceSearch}
-                        code={work.code}
-                        disabled={state.loading}
-                        onStart={() => {
-                          detailOrigin.current =
-                            document.activeElement instanceof HTMLElement
-                              ? document.activeElement
-                              : null;
-                          setDetailView("links");
-                          service.open(work);
-                        }}
-                      />
+              <div className="online-work">
+                <UnstyledButton
+                  className="online-work-open"
+                  disabled={state.loading}
+                  aria-label={`查看作品 ${work.code}${local === null ? "" : local ? "，本地已收录" : "，本地缺失"}`}
+                  onClick={(event) => openWork(work, "info", event.currentTarget)}
+                >
+                  <span className="online-work-cover">
+                    <Poster film={summaryFilm(work)} compact={cardWidth < 200} />
+                    {local !== null && (
+                      <Badge
+                        className="online-work-status"
+                        size="xs"
+                        radius="sm"
+                        variant="filled"
+                        color={local ? "teal.7" : "dark.6"}
+                      >
+                        {local ? "本地" : "缺失"}
+                      </Badge>
                     )}
-                  </Group>
-                </Stack>
-              </Paper>
+                  </span>
+                  <Text span size="xs" fw={600} ff="monospace" truncate title={work.code}>
+                    {work.code}
+                  </Text>
+                  <Text span size="xs" c="dimmed" truncate title={work.title}>
+                    {work.title}
+                  </Text>
+                </UnstyledButton>
+                {resourceSearch && (
+                  <span className="online-work-actions">
+                    <ResourceLookupButton
+                      compact
+                      service={resourceSearch}
+                      code={work.code}
+                      disabled={state.loading}
+                      onStart={() =>
+                        openWork(
+                          work,
+                          "links",
+                          document.activeElement instanceof HTMLElement
+                            ? document.activeElement
+                            : null,
+                        )
+                      }
+                    />
+                  </span>
+                )}
+              </div>
             );
-          })}
-        </SimpleGrid>
+          }}
+        />
       )}
       {result && !result.items.length && !state.loading && !state.error && (
         <Empty title="暂无在线作品" description="暂未找到该条目的作品。" />
       )}
+      {!!result?.items.length &&
+        !items.length &&
+        (scope === "all" || !!localCodes) &&
+        !state.loading && (
+          <Empty
+            title={keyword ? "无匹配作品" : "已加载的作品均已收录"}
+            description={
+              result.nextPage === null
+                ? "已加载全部作品。"
+                : "只过滤已加载的作品，可继续加载更多后再查看。"
+            }
+          >
+            {result.nextPage !== null && !state.error && (
+              <Button size="xs" variant="subtle" onClick={service.loadMore}>
+                加载更多作品
+              </Button>
+            )}
+          </Empty>
+        )}
       {!result && !state.loading && !state.error && state.entities.length <= 1 && (
-        <Empty title="尚未读取作品" description="点击读取或刷新，获取作品列表。">
+        <Empty title="尚未读取作品" description="点击重新抓取，获取作品列表。">
           <Button size="xs" onClick={service.retry}>
             读取作品
           </Button>
         </Empty>
       )}
-      {result && (
-        <Group justify="center" py="lg" aria-label="在线作品分页">
-          <Button
-            variant="default"
-            size="xs"
-            disabled={state.loading || result.page <= 1}
-            onClick={() => page(result.page - 1)}
-          >
-            上一页
-          </Button>
-          <Text size="sm">第 {result.page} 页</Text>
-          <Button
-            variant="default"
-            size="xs"
-            disabled={state.loading || result.nextPage === null}
-            onClick={() => page(result.nextPage!)}
-          >
-            下一页
-          </Button>
+      {!!result?.items.length && (
+        <Group justify="center" py="lg" aria-live="polite">
+          {state.loading ? (
+            <>
+              <Loader size="xs" />
+              <Text size="sm" c="dimmed">
+                正在加载更多作品…
+              </Text>
+            </>
+          ) : state.error ? (
+            <Alert color="red" role="alert">
+              {publicMessage(state.error)}
+              <Button size="xs" variant="subtle" onClick={service.retryMore}>
+                重试
+              </Button>
+            </Alert>
+          ) : result.nextPage === null && items.length ? (
+            <Text size="sm" c="dimmed">
+              已加载全部作品
+            </Text>
+          ) : null}
         </Group>
       )}
       <FilmDetail

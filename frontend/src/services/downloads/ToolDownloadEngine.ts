@@ -11,12 +11,21 @@ import type { MediaProbe } from "./probe";
 import { downloadHls, mismatchedFiles, readHlsState } from "./hlsDownload";
 import { configValue, curlContext, curlSafety } from "./curlConfig";
 import { createHlsPlanner } from "./hlsPlanner";
+import {
+  imageSignature,
+  isTransportStreamAt,
+  transportStreamOffset,
+  tsPacket,
+  tsSyncPackets,
+} from "./hls";
 
 export interface DownloadFiles {
   mkdir(path: string): Promise<void>;
   stat(path: string): Promise<{ size: number; isFile: boolean } | null>;
   read(path: string): Promise<string>;
   write(path: string, value: string): Promise<void>;
+  /** 从指定位置读取若干字节，用于诊断日志和识别伪装成图片的分片。 */
+  readBytes?(path: string, length: number, position?: number): Promise<Uint8Array>;
   /** 写入二进制文件，例如 HLS 播放列表内嵌的密钥。 */
   writeBinary?(path: string, value: Uint8Array): Promise<void>;
   list(path: string): Promise<string[]>;
@@ -34,11 +43,29 @@ export interface DownloadHost {
   /** 创建 HLS 规划 Worker；未提供时（单元测试）在当前线程直接计算。 */
   hlsWorker?: () => Worker;
 }
+/**
+ * 读取本地 HLS 播放列表的公共输入参数。探测范围放大到 200 MB / 120 秒：部分来源的首段不是
+ * 关键帧，默认的 5 秒探测找不到视频参数，封装 MP4 时会报 “dimensions not set”。读取的是本地文件，代价很小。
+ */
+const hlsInputOptions = [
+  "-allowed_extensions",
+  "ALL",
+  "-extension_picky",
+  "0",
+  "-protocol_whitelist",
+  "file,crypto",
+  "-probesize",
+  "200M",
+  "-analyzeduration",
+  "120000000",
+];
 export class ToolDownloadEngine implements DownloadEngine {
   private decryption?: { path: string; supported: Promise<boolean> };
   constructor(
     private host: DownloadHost,
     private getProxy: () => Promise<string> = async () => "",
+    /** 测试可缩短 HLS 自动补下载的等待时间，或传入空数组关闭。 */
+    private options: { hlsRetryDelays?: number[]; hlsStallTimeout?: number } = {},
   ) {}
   /** 精简版 FFmpeg 只有启用 crypto 协议时才能在本地解密 AES-128 分片。 */
   private supportsDecryption(ffmpeg: string) {
@@ -108,6 +135,149 @@ export class ToolDownloadEngine implements DownloadEngine {
       return true;
     } finally {
       planner.close();
+    }
+  }
+  /**
+   * 合并前把本地播放列表的概况写入日志：分片、初始化段与密钥数量、时长，以及首个分片的
+   * 大小和开头字节（判断是否为 TS、fMP4 或被替换成网页）。只记录本地文件名，不记录地址。
+   */
+  private async diagnoseHls(
+    inputs: string[],
+    signal: AbortSignal,
+    progress: (update: DownloadProgress) => void,
+  ) {
+    const planner = createHlsPlanner(this.host.hlsWorker);
+    let duration = 0;
+    try {
+      for (const [index, input] of inputs.entries()) {
+        const text = await this.host.files.read(input);
+        const inspected = await planner.run("files", { text }, signal);
+        if (index === 0) duration = inspected.duration;
+        const segments = inspected.files.filter((name) => name.includes("-seg-"));
+        const maps = inspected.files.filter((name) => name.includes("-init-")).length;
+        const keys = inspected.files.filter((name) => name.includes("-key-")).length;
+        const name = input.split(/[\\/]/).at(-1);
+        const directory = input.replace(/[\\/][^\\/]*$/, "");
+        let first = "";
+        const sample = inspected.files.find((item) => !item.includes("-key-"));
+        if (sample) {
+          const path = joinPath(directory, sample);
+          const stat = await this.host.files.stat(path).catch(() => null);
+          const bytes = await this.host.files.readBytes?.(path, 16).catch(() => undefined);
+          const hex = bytes
+            ? [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join(" ")
+            : "未读取";
+          first = `；首个文件 ${sample} 大小 ${stat?.size ?? "缺失"} 字节，开头 ${hex}`;
+        }
+        progress({
+          line: `合并诊断：${name} 共 ${segments.length} 个分片、${maps} 个初始化段、${keys} 个密钥，时长 ${inspected.duration.toFixed(1)} 秒${first}。`,
+        });
+      }
+    } finally {
+      planner.close();
+    }
+    return duration;
+  }
+  /**
+   * 伪装成图片的 TS 分片：在合并用的播放列表里给这些分片加上字节范围，跳过前面的图片头。
+   * 只读取每个分片开头的少量字节（16 路并发异步），不改写分片文件，原播放列表保持不变。
+   * 返回交给 FFmpeg 的播放列表路径；没有伪装时原样返回。
+   */
+  private async unwrapDisguisedSegments(
+    inputs: string[],
+    signal: AbortSignal,
+    progress: (update: DownloadProgress) => void,
+  ) {
+    const files = this.host.files;
+    const readBytes = files.readBytes?.bind(files);
+    if (!readBytes) return inputs;
+    const planner = createHlsPlanner(this.host.hlsWorker);
+    try {
+      const prepared: string[] = [];
+      for (const input of inputs) {
+        const directory = input.replace(/[\\/][^\\/]*$/, "");
+        const name = input.split(/[\\/]/).at(-1)!;
+        const text = await files.read(input);
+        const { files: names } = await planner.run("files", { text }, signal);
+        const segments = names.filter((item) => item.includes("-seg-"));
+        const encrypted = names.some((item) => item.includes("-key-"));
+        const recorded = (await readHlsState(files, directory))?.completed ?? {};
+        const ranges: Record<string, { offset: number; length: number }> = {};
+        const kinds = new Map<string, number>();
+        let guess = -1;
+        let unresolved = "";
+        let next = 0;
+        const inspect = async () => {
+          while (next < segments.length && !unresolved) {
+            signal.throwIfAborted();
+            const segment = segments[next++]!;
+            const path = joinPath(directory, segment);
+            const kind = imageSignature(await readBytes(path, 16));
+            if (!kind) continue;
+            if (encrypted) {
+              unresolved = `${segment} 是加密分片，却带有 ${kind} 图片头`;
+              return;
+            }
+            const size = recorded[segment] ?? (await files.stat(path))?.size ?? 0;
+            const window = (tsSyncPackets - 1) * tsPacket + 1;
+            let offset = -1;
+            // 同一来源的图片头通常长度相同，先验证上一个分片的偏移。
+            if (guess > 0 && guess + window <= size)
+              offset = isTransportStreamAt(await readBytes(path, window, guess), 0) ? guess : -1;
+            for (const length of [64 * 1024, 1024 * 1024]) {
+              if (offset >= 0) break;
+              offset = transportStreamOffset(await readBytes(path, Math.min(length, size)));
+            }
+            if (offset <= 0) {
+              unresolved = `${segment} 带有 ${kind} 图片头，但没有找到后面的视频数据`;
+              return;
+            }
+            guess = offset;
+            ranges[segment] = { offset, length: size - offset };
+            kinds.set(kind, (kinds.get(kind) ?? 0) + 1);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(16, segments.length) }, inspect));
+        if (unresolved)
+          throw new Error(`合并前检查失败：${unresolved}。该来源的分片格式暂不支持。`);
+        const count = Object.keys(ranges).length;
+        if (!count) {
+          prepared.push(input);
+          continue;
+        }
+        const offsets = new Set(Object.values(ranges).map((range) => range.offset));
+        progress({
+          line: `合并前处理：${name} 中 ${count} / ${segments.length} 个分片伪装成图片（${[...kinds].map(([kind, total]) => `${kind} ×${total}`).join("，")}），图片头长度 ${[...offsets].slice(0, 3).join("、")} 字节，已跳过图片头读取视频数据。`,
+        });
+        const output = joinPath(directory, name.replace(/\.m3u8$/, ".merge.m3u8"));
+        await files.write(output, await planner.run("ranges", { text, ranges }, signal));
+        prepared.push(output);
+      }
+      return prepared;
+    } finally {
+      planner.close();
+    }
+  }
+  /** 合并失败后让 FFmpeg 只探测一次输入，把识别出的流信息写入日志。 */
+  private async probeHlsStreams(
+    ffmpeg: string,
+    inputs: string[],
+    signal: AbortSignal,
+    progress: (update: DownloadProgress) => void,
+  ) {
+    const args = ["-hide_banner", "-nostdin", "-v", "info"];
+    for (const path of inputs) args.push(...hlsInputOptions, "-i", path);
+    try {
+      const probe = await this.host.run(ffmpeg, args, signal, undefined, true);
+      const details = probe.stdErr
+        .split(/\r?\n/)
+        .filter((line) =>
+          /Input #|Duration:|Stream #|Could not|unspecified|Invalid|error/i.test(line),
+        )
+        .slice(0, 30);
+      for (const line of details) progress({ line: `合并诊断（输入探测）：${line.trim()}` });
+    } catch {
+      // 诊断失败不影响原有的错误信息。
     }
   }
   private async cleanCompleted(task: DownloadTask, progress: (update: DownloadProgress) => void) {
@@ -180,6 +350,8 @@ export class ToolDownloadEngine implements DownloadEngine {
               signal,
               progress,
               supportsDecryption: () => this.supportsDecryption(ffmpeg),
+              retryDelays: this.options.hlsRetryDelays,
+              stallTimeout: this.options.hlsStallTimeout,
               planner,
             });
             inputs = hls.inputs;
@@ -299,6 +471,9 @@ export class ToolDownloadEngine implements DownloadEngine {
     await stage("merge", inputs);
     const outputPath = joinPath(task.workDirectory, "merged.partial.mp4");
     const args = ["-hide_banner", "-nostdin", "-y", "-v", "error"];
+    const hlsMerge = inputs.every((path) => path.endsWith(".m3u8"));
+    // 合并实际使用的输入；伪装分片会换成带字节范围的副本，任务记录里的输入保持不变。
+    let mergeInputs = inputs;
     let duration: number;
     let requireAudio: boolean;
     if (inputs.every((path) => path.endsWith(".m3u8"))) {
@@ -306,25 +481,12 @@ export class ToolDownloadEngine implements DownloadEngine {
       // 会给出重复的时间戳，FFmpeg 平时自行修正；-xerror 会把它变成致命错误，因此这里不用。
       // 输出仍需通过下方的视频、音频与时长校验。
       // 大播放列表的拆分与时长合计在规划 Worker 中完成。
-      const planner = createHlsPlanner(this.host.hlsWorker);
-      try {
-        const text = await files.read(inputs[0]!);
-        duration = (await planner.run("files", { text }, signal)).duration;
-      } finally {
-        planner.close();
-      }
+      duration = await this.diagnoseHls(inputs, signal, progress);
+      mergeInputs = await this.unwrapDisguisedSegments(inputs, signal, progress);
       requireAudio = inputs.length > 1;
-      for (const path of inputs)
-        args.push(
-          "-allowed_extensions",
-          "ALL",
-          "-extension_picky",
-          "0",
-          "-protocol_whitelist",
-          "file,crypto",
-          "-i",
-          path,
-        );
+      // 警告级别会把探测与时间戳问题写进日志，便于排查合并失败。
+      args[4] = "warning";
+      for (const path of mergeInputs) args.push(...hlsInputOptions, "-i", path);
       args.push("-map", "0:v:0", "-map", requireAudio ? "1:a:0" : "0:a:0?");
     } else {
       // 旧版下载器留下的源轨文件仍按探测结果合并，并保留严格模式。
@@ -371,6 +533,14 @@ export class ToolDownloadEngine implements DownloadEngine {
       true,
     );
     signal.throwIfAborted();
+    if (merged.exitCode !== 0 && hlsMerge) {
+      await this.probeHlsStreams(ffmpeg, mergeInputs, signal, progress);
+      if (
+        /dimensions not set|Could not find codec parameters|unspecified size/i.test(merged.stdErr)
+      )
+        merged.stdErr +=
+          "\n视频开头一段内没有找到可识别的视频参数（关键帧），或分片内容不是有效视频。可尝试重新下载；如果仍失败，请把应用日志发给开发者。";
+    }
     this.check(merged, "合并", task);
     const stat = await files.stat(outputPath);
     if (!stat?.isFile || !stat.size) throw new Error("合并没有生成有效输出，已保留下载文件。");

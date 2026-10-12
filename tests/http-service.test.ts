@@ -37,7 +37,7 @@ const limits = {
   cacheEntries: 2,
 };
 const signal = () => new AbortController().signal;
-function fixture(options = limits) {
+function fixture(options: ConstructorParameters<typeof HttpService>[1] = limits) {
   const transfers: {
     signal: AbortSignal;
     finish(patch?: Partial<HttpResponse>): void;
@@ -245,5 +245,48 @@ describe("常驻 HTTP 调度与缓存（全内存安全 mock）", () => {
     await close;
     expect(port.remove).toHaveBeenCalledWith("mock-0");
     await expect(service.request(request, signal())).rejects.toThrow("正在退出");
+  });
+});
+
+describe("图片与网页分道限流（全内存安全 mock）", () => {
+  it("同一图片站点立即并行 6 个，网页仍是每站 2 个且间隔启动", async () => {
+    vi.useFakeTimers();
+    const { service, transfers, port } = fixture({
+      ...limits,
+      images: { parallel: 8, perHost: 6, intervalMs: 0 },
+    });
+    const images = Array.from({ length: 8 }, (_, index) =>
+      service
+        .request(
+          { ...request, purpose: "artwork", url: `https://img.safe.invalid/${index}.jpg` },
+          signal(),
+        )
+        .catch(() => {}),
+    );
+    const pages = Array.from({ length: 3 }, (_, index) =>
+      service
+        .request(
+          { ...request, purpose: "catalog", url: `https://img.safe.invalid/page-${index}` },
+          signal(),
+        )
+        .catch(() => {}),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const started = () => port.execute.mock.calls.map(([item]) => item.purpose);
+    // 图片 6 个同时开始，不受网页的 300 ms 间隔和每站 2 个的限制；网页先开始 1 个。
+    expect(started().filter((purpose) => purpose === "artwork")).toHaveLength(6);
+    expect(started().filter((purpose) => purpose === "catalog")).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(started().filter((purpose) => purpose === "catalog")).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(600);
+    expect(started().filter((purpose) => purpose === "catalog")).toHaveLength(2);
+    // 图片完成后，排队的图片立即补上。
+    transfers[0]!.finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(started().filter((purpose) => purpose === "artwork")).toHaveLength(7);
+    for (const transfer of transfers) transfer.finish();
+    await vi.advanceTimersByTimeAsync(1000);
+    for (const transfer of transfers) transfer.finish();
+    await Promise.all([...images, ...pages]);
   });
 });

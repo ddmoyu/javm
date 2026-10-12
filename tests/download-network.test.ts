@@ -25,7 +25,7 @@ const result = (exitCode = 0, stdErr = "", stdOut = ""): ProcessResult => ({
 });
 const proxy = "http://127.0.0.1:7890";
 
-function fixture(kind: "http" | "hls" = "http") {
+function fixture(kind: "http" | "hls" = "http", hlsRetryDelays: number[] = []) {
   const task = createDownloadTasks(
     {
       urls: [`https://example.test/video.${kind === "http" ? "mp4" : "m3u8"}`],
@@ -115,7 +115,8 @@ function fixture(kind: "http" | "hls" = "http") {
       mergeResult = value;
     },
     start: () =>
-      new ToolDownloadEngine(host, getProxy).run(
+      // 默认关闭自动补下载，单独验证直连到代理的切换；自动重试另有用例。
+      new ToolDownloadEngine(host, getProxy, { hlsRetryDelays }).run(
         task,
         defaultDownloadSettings,
         controller.signal,
@@ -309,6 +310,107 @@ describe("download direct-first proxy fallback", () => {
     });
     await expect(f.start()).rejects.toThrow("不是 HLS");
     expect(f.getProxy).not.toHaveBeenCalled();
+  });
+  it("automatically re-downloads failed segments within the same run before giving up", async () => {
+    const f = fixture("hls", [0, 0, 0]);
+    const rounds: number[] = [];
+    f.setDownload(
+      hlsCurl(f, (kind, config) => {
+        if (kind !== "segments") return;
+        rounds.push([...config.matchAll(/^output = /gm)].length);
+        // 第一轮两个分片都因连接重置失败，第二轮补齐。
+        if (rounds.length === 1) return 56;
+      }),
+    );
+    await f.start();
+    expect(rounds).toEqual([2, 2]);
+    expect(f.getProxy).not.toHaveBeenCalled();
+    expect(f.progress).toHaveBeenCalledWith(
+      expect.objectContaining({ line: expect.stringContaining("第 1 次自动重试") }),
+    );
+    expect(f.data.has(f.task.output)).toBe(true);
+  });
+  it("stops automatic retries after the configured rounds and reports the failure reasons", async () => {
+    const f = fixture("hls", [0, 0]);
+    f.getProxy.mockResolvedValue("");
+    let segmentRuns = 0;
+    f.setDownload(
+      hlsCurl(f, (kind) => {
+        if (kind !== "segments") return;
+        segmentRuns++;
+        return 28;
+      }),
+    );
+    await expect(f.start()).rejects.toThrow(/已自动重试 2 次.*curl 28 ×2/);
+    expect(segmentRuns).toBe(3);
+  });
+  it.each([
+    ["disk write failure", 23],
+    ["HTTP 404", 22],
+  ])("does not auto-retry a permanent %s", async (_name, code) => {
+    const f = fixture("hls", [0, 0, 0]);
+    f.getProxy.mockResolvedValue("");
+    let segmentRuns = 0;
+    f.setDownload(async (file, args, signal, output) => {
+      const runner = hlsCurl(f, (kind) => (kind === "segments" ? code : undefined));
+      const config = f.data.get(args[args.indexOf("--config") + 1]!)!;
+      if (!config.includes("fetch.m3u8")) {
+        segmentRuns++;
+        // 404 由 curl 以退出码 22 报告，状态码写在结果行里。
+        if (code === 22) {
+          for (const match of config.matchAll(/^output = "(.*)"$/gm))
+            output?.(`javm-transfer\t22\t404\t0\t\t${match[1]}\n`, "stderr");
+          return result(22);
+        }
+      }
+      return runner(file, args, signal, output);
+    });
+    await expect(f.start()).rejects.toThrow();
+    expect(segmentRuns).toBe(1);
+  });
+  it("ends a stalled round and retries with half the concurrency", async () => {
+    const f = fixture("hls", [0, 0, 0]);
+    const parallel: string[] = [];
+    f.setDownload(async (file, args, signal, output) => {
+      const config = f.data.get(args[args.indexOf("--config") + 1]!)!;
+      if (!config.includes("fetch.m3u8")) {
+        parallel.push(args[args.indexOf("--parallel-max") + 1]!);
+        // 第一轮：连接被源站挂起，curl 没有任何输出，直到被结束。
+        if (parallel.length === 1)
+          return new Promise<ProcessResult>((resolve) =>
+            signal.addEventListener("abort", () => resolve(result(-1)), { once: true }),
+          );
+      }
+      return hlsCurl(f, () => undefined)(file, args, signal, output);
+    });
+    await new ToolDownloadEngine(f.host, f.getProxy, {
+      hlsRetryDelays: [0, 0, 0],
+      hlsStallTimeout: 200,
+    }).run(f.task, defaultDownloadSettings, f.controller.signal, f.progress, f.stage);
+    expect(parallel).toEqual(["8", "4"]);
+    expect(f.progress).toHaveBeenCalledWith(
+      expect.objectContaining({ line: expect.stringContaining("没有分片完成") }),
+    );
+    expect(f.data.has(f.task.output)).toBe(true);
+  });
+  it("still lets the user cancel while the watchdog is armed", async () => {
+    const f = fixture("hls", [0, 0, 0]);
+    f.setDownload(async (file, args, signal, output) => {
+      const config = f.data.get(args[args.indexOf("--config") + 1]!)!;
+      if (!config.includes("fetch.m3u8")) {
+        setTimeout(() => f.controller.abort(), 20);
+        return new Promise<ProcessResult>((_, reject) =>
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+        );
+      }
+      return hlsCurl(f, () => undefined)(file, args, signal, output);
+    });
+    await expect(
+      new ToolDownloadEngine(f.host, f.getProxy, {
+        hlsRetryDelays: [0, 0, 0],
+        hlsStallTimeout: 10_000,
+      }).run(f.task, defaultDownloadSettings, f.controller.signal, f.progress, f.stage),
+    ).rejects.toMatchObject({ name: "AbortError" });
   });
   it("retries HLS segments through the proxy after a transport reset and keeps finished ones", async () => {
     const f = fixture("hls");

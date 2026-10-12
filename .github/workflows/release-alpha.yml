@@ -49,6 +49,10 @@ jobs:
         env:
           JAVM_HTTP_INTEGRATION: "1"
         run: pnpm exec vp test run tests/http-native.integration.test.ts
+      - name: 验证封面与资料的原生写入
+        env:
+          JAVM_MEDIA_INTEGRATION: "1"
+        run: pnpm exec vp test run tests/artwork-native.integration.test.ts tests/metadata-fusion-native.integration.test.ts
       - name: 解压运行并验证安全样例
         run: pnpm test:offline
       - name: 整理发布附件和验证记录

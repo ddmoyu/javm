@@ -139,7 +139,7 @@ describe("MetaTube 代理刷新与查询错误", () => {
                 code: "TEST-001",
                 title: "合成影片",
               });
-        await expect(pending).rejects.toThrow("资料来源无法访问");
+        await expect(pending).rejects.toThrow("没有找到资料，请检查番号或网络代理。");
         expect(service.getSnapshot()).toMatchObject({ status: "ready", querying: false });
         expect(service.getSnapshot().error).not.toContain("基础地址");
         expect(stops[0]).not.toHaveBeenCalled();

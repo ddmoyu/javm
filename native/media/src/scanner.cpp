@@ -241,7 +241,7 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
         std::lock_guard lock(startMutex_);
         if(busy_ || !removal_.is_null()) throw std::runtime_error("请等待当前片库操作完成后处理图片");
         auto result=store_.artwork(method,params);
-        if(method!="library.artwork.prepare") { std::lock_guard progressLock(progressMutex_); ++revision_; }
+        if(method!="library.artwork.prepare" && method!="library.artwork.pending" && method!="library.artwork.failed") { std::lock_guard progressLock(progressMutex_); ++revision_; }
         return result;
     }
     if (method == "library.catalogAppend") return store_.catalogAppend(params);
@@ -360,6 +360,8 @@ Json LibraryService::prepareScrape(const Json& params) {
     if(scrapeCancelled_) throw std::runtime_error("刮削已取消");
     bool artwork=false;
     for(const auto* kind:{"poster","thumb","fanart"}) {
+        // 自动截帧的封面不算正式封面，刮削仍会下载来源封面替换它。
+        if(std::string(kind)=="poster" && work.value("poster_auto",false)) continue;
         const auto text=work.value(kind,std::string{}); std::error_code ec;
         artwork=artwork || (!text.empty() && fs::is_regular_file(fs::path(wide(text)),ec));
     }

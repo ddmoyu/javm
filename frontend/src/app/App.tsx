@@ -108,7 +108,14 @@ export function App({
 }) {
   const [page, setPageState] = useState<Page>("library");
   const [visited, setVisited] = useState(() => new Set<Page>(["library"]));
+  // 各页共用 .page-content 滚动容器；切页时记住离开页的位置，返回时恢复。
+  const pageRef = useRef(page);
+  const scrollPositions = useRef(new Map<Page, number>());
   const setPage = useCallback((next: Page) => {
+    const scroller = document.getElementById("main-content");
+    if (scroller && next !== pageRef.current)
+      scrollPositions.current.set(pageRef.current, scroller.scrollTop);
+    pageRef.current = next;
     setVisited((previous) => (previous.has(next) ? previous : new Set([...previous, next])));
     setPageState(next);
   }, []);
@@ -172,10 +179,8 @@ export function App({
     if (!savePreferences(next)) notice("偏好已在本次会话生效，本地存储不可用");
   };
   useHotkeys([["mod+B", () => changePreference({ navCollapsed: !collapsed })]]);
-  useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0 });
-  }, [page]);
   useLayoutEffect(() => {
+    mainRef.current?.scrollTo({ top: scrollPositions.current.get(page) ?? 0 });
     pendingNavigation.current?.();
     pendingNavigation.current = null;
   }, [page]);
@@ -277,11 +282,13 @@ export function App({
               .catch((error: unknown) => notice(libraryError(error)));
           if (scraperRef.current) scraperRef.current.select(film, view);
           else pendingNavigation.current = () => scraperRef.current?.select(film, view);
+          scrollPositions.current.delete("scraper");
           setPage("scraper");
         },
         browseFacet: (facet, value) => {
           if (discoverRef.current) discoverRef.current.select(facet, value);
           else pendingNavigation.current = () => discoverRef.current?.select(facet, value);
+          scrollPositions.current.delete("discover");
           setPage("discover");
         },
         notice,

@@ -1,4 +1,12 @@
-import { useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import type { Ref } from "react";
 import {
@@ -8,11 +16,11 @@ import {
   Button,
   Group,
   Paper,
-  Pagination,
   Loader,
   SegmentedControl,
+  Skeleton,
   Select,
-  SimpleGrid,
+  Slider,
   Text,
   TextInput,
   Title,
@@ -20,11 +28,12 @@ import {
 } from "@mantine/core";
 import { FilmCollection } from "../library/FilmCollection";
 import type { FilmFacet } from "../films/filmMetadata";
+import type { FacetValue } from "../../contracts/library";
 import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
-import { Empty, Pill } from "../../components/ui";
+import { CountTabs, Empty, Pill } from "../../components/ui";
+import { VirtualGrid } from "../../components/VirtualGrid";
 import { usePagedQuery } from "../../services/library/usePagedQuery";
-import { LIBRARY_PAGE_SIZE } from "../../services/library/PagedQuery";
 import { isActorDirectoryDimension } from "../../services/catalog/discoveryData";
 import { CatalogStatus } from "./CatalogStatus";
 import { usePortraits } from "./usePortraits";
@@ -38,13 +47,18 @@ import type { DiscoverCategory } from "./discoverCategories";
 import { EntityAliasesModal } from "./EntityAliasesModal";
 import { OnlineWorks } from "./OnlineWorks";
 import { OnlineActorSearch } from "./OnlineActorSearch";
+import { WorksProfile } from "./WorksProfile";
 import { publicMessage } from "../../services/publicMessage";
 
 export interface DiscoverHandle {
   select: (dimension: FilmFacet, value: string) => void;
 }
 
-const FACET_PAGE_SIZE = LIBRARY_PAGE_SIZE;
+const FACET_GAP = 12;
+const FACET_CARD_HEIGHT = 66;
+const facetColumns = (width: number) =>
+  width >= 1500 ? 6 : width >= 1200 ? 5 : width >= 900 ? 4 : width >= 600 ? 3 : 2;
+const facetCardHeight = () => FACET_CARD_HEIGHT;
 const avatarGradients = [
   { from: "rouge.6", to: "orchid.7" },
   { from: "wine.6", to: "rouge.4" },
@@ -56,6 +70,27 @@ const avatarGradient = (name: string) =>
   avatarGradients[
     Array.from(name).reduce((sum, char) => sum + char.codePointAt(0)!, 0) % avatarGradients.length
   ]!;
+const noSubscribe = () => () => {};
+type WorksTab = "all" | "local" | "missing";
+const CARD_WIDTH_KEY = "javm:discover-card-width";
+const CARD_WIDTH = { min: 140, max: 640, fallback: 260 };
+function readCardWidth() {
+  try {
+    const value = Number(localStorage.getItem(CARD_WIDTH_KEY));
+    return Number.isFinite(value) && value >= CARD_WIDTH.min && value <= CARD_WIDTH.max
+      ? value
+      : CARD_WIDTH.fallback;
+  } catch {
+    return CARD_WIDTH.fallback;
+  }
+}
+function saveCardWidth(value: number) {
+  try {
+    localStorage.setItem(CARD_WIDTH_KEY, String(value));
+  } catch {
+    /* 存储不可用时只在本次会话生效。 */
+  }
+}
 
 export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
   const { page, library, libraryState, toggleFavorite, openFilm, play, notice } = useWorkspace();
@@ -65,7 +100,10 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
   const [dimension, setDimension] = useState<DiscoverCategory>("女演员");
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedFacet, setSelectedFacet] = useState<FilmFacet | null>(null);
-  const [workSource, setWorkSource] = useState("online");
+  const [worksTab, setWorksTab] = useState<WorksTab>("all");
+  const [worksFilter, setWorksFilter] = useState("");
+  const [worksSearch] = useDebouncedValue(worksFilter.trim(), 250);
+  const [cardWidth, setCardWidth] = useState(readCardWidth);
   const [query, setQuery] = useState("");
   const [search] = useDebouncedValue(query.trim(), 500);
   const onlineSearch =
@@ -74,7 +112,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
   const [onlyFavorites, setOnlyFavorites] = useState(false);
   const [aliasesOpened, setAliasesOpened] = useState(false);
   const [savingFavorites, setSavingFavorites] = useState<Set<string>>(() => new Set());
-  const [pageNumber, setPageNumber] = useState(1);
+  const [range, setRange] = useState<[number, number]>([0, -1]);
   const [facetView] = useState(() => library.createFacetQuery(true));
   const [workView] = useState(() => library.createFilmQuery());
   const facetState = usePagedQuery(
@@ -88,52 +126,125 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
     },
     page === "discover" && !selected && !onlineSearch && (libraryState.ready || !!library.catalog),
   );
+  const onlineWorks = !selectedFacet && !!library.catalog;
+  const worksFacet = {
+    dimension: selectedFacet ? metadataDimensions[selectedFacet] : discoverDimensions[dimension],
+    value: selected ?? "",
+  };
   const works = usePagedQuery(
     library,
     workView,
-    {
-      facet: {
-        dimension: selectedFacet
-          ? metadataDimensions[selectedFacet]
-          : discoverDimensions[dimension],
-        value: selected ?? "",
-      },
-    },
+    { facet: worksFacet, ...(onlineWorks && worksSearch ? { query: worksSearch } : {}) },
     page === "discover" && !!selected && libraryState.ready,
   );
-  const shownPage = facetState.ready
-    ? Math.min(pageNumber, Math.max(1, Math.ceil(facetState.total / FACET_PAGE_SIZE)))
-    : pageNumber;
+  // 当前条目的收藏状态与作品总数：按名称检索目录，取名称完全一致的一项。
+  const [entryView] = useState(() => library.createFacetQuery(true));
+  const entryState = usePagedQuery(
+    library,
+    entryView,
+    { dimension: discoverDimensions[dimension], query: selected ?? "", sort: "source" },
+    page === "discover" && !!selected && onlineWorks,
+  );
+  let entry: FacetValue | undefined;
+  for (const item of entryState.items.values())
+    if (item.name === selected) {
+      entry = item;
+      break;
+    }
+  const worksState = useSyncExternalStore(
+    library.catalog?.works.subscribe ?? noSubscribe,
+    () => library.catalog?.works.getSnapshot() ?? null,
+  );
+  const onlineResult =
+    worksState?.selection?.dimension === discoverDimensions[dimension] &&
+    worksState.selection.name === selected
+      ? worksState.result
+      : null;
+  // 本地已收录番号用于标记在线作品并计数；片库总数变化时重新读取。
+  const [localCodes, setLocalCodes] = useState<{ key: string; codes: Set<string> } | null>(null);
+  const localKey =
+    selected && onlineWorks && libraryState.ready && libraryState.available && !libraryState.error
+      ? JSON.stringify([worksFacet, libraryState.total])
+      : "";
   useEffect(() => {
-    if (!selected)
-      facetView.loadRange((shownPage - 1) * FACET_PAGE_SIZE, shownPage * FACET_PAGE_SIZE - 1);
-  }, [facetView, shownPage, selected]);
-  const shown = Array.from(
-    {
-      length: Math.max(
-        0,
-        Math.min(FACET_PAGE_SIZE, facetState.total - (shownPage - 1) * FACET_PAGE_SIZE),
-      ),
+    if (!localKey || page !== "discover") return;
+    const abort = new AbortController();
+    const [facet] = JSON.parse(localKey) as [typeof worksFacet];
+    library
+      .facetCodes(facet, abort.signal)
+      .then((codes) => {
+        if (!abort.signal.aborted) setLocalCodes({ key: localKey, codes });
+      })
+      .catch(() => {
+        if (!abort.signal.aborted) setLocalCodes(null);
+      });
+    return () => abort.abort();
+  }, [library, localKey, page]);
+  const currentLocalCodes = localCodes && localCodes.key === localKey ? localCodes.codes : null;
+  const onlineTotal = onlineResult?.total ?? entry?.videoCount ?? undefined;
+  const localCount = currentLocalCodes ? currentLocalCodes.size : null;
+  const missingCount =
+    onlineTotal !== undefined && localCount !== null
+      ? Math.max(0, onlineTotal - localCount)
+      : undefined;
+  const selectedPortrait = usePortraits(
+    library.catalog,
+    discoverDimensions[dimension],
+    selected ?? "",
+    page === "discover" && !!selected && onlineWorks,
+  );
+  const changeRange = useCallback(
+    (first: number, last: number) => {
+      setRange((previous) =>
+        previous[0] === first && previous[1] === last ? previous : [first, last],
+      );
+      facetView.loadRange(first, last);
     },
-    (_, index) => facetState.items.get((shownPage - 1) * FACET_PAGE_SIZE + index),
-  ).filter((item) => item !== undefined);
+    [facetView],
+  );
+  const visibleNames: string[] = [];
+  for (let index = range[0]; index <= range[1] && visibleNames.length < 100; index++) {
+    const item = facetState.items.get(index);
+    if (item) visibleNames.push(item.name);
+  }
+  // 快速滚动时只为停留的可见范围加载头像。
+  const [portraitKey] = useDebouncedValue(visibleNames.join("\n"), 200);
   const portraits = usePortraits(
     library.catalog,
     discoverDimensions[dimension],
-    shown.map((item) => item.name),
+    portraitKey,
     page === "discover" && !selected && !onlineSearch,
   );
   const labels = library.catalog?.getSnapshot().catalogs[discoverDimensions[dimension]].labels;
   const favoriteKey = (name: string) => `${dimension}:${name}`;
+  const toggleFacetFavorite = (name: string, favorite: boolean) => {
+    const key = favoriteKey(name);
+    setSavingFavorites((previous) => new Set(previous).add(key));
+    void library
+      .setFacetFavorite(discoverDimensions[dimension], name, !favorite)
+      .catch((error: unknown) =>
+        notice(error instanceof Error ? error.message : "收藏保存失败，请重试。"),
+      )
+      .finally(() =>
+        setSavingFavorites((previous) => {
+          const next = new Set(previous);
+          next.delete(key);
+          return next;
+        }),
+      );
+  };
+  const resetWorks = () => {
+    setWorksTab("all");
+    setWorksFilter("");
+  };
   const resetPosition = () => {
-    setPageNumber(1);
     pendingPosition.current = { top: 0 };
   };
   const changeDimension = (next: DiscoverCategory) => {
     setDimension(next);
     setSelected(null);
     setSelectedFacet(null);
-    setWorkSource("online");
+    resetWorks();
     setQuery("");
     setOnlyFavorites(false);
     returnTo.current = null;
@@ -275,7 +386,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
             };
             library.catalog!.works.selectEntity(discoverDimensions[dimension], entity);
             setSelected(entity.name);
-            setWorkSource("online");
+            resetWorks();
             pendingPosition.current = { top: 0 };
           }}
         />
@@ -285,7 +396,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
             {query.trim() || onlyFavorites
               ? `${facetState.total} / ${facetState.available}`
               : facetState.total}{" "}
-            项 · 每页 {FACET_PAGE_SIZE} 项
+            项
             {library.catalog &&
               (libraryState.available && libraryState.ready && !libraryState.error
                 ? " · 作品总数与本地已收录数量分别显示"
@@ -305,28 +416,36 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               </Button>
             </Alert>
           )}
-          {!facetState.error && (!facetState.ready || (facetState.loading && !shown.length)) ? (
+          {!facetState.error && (!facetState.ready || (facetState.loading && !facetState.total)) ? (
             <Group component="output" justify="center" py="xl">
               <Loader size="sm" />
               <Text size="sm">正在读取条目…</Text>
             </Group>
-          ) : shown.length ? (
-            <SimpleGrid
-              component="ul"
-              type="container"
-              cols={{ base: 2, "600px": 3, "900px": 4, "1200px": 5, "1500px": 6 }}
-              spacing="sm"
-              verticalSpacing="sm"
-              className="facet-grid"
-              aria-label={`${dimension}列表`}
-            >
-              {shown.map(({ name, count, videoCount, favorite: savedFavorite, label }) => {
+          ) : facetState.total ? (
+            <VirtualGrid
+              count={facetState.total}
+              columns={facetColumns}
+              rowHeight={facetCardHeight}
+              gap={FACET_GAP}
+              active={page === "discover"}
+              getKey={(index) => facetState.items.get(index)?.name ?? `loading:${index}`}
+              onRangeChange={changeRange}
+              label={`${dimension}列表`}
+              renderItem={(index) => {
+                const item = facetState.items.get(index);
+                if (!item)
+                  return (
+                    <Paper className="facet-card" withBorder radius="md" aria-busy="true">
+                      <Skeleton height={14} width="70%" m="md" />
+                    </Paper>
+                  );
+                const { name, count, videoCount, favorite: savedFavorite, label } = item;
                 const favorite = !!savedFavorite;
                 const localReady =
                   libraryState.available && libraryState.ready && !libraryState.error;
                 const localCount = localReady ? count.toLocaleString() : "—";
                 return (
-                  <Paper component="li" key={name} className="facet-card" withBorder radius="md">
+                  <Paper className="facet-card" withBorder radius="md">
                     <UnstyledButton
                       className="facet-open"
                       data-name={name}
@@ -338,7 +457,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                           top: root.current?.closest(".page-content")?.scrollTop ?? 0,
                         };
                         setSelected(name);
-                        setWorkSource("online");
+                        resetWorks();
                         pendingPosition.current = { top: 0 };
                       }}
                     >
@@ -384,31 +503,14 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                       aria-pressed={favorite}
                       loading={savingFavorites.has(favoriteKey(name))}
                       disabled={!libraryState.available || !libraryState.ready}
-                      onClick={() => {
-                        const key = favoriteKey(name);
-                        setSavingFavorites((previous) => new Set(previous).add(key));
-                        void library
-                          .setFacetFavorite(discoverDimensions[dimension], name, !favorite)
-                          .catch((error: unknown) =>
-                            notice(
-                              error instanceof Error ? error.message : "收藏保存失败，请重试。",
-                            ),
-                          )
-                          .finally(() =>
-                            setSavingFavorites((previous) => {
-                              const next = new Set(previous);
-                              next.delete(key);
-                              return next;
-                            }),
-                          );
-                      }}
+                      onClick={() => toggleFacetFavorite(name, favorite)}
                     >
                       <Icon name="star" size={15} filled={favorite} />
                     </ActionIcon>
                   </Paper>
                 );
-              })}
-            </SimpleGrid>
+              }}
+            />
           ) : facetState.error ? null : (
             <Empty
               icon={onlyFavorites && !query.trim() ? "star" : "search"}
@@ -434,19 +536,6 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               )}
             </Empty>
           )}
-          {facetState.total > FACET_PAGE_SIZE && (
-            <Group justify="center" py="md">
-              <Pagination
-                aria-label="发现条目分页"
-                total={Math.ceil(facetState.total / FACET_PAGE_SIZE)}
-                value={shownPage}
-                onChange={(value) => {
-                  setPageNumber(value);
-                  pendingPosition.current = { top: 0 };
-                }}
-              />
-            </Group>
-          )}
         </>
       ) : (
         <section>
@@ -463,34 +552,106 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
             >
               返回{selectedFacet ? "发现" : dimension}
             </Button>
-            <Title order={3} fz={18}>
-              {selected}
-            </Title>
-            {selectedFacet && <Pill>{selectedFacet}</Pill>}
-            <Pill>本地 {works.total.toLocaleString()} 部</Pill>
+            {onlineWorks ? (
+              <Text size="sm" c="dimmed">
+                {dimension}：{selected}
+              </Text>
+            ) : (
+              <>
+                <Title order={3} fz={18}>
+                  {selected}
+                </Title>
+                {selectedFacet && <Pill>{selectedFacet}</Pill>}
+                <Pill>本地 {works.total.toLocaleString()} 部</Pill>
+              </>
+            )}
           </Group>
-          {!selectedFacet && library.catalog && (
+          {onlineWorks && library.catalog && (
             <>
-              <SegmentedControl
-                aria-label="作品范围"
-                value={workSource}
-                onChange={setWorkSource}
-                data={[
-                  { value: "online", label: "在线作品" },
-                  { value: "local", label: "本地已收录" },
-                ]}
+              <WorksProfile
+                name={selected}
+                actor={isActorDirectoryDimension(discoverDimensions[dimension])}
+                portrait={selectedPortrait.images[selected]}
+                profile={onlineResult?.profile}
+                total={onlineTotal}
+                local={localCount}
+                missing={missingCount}
+                loading={!!worksState?.loading && !worksState.detail}
+                onRefresh={library.catalog.works.retry}
+                onCancel={library.catalog.works.cancel}
+                favorite={entry ? !!entry.favorite : null}
+                favoriteBusy={savingFavorites.has(favoriteKey(selected))}
+                onToggleFavorite={
+                  libraryState.available && libraryState.ready
+                    ? () => entry && toggleFacetFavorite(selected, !!entry.favorite)
+                    : undefined
+                }
               />
-              <div hidden={workSource !== "online"}>
+              <div className="works-toolbar">
+                <CountTabs
+                  label="作品范围"
+                  value={worksTab}
+                  onChange={setWorksTab}
+                  items={[
+                    ["all", "全部", onlineTotal ?? onlineResult?.items.length ?? 0],
+                    ["local", "本地", localCount ?? works.total],
+                    ["missing", "缺失", missingCount ?? 0],
+                  ]}
+                />
+                <Group gap="sm" wrap="nowrap" ml="auto">
+                  <TextInput
+                    size="xs"
+                    w={180}
+                    aria-label="过滤作品"
+                    placeholder="过滤番号/名字"
+                    leftSection={<Icon name="filter" size={14} />}
+                    rightSection={
+                      worksFilter ? (
+                        <ActionIcon
+                          size={22}
+                          aria-label="清除作品过滤"
+                          onClick={() => setWorksFilter("")}
+                        >
+                          <Icon name="close" size={13} />
+                        </ActionIcon>
+                      ) : undefined
+                    }
+                    value={worksFilter}
+                    onChange={(event) => setWorksFilter(event.currentTarget.value)}
+                  />
+                  <Text size="xs" c="dimmed" component="label" htmlFor="discover-card-width">
+                    卡片
+                  </Text>
+                  <Slider
+                    id="discover-card-width"
+                    w={120}
+                    size="sm"
+                    min={CARD_WIDTH.min}
+                    max={CARD_WIDTH.max}
+                    step={10}
+                    label={null}
+                    aria-label="封面大小"
+                    value={cardWidth}
+                    onChange={setCardWidth}
+                    onChangeEnd={saveCardWidth}
+                  />
+                </Group>
+              </div>
+              <div hidden={worksTab === "local"}>
                 <OnlineWorks
                   service={library.catalog.works}
                   name={selected}
                   dimension={discoverDimensions[dimension]}
-                  active={page === "discover" && workSource === "online"}
+                  active={page === "discover" && worksTab !== "local"}
+                  filter={worksFilter}
+                  scope={worksTab === "missing" ? "missing" : "all"}
+                  localCodes={currentLocalCodes}
+                  cardWidth={cardWidth}
                 />
               </div>
             </>
           )}
-          {(selectedFacet || !library.catalog || workSource === "local") && (
+          {(!onlineWorks || worksTab === "local") && (
             <>
               {works.error && (
                 <Alert color="red" role="alert" mb="md">
@@ -510,7 +671,8 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                 items={works.items}
                 count={works.total}
                 onRangeChange={workView.loadRange}
-                layout="poster"
+                layout={onlineWorks ? "landscape" : "poster"}
+                cardWidth={onlineWorks ? cardWidth : undefined}
                 active={page === "discover"}
                 openFilm={openFilm}
                 play={play}
@@ -518,8 +680,12 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               />
               {works.ready && works.total === 0 && !works.error && (
                 <Empty
-                  title="暂未收录"
-                  description="保存在线作品资料或导入本地视频后会显示在这里。"
+                  title={worksSearch ? "无匹配作品" : "暂未收录"}
+                  description={
+                    worksSearch
+                      ? "换个番号或名字再试。"
+                      : "保存在线作品资料或导入本地视频后会显示在这里。"
+                  }
                 />
               )}
             </>

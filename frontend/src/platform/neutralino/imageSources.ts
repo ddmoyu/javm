@@ -8,6 +8,7 @@ import { mediaResourceUrl } from "./playbackResources";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { logEvent } from "../../services/logging/events";
 import { yieldToUi } from "../../services/yieldToUi";
+import { isDmmImage } from "../../services/images/dmm";
 
 const IMAGE_BYTES = 8 * 1024 * 1024;
 const CACHE_BYTES = 96 * 1024 * 1024;
@@ -197,7 +198,8 @@ export function createImageSourcePort(
             maxBytes: IMAGE_BYTES,
             timeoutMs: 15_000,
             connectTimeoutMs: 6000,
-            maxRedirects: 3,
+            // DMM 缺图会 302 到占位图，按失败处理并回退下一候选。
+            maxRedirects: isDmmImage(url) ? 0 : 3,
             cacheTtlMs: 60_000,
           },
           signal,

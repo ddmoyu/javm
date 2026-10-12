@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
@@ -37,7 +38,8 @@ export function ResourceLookupButton({
   workId,
   onStart,
   disabled = false,
-}: LookupProps & { onStart?: () => void; disabled?: boolean }) {
+  compact = false,
+}: LookupProps & { onStart?: () => void; disabled?: boolean; compact?: boolean }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const searching = service.matches(code, workId) && state.searching;
   let valid = true;
@@ -46,24 +48,39 @@ export function ResourceLookupButton({
   } catch {
     valid = false;
   }
+  const blocked =
+    disabled ||
+    searching ||
+    !valid ||
+    !state.available ||
+    state.restoring ||
+    !!state.cleanupPending;
+  const start = () => {
+    onStart?.();
+    service.search(code, workId);
+  };
+  if (compact)
+    return (
+      <ActionIcon
+        size="sm"
+        variant="subtle"
+        aria-label={`获取 ${code} 资源链接`}
+        title="获取资源链接"
+        loading={searching}
+        disabled={blocked}
+        onClick={start}
+      >
+        <Icon name="link" size={14} />
+      </ActionIcon>
+    );
   return (
     <Button
       size="sm"
       variant="light"
       leftSection={<Icon name="link" size={16} />}
       loading={searching}
-      disabled={
-        disabled ||
-        searching ||
-        !valid ||
-        !state.available ||
-        state.restoring ||
-        !!state.cleanupPending
-      }
-      onClick={() => {
-        onStart?.();
-        service.search(code, workId);
-      }}
+      disabled={blocked}
+      onClick={start}
     >
       获取资源链接
     </Button>

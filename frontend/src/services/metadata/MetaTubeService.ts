@@ -386,9 +386,7 @@ export class MetaTubeService extends Observable<{
       return response.data;
     } catch (error) {
       if (error instanceof JsonHttpError && error.status === 404)
-        throw new Error(
-          "MetaTube 未找到资料或资料来源无法访问，请检查番号、资料来源及网络代理后重试。",
-        );
+        throw new Error("没有找到资料，请检查番号或网络代理。");
       throw error;
     }
   }
@@ -417,8 +415,7 @@ export class MetaTubeService extends Observable<{
         }
         if (data.length >= 500) break;
       }
-      if (!data.length && failed)
-        throw new Error("资料来源未返回结果或无法访问，请检查来源与网络后重试。");
+      if (!data.length && failed) throw new Error("资料来源没有返回结果，请检查网络代理。");
       return data.map((item) => {
         const row = record(item);
         return {

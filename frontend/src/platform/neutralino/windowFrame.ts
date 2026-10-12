@@ -3,9 +3,11 @@ import { events, window as nativeWindow } from "@neutralinojs/lib";
 interface WindowState {
   maximized: boolean;
   fullScreen: boolean;
+  alwaysOnTop: boolean;
 }
 
-let state: WindowState = { maximized: false, fullScreen: false };
+// Neutralino 没有置顶状态查询接口；窗口默认不置顶，之后只由本窗口切换。
+let state: WindowState = { maximized: false, fullScreen: false, alwaysOnTop: false };
 let initialized = false;
 let revision = 0;
 const listeners = new Set<() => void>();
@@ -23,7 +25,12 @@ function updateWindowState(next: WindowState) {
   revision += 1;
   document.documentElement.dataset.windowMaximized = String(next.maximized);
   document.documentElement.dataset.windowFullscreen = String(next.fullScreen);
-  if (state.maximized === next.maximized && state.fullScreen === next.fullScreen) return;
+  if (
+    state.maximized === next.maximized &&
+    state.fullScreen === next.fullScreen &&
+    state.alwaysOnTop === next.alwaysOnTop
+  )
+    return;
   state = next;
   for (const listener of listeners) listener();
 }
@@ -35,7 +42,7 @@ export async function refreshWindowState() {
     nativeWindow.isFullScreen(),
   ]);
   // 查询期间如果收到了更新的原生事件，不能用旧结果覆盖它。
-  if (request === revision) updateWindowState({ maximized, fullScreen });
+  if (request === revision) updateWindowState({ ...state, maximized, fullScreen });
 }
 
 export function toggleWindowMaximize() {
@@ -46,6 +53,12 @@ export function toggleWindowMaximize() {
   })().finally(() => {
     toggling = undefined;
   }));
+}
+
+export async function toggleWindowAlwaysOnTop() {
+  const next = !state.alwaysOnTop;
+  await nativeWindow.setAlwaysOnTop(next);
+  updateWindowState({ ...state, alwaysOnTop: next });
 }
 
 export function initializeWindowFrame() {

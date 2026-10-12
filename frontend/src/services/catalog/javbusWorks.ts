@@ -1,8 +1,9 @@
 import type { MovieDetails } from "../metadata/MetaTubeService";
 import { normalizeCode } from "../scraping/identity";
 import { hasControlCharacters } from "./catalogCsv";
-import type { OnlineEntity, OnlineWork, OnlineWorksPage } from "./onlineWorks";
+import type { OnlineEntity, OnlineProfile, OnlineWork, OnlineWorksPage } from "./onlineWorks";
 import type { GenreEntry, GenreLane } from "./catalogData";
+import { dmmCoverUrls } from "../images/dmm";
 
 export type WorksDimension =
   | "actresses"
@@ -218,6 +219,64 @@ function imageUrls(attrs: string, base = JAVBUS_ORIGIN) {
     ...new Set(values.map((value) => imageUrl(value, base)).filter((url): url is string => !!url)),
   ].slice(0, 8);
 }
+// 列表缩略图只是封面右半；同名大图为完整横版封面，放在首位，缺失时回退缩略图。
+function wideCovers(urls: string[]) {
+  const wide = urls.flatMap((value) => {
+    const url = new URL(value);
+    const match = /^(.*)\/pics\/thumb\/([a-z0-9_-]{1,100})\.jpe?g$/i.exec(url.pathname);
+    if (!match) return [];
+    url.pathname = `${match[1]}/pics/cover/${match[2]}_b.jpg`;
+    url.search = "";
+    return [url.href];
+  });
+  return [...new Set([...wide, ...urls])].slice(0, 8);
+}
+const profileLabels: Record<string, string> = {
+  生日: "生日",
+  年齡: "年龄",
+  年龄: "年龄",
+  身高: "身高",
+  罩杯: "罩杯",
+  胸圍: "胸围",
+  胸围: "胸围",
+  腰圍: "腰围",
+  腰围: "腰围",
+  臀圍: "臀围",
+  臀围: "臀围",
+  出生地: "出生地",
+  愛好: "爱好",
+  爱好: "爱好",
+};
+// 演员页头部 avatar-box：头像与“标签: 值”档案行；其他条目页没有该结构时返回 undefined。
+export function parseJavbusProfile(
+  source: string,
+  base = JAVBUS_ORIGIN,
+): OnlineProfile | undefined {
+  for (const match of source.matchAll(/<div\b([^>]{0,1024})>/gi)) {
+    if (!hasClass(match[1]!, "avatar-box")) continue;
+    const block = source.slice(match.index, match.index + 16 * 1024);
+    // 档案块之后紧接作品卡片；截断到首个 movie-box，避免把作品文字当作档案行。
+    const end = block.search(/\bmovie-box\b/i);
+    const box = end > 0 ? block.slice(0, end) : block;
+    const img = /<img\b([^>]{0,4096})>/i.exec(box)?.[1] ?? "";
+    const heading = /<span\b[^>]*class\s*=\s*["'][^"']*\bpb10\b[^"']*["'][^>]*>([^]*?)<\/span\s*>/i;
+    const name = (
+      plain(heading.exec(box)?.[1] ?? "") ||
+      attribute(img, "title") ||
+      attribute(img, "alt")
+    ).slice(0, 128);
+    const fields: OnlineProfile["fields"] = [];
+    for (const row of box.matchAll(/<p(?:\s[^>]*)?>([^]*?)<\/p\s*>/gi)) {
+      const text = /^([^:：]{1,8})\s*[:：]\s*(.{1,120})$/.exec(plain(row[1]!));
+      const label = text && profileLabels[text[1]!.trim()];
+      if (label && !fields.some((field) => field.label === label))
+        fields.push({ label, value: text[2]!.trim() });
+    }
+    if (!name && !fields.length) return;
+    const avatarUrl = imageUrls(img, base)[0];
+    return { name, fields, ...(avatarUrl ? { avatarUrl } : {}) };
+  }
+}
 function previewImages(source: string, base: string) {
   const images = new Set<string>();
   for (const sample of anchors(source)) {
@@ -312,7 +371,10 @@ export function parseJavbusWorks(html: string, url: string, page: number): Onlin
     if (!code || normalizeCode(code) !== normalizeCode(pathCode(target))) continue;
     const img = /<img\b([^>]{0,4096})>/i.exec(match[2]!)?.[1] ?? "";
     const title = (attribute(img, "title") || attribute(img, "alt") || code).slice(0, 2000);
-    const coverCandidates = imageUrls(img);
+    // JavBus 封面清晰度不足，只作 DMM digital/mono 之后的兜底。
+    const coverCandidates = [
+      ...new Set([...dmmCoverUrls(code), ...wideCovers(imageUrls(img, url))]),
+    ].slice(0, 8);
     items.set(target.href, {
       code,
       title,
@@ -330,7 +392,14 @@ export function parseJavbusWorks(html: string, url: string, page: number): Onlin
     "",
   );
   const total = readJavbusVideoCount(summary);
-  return { items: [...items.values()], page, nextPage, ...(total === undefined ? {} : { total }) };
+  const profile = parseJavbusProfile(source, url);
+  return {
+    items: [...items.values()],
+    page,
+    nextPage,
+    ...(total === undefined ? {} : { total }),
+    ...(profile ? { profile } : {}),
+  };
 }
 
 // 只读取显式影片总数。页数、当前页卡片数和作品标题里的数字都不是总数。
@@ -405,6 +474,7 @@ export function parseJavbusWorkDetails(html: string, work: OnlineWork): MovieDet
   const coverCandidates = [
     ...new Set(
       [
+        ...dmmCoverUrls(code),
         imageUrl(cover ? attribute(cover[1]!, "href") : ""),
         ...imageUrls(coverImg),
         work.coverUrl,

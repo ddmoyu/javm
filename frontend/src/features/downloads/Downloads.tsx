@@ -18,7 +18,11 @@ import { useWorkspace } from "../../app/state";
 import { canResume, downloadLabels, isRunning } from "../../contracts/downloads";
 import type { DownloadTask } from "../../contracts/downloads";
 import { describeError } from "../../services/downloads/DownloadService";
-import { formatBytes, formatDownloadSize } from "../../services/downloads/progress";
+import {
+  formatBytes,
+  formatDownloadSize,
+  formatRemaining,
+} from "../../services/downloads/progress";
 import { Icon } from "../../components/icons";
 import { CountTabs, Empty, Pill } from "../../components/ui";
 import { activeScrape, scrapeLabels, scrapePhaseLabels } from "../../contracts/scraping";
@@ -423,7 +427,7 @@ export function Downloads() {
                   <Text size="xs">{task.speed ? `${formatBytes(task.speed)}/s` : "—"}</Text>
                   <Text size="xs" c="dimmed">
                     {task.speed > 0 && task.total > task.downloaded
-                      ? `约 ${Math.ceil((task.total - task.downloaded) / task.speed)} 秒`
+                      ? formatRemaining((task.total - task.downloaded) / task.speed)
                       : "—"}
                   </Text>
                 </Table.Td>

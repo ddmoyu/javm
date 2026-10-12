@@ -26,6 +26,7 @@ import type { MovieDetails } from "../metadata/MetaTubeService";
 import { movieTrailers } from "../metadata/movieTrailers";
 import type { ScrapeTarget } from "../scraping/ScrapeService";
 import { publicMessage } from "../publicMessage";
+import { normalizeCode } from "../scraping/identity";
 
 export interface LibraryPort {
   request<T>(method: string, params?: unknown): Promise<T>;
@@ -186,6 +187,8 @@ export class LibraryService {
   watcher?: DirectoryWatchService;
   documents?: LibraryDocumentsService;
   artwork?: ArtworkService;
+  /** 扫描后为没有封面的作品自动截帧。 */
+  autoCover?: import("./AutoCoverService").AutoCoverService;
   organization?: FileOrganizationService;
   private snapshot: LibrarySnapshot;
   private listeners = new Set<() => void>();
@@ -262,36 +265,59 @@ export class LibraryService {
       return { ...result, items: result.items.map((video) => toFilm(video, this.asset)) };
     });
   }
+  // 读取某条目下本地已收录作品的番号（规范化后），用于标记在线作品“本地/缺失”。
+  // 分页读取并限制总量；每页之间让出事件循环。
+  async facetCodes(
+    facet: NonNullable<LibraryQuery["facet"]>,
+    signal: AbortSignal,
+    limit = 5000,
+  ): Promise<Set<string>> {
+    const codes = new Set<string>();
+    if (!this.port) return codes;
+    await this.initialize();
+    for (let offset = 0; offset < limit; offset += 200) {
+      signal.throwIfAborted();
+      const page = await this.port.request<QueryPage<NativeVideo>>("library.query", {
+        facet,
+        offset,
+        limit: 200,
+        includeTotal: false,
+      });
+      signal.throwIfAborted();
+      for (const video of page.items)
+        if (video.local_id && video.availability !== "metadata_only")
+          codes.add(normalizeCode(video.local_id));
+      if (page.items.length < 200) break;
+    }
+    return codes;
+  }
   createFacetQuery(includeCatalog = false) {
-    const view = new PagedQuery<FacetValue, FacetQuery>(
-      async (query, page) => {
-        if (includeCatalog && isCatalogDimension(query.dimension) && this.catalog) {
-          await this.catalog.ready();
-          if (!this.port || !this.snapshot.ready || this.snapshot.error) {
-            if (query.favoritesOnly) throw new Error("无法读取收藏，请恢复媒体库连接后重试。");
-            return this.catalog.query(query, page);
-          }
-          await this.syncCatalog(query.dimension);
-          return this.port.request<QueryPage<FacetValue>>("library.facets", {
-            ...query,
-            ...page,
-            includeCatalog: true,
-            includeFavorites: true,
-            includeLabels: true,
-            includeVideoCounts: true,
-          });
+    const view = new PagedQuery<FacetValue, FacetQuery>(async (query, page) => {
+      if (includeCatalog && isCatalogDimension(query.dimension) && this.catalog) {
+        await this.catalog.ready();
+        if (!this.port || !this.snapshot.ready || this.snapshot.error) {
+          if (query.favoritesOnly) throw new Error("无法读取收藏，请恢复媒体库连接后重试。");
+          return this.catalog.query(query, page);
         }
-        if (!this.port) return { items: [], total: 0, available: 0, offset: page.offset };
-        await this.initialize();
+        await this.syncCatalog(query.dimension);
         return this.port.request<QueryPage<FacetValue>>("library.facets", {
           ...query,
           ...page,
+          includeCatalog: true,
           includeFavorites: true,
           includeLabels: true,
+          includeVideoCounts: true,
         });
-      },
-      includeCatalog ? 1 : LIBRARY_CACHE_PAGES,
-    );
+      }
+      if (!this.port) return { items: [], total: 0, available: 0, offset: page.offset };
+      await this.initialize();
+      return this.port.request<QueryPage<FacetValue>>("library.facets", {
+        ...query,
+        ...page,
+        includeFavorites: true,
+        includeLabels: true,
+      });
+    }, LIBRARY_CACHE_PAGES);
     if (includeCatalog) this.catalogViews.add(view);
     return view;
   }
@@ -557,8 +583,12 @@ export class LibraryService {
             id: target.id,
           });
           if (!existing) throw new Error("已保存的作品暂时无法读取，请刷新片库。");
+          // 自动截帧的封面不算正式封面，刮削到来源封面时替换它。
           const cover =
-            !existing.poster && !existing.thumb && !existing.fanart && sources.cover.length > 0;
+            (!existing.poster || existing.poster_auto === true) &&
+            !existing.thumb &&
+            !existing.fanart &&
+            sources.cover.length > 0;
           const screenshots = !existing.screenshots?.length && sources.screenshots.length > 0;
           if (cover || screenshots) {
             let warning = "";
@@ -624,6 +654,7 @@ export class LibraryService {
   async shutdown() {
     await this.backups?.shutdown();
     // 先关闭图片服务，正在保存文字的收藏也不能在退出期间启动新图片请求。
+    await this.autoCover?.shutdown();
     await this.artwork?.shutdown();
     await this.collecting?.catch(() => {});
     await this.watcher?.shutdown();

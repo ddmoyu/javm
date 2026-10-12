@@ -1,6 +1,6 @@
 {
   "name": "javm",
-  "version": "1.0.5-alpha.2",
+  "version": "1.0.5-alpha.3",
   "private": true,
   "license": "MIT",
   "type": "module",

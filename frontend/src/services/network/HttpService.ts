@@ -31,9 +31,20 @@ export interface HttpPort {
   copy(from: string, to: string): Promise<void>;
   remove(path: string): Promise<void>;
 }
+/** 图片（封面、预览图、头像）与网页、资料请求分道限流。 */
+type Lane = "image" | "page";
+const laneOf = (purpose: HttpRequest["purpose"]): Lane =>
+  purpose === "artwork" || purpose === "portrait" ? "image" : "page";
+interface LaneLimits {
+  parallel: number;
+  perHost: number;
+  intervalMs: number;
+}
 interface Job {
   key: string;
+  /** 限流分组：站点加分道，网页与图片互不占用对方的名额。 */
   origin: string;
+  lane: Lane;
   request: HttpRequest;
   abort: AbortController;
   users: number;
@@ -52,6 +63,7 @@ export class HttpService {
   private reusable = new Map<string, Job>();
   private queue: Job[] = [];
   private running = 0;
+  private laneRunning: Record<Lane, number> = { image: 0, page: 0 };
   private hosts = new Map<string, { running: number; next: number }>();
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
@@ -61,13 +73,23 @@ export class HttpService {
   private consumers = new Set<Promise<HttpResponse>>();
   constructor(
     private port: HttpPort,
-    private limits = {
+    /**
+     * 顶层的 parallel / perHost / intervalMs 用于网页与资料请求，保护目标站点。
+     * images 用于图片 CDN：并发更高、不设起始间隔；省略时与网页相同。
+     */
+    private limits: LaneLimits & {
+      queued: number;
+      cacheBytes: number;
+      cacheEntries: number;
+      images?: LaneLimits;
+    } = {
       parallel: 4,
       perHost: 2,
       intervalMs: 300,
       queued: 64,
       cacheBytes: 32 * 1024 * 1024,
       cacheEntries: 64,
+      images: { parallel: 8, perHost: 6, intervalMs: 0 },
     },
   ) {}
 
@@ -129,9 +151,11 @@ export class HttpService {
       });
       // 订阅者取消后仍须等待原生停止；避免未观察的队列失败。
       void promise.catch(() => {});
+      const lane = laneOf(request.purpose);
       job = {
         key,
-        origin: url.origin,
+        origin: `${url.origin}|${lane}`,
+        lane,
         request,
         abort: new AbortController(),
         users: 0,
@@ -204,7 +228,8 @@ export class HttpService {
       const host = this.hosts.get(job.origin) ?? { running: 0, next: 0 };
       this.hosts.set(job.origin, host);
       wake = Math.min(wake, job.deadline);
-      if (this.running >= this.limits.parallel || host.running >= this.limits.perHost) {
+      const limits = job.lane === "image" ? (this.limits.images ?? this.limits) : this.limits;
+      if (this.laneRunning[job.lane] >= limits.parallel || host.running >= limits.perHost) {
         index++;
         continue;
       }
@@ -216,8 +241,9 @@ export class HttpService {
       this.queue.splice(index, 1);
       job.state = "running";
       this.running++;
+      this.laneRunning[job.lane]++;
       host.running++;
-      host.next = now + this.limits.intervalMs;
+      host.next = now + limits.intervalMs;
       const remaining = Math.max(1, job.deadline - now);
       void this.port
         .execute(
@@ -272,6 +298,7 @@ export class HttpService {
         .finally(() => {
           job.state = "done";
           this.running--;
+          this.laneRunning[job.lane]--;
           host.running--;
           this.prune();
           this.pump();

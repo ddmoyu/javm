@@ -44,6 +44,21 @@ export function parseCurlProgress(line: string): DownloadProgress | undefined {
   };
 }
 
+/** 剩余时间：不足 1 分钟显示秒，不足 1 小时显示分和秒，更长显示小时和分。 */
+export function formatRemaining(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  const total = Math.ceil(seconds);
+  if (total < 60) return `约 ${total} 秒`;
+  if (total < 3600) {
+    const minutes = Math.floor(total / 60),
+      rest = total % 60;
+    return rest ? `约 ${minutes} 分 ${rest} 秒` : `约 ${minutes} 分钟`;
+  }
+  const hours = Math.floor(total / 3600),
+    minutes = Math.floor((total % 3600) / 60);
+  return minutes ? `约 ${hours} 小时 ${minutes} 分` : `约 ${hours} 小时`;
+}
+
 export function formatBytes(value: number) {
   if (!Number.isFinite(value) || value <= 0) return "0 B";
   const power = Math.max(0, Math.min(4, Math.floor(Math.log(value) / Math.log(1024))));

@@ -26,6 +26,8 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
   const proxyRequests: string[] = [];
   const directRequests: string[] = [];
   const requests: string[] = [];
+  let limitedActive = 0;
+  let limitedHeld = 0;
   let ranged = false;
   let slowRequests = 0;
   let peakSlowRequests = 0;
@@ -40,6 +42,24 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
         directRequests.push(pathname);
         response.writeHead(403);
         response.end("direct access unavailable");
+        return;
+      }
+      // 模拟限制单 IP 并发的源站：同一时间只服务一个请求，其余请求挂起、不作任何回应。
+      if (pathname.startsWith("/limited/")) {
+        if (limitedActive >= 1) {
+          limitedHeld++;
+          return;
+        }
+        limitedActive++;
+        response.on("close", () => limitedActive--);
+        const bytes = await fs.readFile(path.join(root, path.basename(pathname)));
+        response.writeHead(200, {
+          "Content-Length": bytes.length,
+          "Content-Type": pathname.endsWith(".m3u8")
+            ? "application/vnd.apple.mpegurl"
+            : "video/mp2t",
+        });
+        response.end(bytes);
         return;
       }
       if (pathname === "/empty.m3u8") {
@@ -343,6 +363,90 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
       path.join(root, "live.m3u8"),
       "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:1,\nsegment00.ts\n",
     );
+    // 关键帧间隔 10 秒、按时间切段：去掉首段后，播放列表开头 8 秒内没有关键帧与视频参数。
+    execFileSync(
+      fixtureFfmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc2=size=320x180:rate=24",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=440",
+        "-t",
+        "30",
+        "-g",
+        "240",
+        "-keyint_min",
+        "240",
+        "-sc_threshold",
+        "0",
+        "-c:v",
+        "libx264",
+        "-c:a",
+        "aac",
+        "-f",
+        "hls",
+        "-hls_time",
+        "2",
+        "-hls_flags",
+        "split_by_time",
+        "-hls_list_size",
+        "0",
+        "-hls_segment_filename",
+        path.join(root, "gop%02d.ts"),
+        path.join(root, "gop-full.m3u8"),
+      ],
+      { windowsHide: true },
+    );
+    {
+      const rows = (await fs.readFile(path.join(root, "gop-full.m3u8"), "utf8")).split(/\r?\n/);
+      const first = rows.findIndex((row) => row.startsWith("#EXTINF"));
+      // 删除第一段（带关键帧的那段）的 EXTINF 与地址两行。
+      rows.splice(first, 2);
+      await fs.writeFile(path.join(root, "gop-late-keyframe.m3u8"), rows.join("\n"));
+    }
+    // 伪装成图片的分片：每个 TS 分片前拼接一张真实的 PNG 图片。
+    execFileSync(
+      fixtureFfmpeg,
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=gray:s=16x16",
+        "-frames:v",
+        "1",
+        path.join(root, "cover.png"),
+      ],
+      { windowsHide: true },
+    );
+    {
+      const image = await fs.readFile(path.join(root, "cover.png"));
+      const source = await fs.readFile(path.join(root, "playlist.m3u8"), "utf8");
+      for (const segment of source.match(/segment\d+\.ts/g) ?? [])
+        await fs.writeFile(
+          path.join(root, segment.replace("segment", "disguised").replace(".ts", ".png")),
+          Buffer.concat([image, await fs.readFile(path.join(root, segment))]),
+        );
+      await fs.writeFile(
+        path.join(root, "disguised.m3u8"),
+        source.replace(/segment(\d+)\.ts/g, "disguised$1.png"),
+      );
+      await fs.writeFile(
+        path.join(root, "image-only.m3u8"),
+        "#EXTM3U\n#EXT-X-TARGETDURATION:2\n#EXTINF:1,\ncover.png\n#EXT-X-ENDLIST\n",
+      );
+    }
     // 地址里带方括号的分片：curl 默认会把 [..] 当作通配范围。
     await fs.copyFile(path.join(root, "segment00.ts"), path.join(root, "segment[00].ts"));
     await fs.writeFile(
@@ -401,6 +505,16 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
         read: (file) => fs.readFile(file, "utf8"),
         write: (file, data) => fs.writeFile(file, data, "utf8"),
         writeBinary: (file, data) => fs.writeFile(file, data),
+        async readBytes(file, length, position = 0) {
+          const handle = await fs.open(file, "r");
+          try {
+            const buffer = Buffer.alloc(length);
+            const { bytesRead } = await handle.read(buffer, 0, length, position);
+            return new Uint8Array(buffer.subarray(0, bytesRead));
+          } finally {
+            await handle.close();
+          }
+        },
         async list(folder) {
           return (await fs.readdir(folder, { withFileTypes: true }))
             .filter((entry) => entry.isFile())
@@ -798,11 +912,26 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
     expect(requests.slice(first).length).toBeGreaterThan(fetched);
     expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
   }, 90000);
-  it("reports a forbidden HLS segment without publishing an output", async () => {
+  it("retries a forbidden HLS segment, then reports it without publishing an output", async () => {
     const task = taskFor("broken.m3u8");
-    await expect(execute(task)).rejects.toThrow(/HLS 分片未能下载，HTTP 403/);
+    const first = requests.length;
+    // 403 可能是偶发的限流，会自动补下载；这里把轮次间隔缩短为 0。
+    const quick = new ToolDownloadEngine(host, undefined, { hlsRetryDelays: [0] });
+    await expect(
+      quick.run(
+        task,
+        { ...defaultDownloadSettings, directory: root },
+        AbortSignal.timeout(60000),
+        () => {},
+        async () => {},
+      ),
+    ).rejects.toThrow(/已自动重试 1 次，仍有 1 个 HLS 分片未能下载（HTTP 403 ×1）/);
+    // 两轮下载，每轮 curl 自身对该分片最多再试 3 次。
+    const attempts = requests.slice(first).filter((item) => item === "/forbidden.mp4").length;
+    expect(attempts).toBeGreaterThan(2);
+    expect(attempts).toBeLessThanOrEqual(8);
     await expect(fs.stat(task.output)).rejects.toThrow();
-  }, 30000);
+  }, 60000);
   it("rejects live HLS playlists", async () => {
     const task = taskFor("live.m3u8");
     await expect(execute(task)).rejects.toThrow("直播流");
@@ -911,6 +1040,59 @@ describe.runIf(enabled)("real HTTP / HLS downloads and FFmpeg merge", () => {
     expect(requests.slice(first).filter((item) => item.endsWith(".ts"))).toHaveLength(1);
     expect((await fs.stat(task.output)).size).toBeGreaterThan(10000);
   }, 60000);
+  it("merges HLS whose first segments contain no keyframe and logs diagnostics", async () => {
+    const task = taskFor("gop-late-keyframe.m3u8");
+    const lines: string[] = [];
+    await execute(task, AbortSignal.timeout(60000), (update) => {
+      if (update.line) lines.push(update.line);
+    });
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, width: 320, height: 180 });
+    expect(lines.some((line) => /^合并诊断：video\.m3u8 共 \d+ 个分片/.test(line))).toBe(true);
+    expect(lines.some((line) => line.includes("开头 47 "))).toBe(true);
+  }, 60000);
+  it("merges segments disguised as PNG images by skipping the image header", async () => {
+    const task = taskFor("disguised.m3u8");
+    const lines: string[] = [];
+    await execute(task, AbortSignal.timeout(60000), (update) => {
+      if (update.line) lines.push(update.line);
+    });
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, audio: true, width: 320, height: 180 });
+    expect(result.durationMs).toBeGreaterThan(11000);
+    expect(lines.some((line) => line.includes("开头 89 50 4e 47"))).toBe(true);
+    expect(lines.some((line) => /伪装成图片（PNG ×\d+）/.test(line))).toBe(true);
+  }, 60000);
+  it("explains a disguised segment that contains no video data", async () => {
+    const task = taskFor("image-only.m3u8");
+    await expect(execute(task)).rejects.toThrow("没有找到后面的视频数据");
+  }, 30000);
+  it("lowers concurrency step by step when the source only serves one connection", async () => {
+    const task = taskFor("limited/playlist.m3u8");
+    const lines: string[] = [];
+    const limited = new ToolDownloadEngine(host, undefined, {
+      hlsRetryDelays: [0, 0, 0],
+      hlsStallTimeout: 3000,
+    });
+    await limited.run(
+      task,
+      { ...defaultDownloadSettings, directory: root },
+      AbortSignal.timeout(120000),
+      (update) => {
+        if (update.line) lines.push(update.line);
+      },
+      async (phase, inputs) => {
+        task.phase = phase;
+        if (inputs) task.inputs = inputs;
+      },
+    );
+    expect(limitedHeld).toBeGreaterThan(0);
+    const lowered = lines.filter((line) => line.includes("下一轮并发降为"));
+    expect(lowered.length).toBeGreaterThan(0);
+    expect(lines.some((line) => line.includes("没有分片完成"))).toBe(true);
+    const result = await host.probe(task.output, AbortSignal.timeout(20000));
+    expect(result).toMatchObject({ video: true, audio: true });
+  }, 120000);
   it("downloads segment addresses containing brackets literally", async () => {
     const first = requests.length;
     const task = taskFor("brackets.m3u8");

@@ -357,9 +357,13 @@ html:has(:fullscreen) .window-resize-edges {
 .virtual-canvas {
   position: relative;
 }
-.film-card {
+.film-card,
+.virtual-grid-item {
   position: absolute;
   top: 0;
+}
+.virtual-grid-item > * {
+  height: 100%;
 }
 .film-card-open {
   display: block;
@@ -627,6 +631,83 @@ html:has(:fullscreen) .window-resize-edges {
   align-items: center;
   gap: 10px;
   padding: 12px 6px 12px 12px;
+}
+
+/* ---------- 发现：条目作品页 ---------- */
+.works-profile {
+  display: flex;
+  gap: 16px;
+  padding: 4px 0 16px;
+  border-bottom: 1px solid var(--line);
+}
+.works-profile-avatar {
+  flex: none;
+  background: var(--sunken);
+}
+.works-profile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.works-profile-facts {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 2px;
+}
+.works-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 8px 0;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.online-work {
+  position: relative;
+}
+.online-work-open {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+}
+.online-work-cover {
+  position: relative;
+  display: block;
+  flex: none;
+  aspect-ratio: 3 / 2;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border-radius: var(--mantine-radius-md);
+  background: var(--sunken);
+  outline: 1px solid var(--line);
+  transition: outline-color 180ms ease;
+}
+.online-work-open:hover .online-work-cover,
+.online-work-open:focus-visible .online-work-cover {
+  outline-color: var(--mantine-color-rouge-7);
+}
+.online-work-status {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.online-work-actions {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  border-radius: var(--mantine-radius-sm);
+  background: color-mix(in srgb, var(--mantine-color-body) 80%, transparent);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.online-work:hover .online-work-actions,
+.online-work-actions:focus-within {
+  opacity: 1;
 }
 
 /* ---------- 资源刮削 ---------- */

@@ -51,7 +51,9 @@ describe("搜索无结果与精确番号后备详情", () => {
       expect(result.candidates).toEqual([
         { provider: "JavBus", id: code, code, title: `${code} 安全旅行纪录片` },
       ]);
-      expect(result.details?.coverUrl).toBe("https://images.example.invalid/safe-cover.png");
+      expect(result.details?.coverCandidates).toContain(
+        "https://images.example.invalid/safe-cover.png",
+      );
       expect(result.details?.previewImages).toContain(
         "https://images.example.invalid/safe-preview.png",
       );

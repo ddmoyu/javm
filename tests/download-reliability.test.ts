@@ -284,7 +284,8 @@ describe("HLS 续传与协作取消", () => {
         },
       },
     };
-    const engine = new ToolDownloadEngine(host);
+    // 关闭同一次运行内的自动补下载，验证跨两次运行的续传。
+    const engine = new ToolDownloadEngine(host, undefined, { hlsRetryDelays: [] });
     await expect(
       engine.run(
         task,

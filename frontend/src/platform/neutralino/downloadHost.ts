@@ -33,6 +33,9 @@ export const nativeDownloadHost: DownloadHost = {
     },
     read: filesystem.readFile,
     write: filesystem.writeFile,
+    async readBytes(path, length, position = 0) {
+      return new Uint8Array(await filesystem.readBinaryFile(path, { pos: position, size: length }));
+    },
     async writeBinary(path, value) {
       await filesystem.writeBinaryFile(path, value.slice().buffer);
     },

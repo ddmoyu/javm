@@ -17,8 +17,9 @@ import type { Film } from "../../contracts/media";
 import { useWorkspace } from "../../app/state";
 import { os } from "@neutralinojs/lib";
 import type { ArtworkService, CropArea } from "../../services/library/ArtworkService";
+import { FilmFramePicker } from "./FilmFramePicker";
 
-export type ArtworkMode = "cover" | "capture" | "fetch" | "long";
+export type ArtworkMode = "cover" | "capture" | "fetch" | "long" | "pick-cover" | "pick-previews";
 export function FilmArtworkEditor({
   film,
   mode,
@@ -31,6 +32,15 @@ export function FilmArtworkEditor({
   source?: string;
 }) {
   const { library } = useWorkspace();
+  if (library.artwork && (mode === "pick-cover" || mode === "pick-previews"))
+    return (
+      <FilmFramePicker
+        service={library.artwork}
+        film={film}
+        multiple={mode === "pick-previews"}
+        onClose={onClose}
+      />
+    );
   return library.artwork ? (
     <ArtworkEditor
       service={library.artwork}
@@ -111,6 +121,8 @@ function ArtworkEditor({
     }
   };
   const title = {
+    "pick-cover": "从视频选择封面",
+    "pick-previews": "从视频选择预览图",
     cover: "选取封面",
     capture: "截取视频截图",
     fetch: "获取封面与截图",

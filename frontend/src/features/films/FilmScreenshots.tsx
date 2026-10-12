@@ -6,7 +6,15 @@ import { useImagePreview } from "../../components/ImagePreview";
 import { ObjectMenu } from "../../components/ObjectMenu";
 import { SourceImage } from "../../components/ImageSources";
 
-export type ScreenshotAction = "capture" | "fetch" | "long" | "clear" | "remove" | "cover";
+export type ScreenshotAction =
+  | "capture"
+  | "fetch"
+  | "long"
+  | "clear"
+  | "remove"
+  | "cover"
+  | "pick-cover"
+  | "pick-previews";
 export function FilmScreenshots({
   film,
   label = "视频截图",
@@ -44,8 +52,14 @@ export function FilmScreenshots({
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item leftSection={<Icon name="image" />} onClick={() => onAction("capture")}>
-                从视频截取
+              <Menu.Item
+                leftSection={<Icon name="image" />}
+                onClick={() => onAction("pick-previews")}
+              >
+                从视频选择预览图
+              </Menu.Item>
+              <Menu.Item leftSection={<Icon name="image" />} onClick={() => onAction("pick-cover")}>
+                从视频选择封面
               </Menu.Item>
               <Menu.Item leftSection={<Icon name="download" />} onClick={() => onAction("fetch")}>
                 获取封面与截图

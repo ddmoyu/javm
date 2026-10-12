@@ -89,12 +89,16 @@ std::string Store::saveWork(const Json& file,const Json& nfo,const std::string* 
     };
     const auto rating=number("rating","rating","rating");
     const auto duration=number("runtime_seconds","runtimeSeconds","duration");
+    const auto autoPoster=previous.value("_auto",Json::object()).value("poster",std::string{});
     for(const auto* kind:{"poster","thumb","fanart"}) {
         auto value=stringValue(old,kind);
+        // 自动截帧的封面可被之后出现的本地封面文件替换。
+        const bool automatic=std::string(kind)=="poster" && !autoPoster.empty() && value==autoPoster;
         if(manual.contains(kind)) value=manual[kind].get<std::string>();
-        else if(file.contains(kind) && (value.empty() || (sameSource && previous.value(std::string("_local_")+kind,std::string{})==value))) value=file[kind].get<std::string>();
+        else if(file.contains(kind) && (value.empty() || automatic || (sameSource && previous.value(std::string("_local_")+kind,std::string{})==value))) value=file[kind].get<std::string>();
         merged[kind]=value;
-        if(!value.empty()) provenance[std::string("_local_")+kind]=value;
+        if(automatic && value!=autoPoster) provenance["_auto"].erase("poster");
+        if(!value.empty() && !(std::string(kind)=="poster" && value==autoPoster)) provenance[std::string("_local_")+kind]=value;
     }
     const bool hasMetadata=(source || nfo.contains("title")) && !file.value("pending",false);
     run(db_,R"SQL(INSERT INTO works(id,code,code_key,title,original_title,plot,studio,label,director,series,premiered,runtime_seconds,rating,poster,thumb,fanart,provenance,scan_status)
@@ -147,6 +151,8 @@ Json Store::decorate(Json result) {
         work["metadata_edited"]=!provenance.value("_manual",Json::object()).empty();
         work["year"]=provenance.value("year",0);
         work["preview"]=provenance.value("_preview",Json::object());
+        const auto autoPoster=provenance.value("_auto",Json::object()).value("poster",std::string{});
+        work["poster_auto"]=!autoPoster.empty() && autoPoster==stringValue(work,"poster");
         work["media_files"]=rows(db_,"SELECT m.id,path,file_size,width,height,duration_ms,codec,missing,s.url AS stream_url,COALESCE(p.part_number,0) AS part,COALESCE(p.total,0) AS parts FROM media_files m LEFT JOIN stream_targets s ON s.media_id=m.id LEFT JOIN media_parts p ON p.media_id=m.id WHERE work_id=? ORDER BY missing,CASE WHEN p.part_number>0 THEN p.part_number ELSE 100 END,created_at,m.id",{id});
         for(auto& file:work["media_files"]) {file["subtitles"]=Json::array();for(const auto& sub:rows(db_,"SELECT path FROM media_subtitles WHERE media_id=? ORDER BY path_key LIMIT 16",{file["id"]})) file["subtitles"].push_back(sub["path"]);}
         work["nfo_files"]=rows(db_,"SELECT path,canonical FROM nfo_documents WHERE work_id=? AND stamp<>'' ORDER BY canonical DESC,path_key",{id});

@@ -169,6 +169,8 @@ struct Transfer {
 }
 struct Service::State {
     struct Cancel { std::string requestId, id; Reply reply; };
+    /** 与 TypeScript 队列的网页 4 个加图片 8 个对应。 */
+    static constexpr size_t maxActive = 12;
     CURLM* multi = nullptr;
     std::mutex mutex;
     std::deque<std::unique_ptr<Transfer>> queued;
@@ -181,9 +183,10 @@ struct Service::State {
         if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) throw std::runtime_error("HTTP 初始化失败");
         multi = curl_multi_init();
         if (!multi) { curl_global_cleanup(); throw std::runtime_error("HTTP 连接池初始化失败"); }
-        curl_multi_setopt(multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, 4L);
-        curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, 2L);
-        curl_multi_setopt(multi, CURLMOPT_MAXCONNECTS, 16L);
+        // 分道限流在 TypeScript 队列中完成（网页每站 2 个、图片每站 6 个）；这里只设总上限。
+        curl_multi_setopt(multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, static_cast<long>(maxActive));
+        curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, 6L);
+        curl_multi_setopt(multi, CURLMOPT_MAXCONNECTS, 24L);
         worker = std::jthread([this] { run(); });
     }
     ~State() { shutdown(); curl_multi_cleanup(multi); curl_global_cleanup(); }
@@ -205,7 +208,7 @@ struct Service::State {
                 stop = stopping;
                 cancel.swap(cancellations);
                 if (stop) start.swap(queued);
-                else while (!queued.empty() && active.size() + start.size() < 4) {
+                else while (!queued.empty() && active.size() + start.size() < maxActive) {
                     start.push_back(std::move(queued.front())); queued.pop_front();
                 }
             }

@@ -103,7 +103,10 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
         {"plot",merged["plot"]},{"premiered",merged["premiered"]},{"director",merged["director"]},{"studio",merged["studio"]},
         {"label",merged["label"]},{"series",merged["series"]},{"actor",merged["actors"]},{"genre",merged["genres"]},{"tag",merged["tags"]},
         {"rating",merged["rating"]},{"runtimeSeconds",static_cast<int64_t>(merged["duration"].get<double>())}};
-    if (!poster.empty()) {
+    const auto autoPoster=provenance.value("_auto",Json::object()).value("poster",std::string{});
+    const bool automaticPoster=!poster.empty() && poster==autoPoster;
+    // 自动截帧的封面只在片库内显示，不写入 NFO。
+    if (!poster.empty() && !automaticPoster) {
         const auto relative=fs::path(wide(poster)).lexically_relative(nfoPath.parent_path());
         metadata["poster"]=relative.empty() ? poster : utf8(relative.generic_wstring());
     }
@@ -146,7 +149,8 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
     fusion["fields"]=previousFields;fusion["sources"]=sources;provenance["_fusion"]=fusion;
     if (!manual.empty()) provenance["_manual"]=manual;
     if (merged["title"]!=current["title"]) provenance.erase("_filenameTitle");
-    if (!poster.empty()) provenance["_local_poster"]=poster;
+    if (!poster.empty() && !automaticPoster) provenance["_local_poster"]=poster;
+    if (!automaticPoster && provenance.contains("_auto")) provenance["_auto"].erase("poster");
     run(db_,"UPDATE works SET title=?,original_title=?,code=?,code_key=?,premiered=?,director=?,studio=?,label=?,series=?,plot=?,rating=?,runtime_seconds=?,poster=?,provenance=?,scan_status=2,scraped_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?",
         {merged["title"],merged["original_title"],merged["code"],codeKey(merged["code"]),merged["premiered"],merged["director"],merged["studio"],merged["label"],merged["series"],merged["plot"],merged["rating"],metadata["runtimeSeconds"],poster,provenance.dump(),id});
     for (const auto& [table,key]: {std::pair{"actors","actor"},{"genres","genre"},{"tags","tag"}})

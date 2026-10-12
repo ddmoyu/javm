@@ -51,6 +51,12 @@ export interface ArtworkTools {
   details(target: ArtworkTarget, signal: AbortSignal): Promise<MovieDetails>;
 }
 type ImageRecord = { path: string; kind: "poster" | "screenshot" | "sheet"; seconds?: number };
+/** 从视频截取、尚未保存的候选画面（已转为标准 JPEG）。 */
+export interface CandidateFrame {
+  index: number;
+  seconds: number;
+  bytes: ArrayBuffer;
+}
 export class ArtworkService extends Observable<{
   busy: boolean;
   action: string;
@@ -211,6 +217,70 @@ export class ArtworkService extends Observable<{
           this.publish({ processed: index + 1 });
         }
         if (sheet) await add(await this.tools.transform(frames, true, undefined, signal), "sheet");
+        return video;
+      }),
+    );
+  }
+  /**
+   * 截取候选画面供用户挑选：按时间均匀截取 count 帧，每完成一帧回调一次。
+   * 画面只保留在内存中，临时文件随即清理；用户确认后再用 applyFrames 提交。
+   */
+  captureCandidates(
+    id: string,
+    count: number,
+    videoId: string | undefined,
+    onFrame: (frame: CandidateFrame) => void,
+  ) {
+    let result: { frames: CandidateFrame[]; video: ArtworkTarget["videos"][number] } | undefined;
+    return this.run("截取候选画面", async (signal) => {
+      if (count < 1 || count > 24) throw new Error("截图数量无效。");
+      const target = await this.port.request<ArtworkTarget>("library.artwork.prepare", { id });
+      const video = target.videos.find((item) => item.id === videoId) ?? target.videos[0];
+      if (!video || video.duration_ms <= 0)
+        throw new Error("没有可抽帧的本地视频，请先扫描以获取时长。");
+      const temporary = `${target.directory}/.work-${crypto.randomUUID()}`;
+      await this.tools.mkdir(temporary);
+      const frames: CandidateFrame[] = [];
+      this.publish({ total: count });
+      try {
+        for (let index = 0; index < count; index++) {
+          signal.throwIfAborted();
+          const seconds = (video.duration_ms / 1000) * ((index + 1) / (count + 1)),
+            path = `${temporary}/frame-${index}.jpg`;
+          await this.tools.frame(video.path, path, seconds, signal);
+          const bytes = await this.tools.transform(
+            [await this.tools.read(path)],
+            false,
+            undefined,
+            signal,
+          );
+          const frame = { index, seconds, bytes };
+          frames.push(frame);
+          onFrame(frame);
+          this.publish({ processed: index + 1 });
+        }
+      } finally {
+        await this.tools.remove(temporary).catch(() => {});
+      }
+      result = { frames, video };
+    }).then(() => result!);
+  }
+  /** 把挑选的候选画面保存为封面（一张）或预览截图（多张）。 */
+  applyFrames(
+    id: string,
+    frames: CandidateFrame[],
+    kind: "poster" | "screenshot",
+    video: ArtworkTarget["videos"][number],
+  ) {
+    return this.run(kind === "poster" ? "保存封面" : "保存预览图", (signal) =>
+      this.batch(id, signal, async (_target, _temporary, add) => {
+        if (!frames.length) throw new Error("请至少选择一张画面。");
+        if (kind === "poster" && frames.length !== 1) throw new Error("封面只能选择一张画面。");
+        this.publish({ total: frames.length });
+        for (const [index, frame] of [...frames].sort((a, b) => a.seconds - b.seconds).entries()) {
+          await add(frame.bytes, kind, frame.seconds);
+          this.publish({ processed: index + 1 });
+        }
         return video;
       }),
     );

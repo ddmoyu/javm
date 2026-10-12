@@ -53,3 +53,9 @@ mock 能证明上述客户端行为，不能证明真实来源使用了共享 Wo
 - [CDP 自动附加](https://chromedevtools.github.io/devtools-protocol/tot/Target/#method-setAutoAttach)、[恢复等待调试器的目标](https://chromedevtools.github.io/devtools-protocol/tot/Runtime/#method-runIfWaitingForDebugger)
 - [Cloudflare 挑战响应标记](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/challenge-pages/detect-response/)、[浏览器支持边界](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/)
 - [本轮隔离验证记录](../verification/2026-10-11-persistent-http.md)
+
+## 图片分道限流（2026-10-12）
+
+影片详情的封面和预览图加载很慢。原因是所有请求共用一套限流：全局 4 个、每站 2 个、同站两次起始间隔 300 ms。同一图片站点的 20 张图至少要排队 6 秒以上，原生 libcurl 层同样是总数 4、每站 2 个连接。
+
+现在按用途分道：`artwork` 和 `portrait` 走图片道，全局 8 个、每站 6 个、不设起始间隔；网页、资料、取流等其他请求保持原来的全局 4 个、每站 2 个、间隔 300 ms，不增加目标站点的风控风险。两道的站点计数互不占用。调用方传入自定义限流参数但没有给出 `images` 时，图片沿用网页的参数（测试即按此保持原有语义）。原生层把总并发提高到 12（与两道之和对应），每站连接数提高到 6，连接池保留 24 个；分道细节仍由 TypeScript 队列控制。

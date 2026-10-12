@@ -118,8 +118,8 @@ export class PagedQuery<T, Q> {
             includeTotal: !this.countKnown,
           });
           if (generation !== this.generation) continue;
-          // 发现页只保留当前页；快速翻页时迟到的旧页不再写回或阻塞新页。
-          if (this.cachePages === 1 && !this.wanted.includes(page)) continue;
+          // 快速滚动时迟到且已离开可见范围的页不再写回，避免挤掉当前页。
+          if (!this.wanted.includes(page)) continue;
           if (result.items.length > LIBRARY_PAGE_SIZE || result.offset !== page * LIBRARY_PAGE_SIZE)
             throw new Error("片库分页响应无效，请重试。");
           const total = result.total ?? this.snapshot.total;
@@ -147,10 +147,7 @@ export class PagedQuery<T, Q> {
           if (this.wanted[0]! * LIBRARY_PAGE_SIZE >= total)
             this.wanted = [Math.max(0, Math.ceil(total / LIBRARY_PAGE_SIZE) - 1)];
         } catch (error) {
-          if (
-            generation === this.generation &&
-            (this.cachePages !== 1 || this.wanted.includes(page))
-          )
+          if (generation === this.generation && this.wanted.includes(page))
             this.publish({
               error: error instanceof Error ? error.message : "片库读取失败，请重试。",
             });

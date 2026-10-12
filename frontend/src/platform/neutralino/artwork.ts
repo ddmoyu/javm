@@ -13,6 +13,9 @@ import { normalizeCode } from "../../services/scraping/identity";
 import { webUrl } from "../../services/streamResolution/shared";
 import type { ImageSourceService } from "../../services/images/ImageSourceService";
 import { yieldToUi } from "../../services/yieldToUi";
+import { AutoCoverService } from "../../services/library/AutoCoverService";
+import { logEvent } from "../../services/logging/events";
+import { isDmmImage } from "../../services/images/dmm";
 
 export function createArtworkService(
   runtime: Runtime,
@@ -141,7 +144,7 @@ export function createArtworkService(
           proxy: await network.getProxy(),
           output: path,
           headers: referer ? { Referer: webUrl(referer) } : {},
-          maxRedirects: 3,
+          maxRedirects: isDmmImage(url) ? 0 : 3,
           maxBytes: 20 * 1024 * 1024,
           timeoutMs: 30_000,
           connectTimeoutMs: 8000,
@@ -185,5 +188,11 @@ export function createArtworkService(
       return metatube.details(candidate, signal);
     },
   };
+  library.autoCover = new AutoCoverService(
+    new NativeLibraryPort(),
+    tools,
+    () => library.refreshAfterImport(),
+    (message) => logEvent("info", "library", "auto_cover", message),
+  );
   return new ArtworkService(new NativeLibraryPort(), tools, () => library.refreshAfterImport());
 }

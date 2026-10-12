@@ -469,3 +469,55 @@ export class HlsSizeEstimate {
     };
   }
 }
+
+/**
+ * 部分来源把 TS 分片伪装成图片：在真正的视频数据前拼接一段 PNG、JPEG、GIF 或 BMP 文件头。
+ * FFmpeg 会按图片识别，合并时报 “dimensions not set”。这里只识别文件头，不解码图片。
+ */
+export function imageSignature(bytes: Uint8Array) {
+  const starts = (...values: number[]) => values.every((value, index) => bytes[index] === value);
+  if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return "PNG";
+  if (starts(0xff, 0xd8, 0xff)) return "JPEG";
+  if (starts(0x47, 0x49, 0x46, 0x38)) return "GIF";
+  if (starts(0x42, 0x4d)) return "BMP";
+  return undefined;
+}
+
+/** MPEG-TS 包长 188 字节，每包以 0x47 开头；连续命中几次才视为找到了真正的 TS 起点。 */
+export const tsPacket = 188;
+export const tsSyncPackets = 4;
+export function isTransportStreamAt(bytes: Uint8Array, offset: number) {
+  if (offset < 0 || offset + (tsSyncPackets - 1) * tsPacket >= bytes.length) return false;
+  for (let packet = 0; packet < tsSyncPackets; packet++)
+    if (bytes[offset + packet * tsPacket] !== 0x47) return false;
+  return true;
+}
+/** 在字节片段中查找第一个可信的 TS 起点；找不到返回 -1。 */
+export function transportStreamOffset(bytes: Uint8Array) {
+  for (let offset = 0; offset + (tsSyncPackets - 1) * tsPacket < bytes.length; offset++)
+    if (bytes[offset] === 0x47 && isTransportStreamAt(bytes, offset)) return offset;
+  return -1;
+}
+
+/**
+ * 给本地播放列表中的指定分片加上字节范围，让 FFmpeg 从真正的视频数据开始读取。
+ * 已经带有字节范围的分片保持原样（来源本身使用字节范围时不做处理）。
+ */
+export function applySegmentRanges(
+  text: string,
+  ranges: Record<string, { offset: number; length: number }>,
+) {
+  const output: string[] = [];
+  let ranged = false;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#EXT-X-BYTERANGE:")) ranged = true;
+    else if (trimmed && !trimmed.startsWith("#")) {
+      const range = ranges[trimmed];
+      if (range && !ranged) output.push(`#EXT-X-BYTERANGE:${range.length}@${range.offset}`);
+      ranged = false;
+    }
+    output.push(line);
+  }
+  return output.join("\n");
+}

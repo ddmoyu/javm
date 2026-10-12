@@ -12,7 +12,7 @@ import type {
 } from "../frontend/src/services/catalog/workerClient";
 import type { PageRequest } from "../frontend/src/contracts/library";
 
-it("发现名单每次读取一百条，仅保留当前页，不预取相邻页", async () => {
+it("发现名单每次读取一百条，虚拟滚动缓存最多六页，不预取相邻页", async () => {
   const names = Array.from({ length: 75303 }, (_, index) => `安全演员${index}`);
   const data = loadDiscovery(
     {
@@ -61,20 +61,30 @@ it("发现名单每次读取一百条，仅保留当前页，不预取相邻页"
       [0, 100],
       [75200, 100],
     ]);
-    expect(view.getSnapshot().items.size).toBe(100);
-    expect(view.getSnapshot().items.has(0)).toBe(false);
+    expect(view.getSnapshot().items.size).toBe(200);
+    expect(view.getSnapshot().items.has(0)).toBe(true);
     expect(view.getSnapshot().items.get(75200)?.name).toBe("安全演员75200");
     view.loadRange(75300, 75399);
     await vi.waitFor(() => expect(view.getSnapshot().loading).toBe(false));
-    expect(view.getSnapshot().items.size).toBe(3);
+    expect(view.getSnapshot().items.size).toBe(203);
     expect(requests.at(-1)?.offset).toBe(75300);
+    for (const offset of [100, 200, 300, 400, 500, 600]) {
+      view.loadRange(offset, offset + 99);
+      await vi.waitFor(() => expect(view.getSnapshot().loading).toBe(false));
+      expect(requests.at(-1)?.offset).toBe(offset);
+      expect(view.getSnapshot().items.size).toBeLessThanOrEqual(600);
+    }
+    expect(requests).toHaveLength(9);
+    expect(view.getSnapshot().items.has(0)).toBe(false);
+    expect(view.getSnapshot().items.has(75200)).toBe(false);
+    expect(view.getSnapshot().items.get(600)?.name).toBe("安全演员600");
   } finally {
     view.setActive(false);
     await library.shutdown();
   }
 });
 
-it("单页模式快速翻页时忽略旧页失败，只继续读取最新目标页", async () => {
+it.each([1, 6])("缓存 %i 页时快速滚动忽略旧页失败，只继续读取最新目标页", async (cachePages) => {
   let rejectOld!: (error: Error) => void;
   const fetch = vi.fn(async (_query: object, page: PageRequest) => {
     if (page.offset === 100)
@@ -83,7 +93,7 @@ it("单页模式快速翻页时忽略旧页失败，只继续读取最新目标�
       });
     return { offset: page.offset, total: 1000, items: [page.offset] };
   });
-  const view = new PagedQuery(fetch, 1);
+  const view = new PagedQuery(fetch, cachePages);
   view.configure({}, true);
   await vi.waitFor(() => expect(view.getSnapshot().loading).toBe(false));
   view.loadRange(100, 199);
@@ -92,7 +102,10 @@ it("单页模式快速翻页时忽略旧页失败，只继续读取最新目标�
   rejectOld(new Error("Safe obsolete failure"));
   await vi.waitFor(() => expect(view.getSnapshot().loading).toBe(false));
   expect(fetch.mock.calls.map(([, page]) => page.offset)).toEqual([0, 100, 300]);
-  expect([...view.getSnapshot().items.values()]).toEqual([300]);
+  expect(view.getSnapshot().items.get(300)).toBe(300);
+  expect(view.getSnapshot().items.has(100)).toBe(false);
+  expect(view.getSnapshot().items.has(200)).toBe(false);
+  expect(view.getSnapshot().items.has(0)).toBe(cachePages > 1);
   expect(view.getSnapshot().error).toBe("");
   view.setActive(false);
 });

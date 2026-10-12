@@ -13,11 +13,25 @@ import {
 import { useWorkspace } from "../../app/state";
 import type { MovieCandidate, MovieDetails } from "../../services/metadata/MetaTubeService";
 import { serviceError } from "../../services/metadata/shared";
-import { mergeMovieCandidates } from "../../services/metadata/mergeMovieCandidates";
 import type { MovieSearchGroup } from "../../services/metadata/mergeMovieCandidates";
 import { normalizeCode } from "../../services/streamResolution/sources";
 import { requireMovieDetails, searchMovieMetadata } from "../../services/metadata/movieSearch";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
+
+/**
+ * 每条搜索结果单独显示，不再按番号合并不同来源；只去掉同一来源、同一编号的完全重复项。
+ */
+function separateCandidates(rows: readonly MovieCandidate[]): MovieSearchGroup[] {
+  const seen = new Set<string>();
+  const groups: MovieSearchGroup[] = [];
+  for (const candidate of rows) {
+    const key = JSON.stringify([candidate.provider, candidate.id]);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    groups.push({ key, candidate, candidates: [candidate] });
+  }
+  return groups;
+}
 
 export function MetaTubeSearch({
   initialQuery = "",
@@ -50,7 +64,6 @@ export function MetaTubeSearch({
   const searching = useRef(false);
   const revision = useRef(0);
   const cancelled = useRef(false);
-  const [merging, setMerging] = useState(false);
   useEffect(
     () => () => {
       revision.current++;
@@ -92,9 +105,7 @@ export function MetaTubeSearch({
         allowResourceLookup,
       );
       if (current !== revision.current || cancelled.current) return;
-      setMerging(true);
-      const result = await mergeMovieCandidates(found.candidates);
-      if (current !== revision.current || cancelled.current) return;
+      const result = separateCandidates(found.candidates);
       if (found.details) remember(found.candidates[0]!, found.details);
       setError(found.error);
       setResourceCode(found.resourceCode);
@@ -108,7 +119,6 @@ export function MetaTubeSearch({
       searching.current = false;
       if (current === revision.current) {
         operation.current = null;
-        setMerging(false);
         setPending(false);
       }
     }
@@ -188,17 +198,17 @@ export function MetaTubeSearch({
             }
           }}
           style={{ flex: 1 }}
-          disabled={pending || state.querying || merging}
+          disabled={pending || state.querying}
         />
         <Button
-          loading={((pending || state.querying) && !opening) || merging}
-          aria-busy={((pending || state.querying) && !opening) || merging}
-          disabled={pending || state.querying || merging || !query.trim() || state.busy}
+          loading={(pending || state.querying) && !opening}
+          aria-busy={(pending || state.querying) && !opening}
+          disabled={pending || state.querying || !query.trim() || state.busy}
           onClick={() => void search()}
         >
           搜索
         </Button>
-        {(pending || state.querying || merging) && (
+        {(pending || state.querying) && (
           <Button
             variant="default"
             onClick={() => {
@@ -216,19 +226,18 @@ export function MetaTubeSearch({
           {error}
         </Alert>
       )}
-      {(pending || state.querying || merging) && (
+      {(pending || state.querying) && (
         <Text size="sm" component="output" aria-live="polite">
           {state.status === "starting"
             ? "正在准备资料服务…"
             : opening
               ? "正在获取影片详情…"
-              : "正在搜索并合并相同结果…"}
+              : "正在搜索…"}
         </Text>
       )}
-      {!pending && !state.querying && !merging && searched && !results.length && (
-        <Text size="sm">
-          {error ? "影片资料未能加载，请重试。" : "没有找到匹配结果，可修改番号或片名后重试。"}
-        </Text>
+      {/* 出错时只显示上方的错误提示，不再重复一行说明。 */}
+      {!pending && !state.querying && searched && !results.length && !error && (
+        <Text size="sm">没有找到匹配结果。</Text>
       )}
       {!pending && resourceCode && onLookupResources && (
         <Group>
@@ -246,7 +255,7 @@ export function MetaTubeSearch({
       )}
       {searched && !!results.length && (
         <Text size="xs" c="dimmed">
-          {results.length} 部影片
+          {results.length} 条结果
         </Text>
       )}
       {results.slice((page - 1) * 10, page * 10).map((group) => {
@@ -258,7 +267,7 @@ export function MetaTubeSearch({
               type="button"
               className="metadata-result"
               aria-label={`打开详情 ${item.code || "未提供番号"} ${item.title || "未提供标题"}`}
-              aria-disabled={pending || state.querying || state.busy || merging}
+              aria-disabled={pending || state.querying || state.busy}
               aria-busy={opening === group}
               data-loading={opening === group || undefined}
               onClick={(event) => void select(group, event.currentTarget)}
@@ -267,6 +276,11 @@ export function MetaTubeSearch({
                 <Text span display="block" size="sm" fw={600} style={{ overflowWrap: "anywhere" }}>
                   {item.code || "未提供番号"} · {item.title || "未提供标题"}
                 </Text>
+                {item.provider && (
+                  <Text span display="block" size="xs" c="dimmed">
+                    {item.provider}
+                  </Text>
+                )}
               </span>
               {opening === group && (
                 <Loader size="sm" aria-hidden="true" style={{ flexShrink: 0 }} />
@@ -276,7 +290,7 @@ export function MetaTubeSearch({
               <Button
                 size="compact-xs"
                 variant="light"
-                disabled={pending || state.querying || state.busy || merging || saving !== null}
+                disabled={pending || state.querying || state.busy || saving !== null}
                 loading={saving === item}
                 onClick={() => {
                   if (saving) return;

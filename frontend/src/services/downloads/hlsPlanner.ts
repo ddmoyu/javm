@@ -1,4 +1,5 @@
 import {
+  applySegmentRanges,
   HlsPlanError,
   hlsFingerprint,
   planTrack,
@@ -39,6 +40,11 @@ export interface HlsPlannerTasks {
   };
   /** 本地播放列表引用的文件与总时长，供合并前核对与合并后校验。 */
   files: { input: { text: string }; output: { files: string[]; duration: number } };
+  /** 为伪装成图片的分片加上字节范围，跳过前面的图片头。 */
+  ranges: {
+    input: { text: string; ranges: Record<string, { offset: number; length: number }> };
+    output: string;
+  };
 }
 type Operation = keyof HlsPlannerTasks;
 
@@ -97,6 +103,10 @@ export function createPlannerCore() {
         );
       }
       return { config: lines.join("\n"), pending } as HlsPlannerTasks[K]["output"];
+    }
+    if (operation === "ranges") {
+      const { text, ranges } = input as HlsPlannerTasks["ranges"]["input"];
+      return applySegmentRanges(text, ranges) as HlsPlannerTasks[K]["output"];
     }
     const { text } = input as HlsPlannerTasks["files"]["input"];
     return {
