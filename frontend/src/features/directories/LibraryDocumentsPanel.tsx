@@ -7,31 +7,20 @@ export function LibraryDocumentsPanel({
   workId,
 }: {
   service: LibraryDocumentsService;
-  workId?: string;
+  workId: string;
 }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const [opened, setOpened] = useState(false),
     [choosing, setChoosing] = useState(false),
     [error, setError] = useState("");
-  const start = async (kind: "export" | "import") => {
+  const start = async () => {
     setChoosing(true);
     setError("");
     try {
-      if (kind === "export") {
-        const root = await os.showFolderDialog("导出 NFO 的位置");
-        if (root) {
-          setOpened(true);
-          await service.exportNfo(root, workId);
-        }
-      } else {
-        const paths = await os.showOpenDialog("导入 STRM 网络资源", {
-          multiSelections: true,
-          filters: [{ name: "STRM", extensions: ["strm"] }],
-        });
-        if (paths.length) {
-          setOpened(true);
-          await service.importStreams(paths);
-        }
+      const root = await os.showFolderDialog("导出 NFO 的位置");
+      if (root) {
+        setOpened(true);
+        await service.exportNfo(root, workId);
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "资料文件操作失败。");
@@ -47,20 +36,10 @@ export function LibraryDocumentsPanel({
           size="xs"
           variant="default"
           disabled={state.running || choosing}
-          onClick={() => void start("export")}
+          onClick={() => void start()}
         >
-          {workId ? "导出 NFO" : "批量导出 NFO"}
+          导出 NFO
         </Button>
-        {!workId && (
-          <Button
-            size="xs"
-            variant="default"
-            disabled={state.running || choosing}
-            onClick={() => void start("import")}
-          >
-            导入 STRM
-          </Button>
-        )}
         {(state.running || state.processed > 0) && (
           <Button size="xs" variant="subtle" onClick={() => setOpened(true)}>
             资料任务 {state.processed}
@@ -84,8 +63,7 @@ export function LibraryDocumentsPanel({
             </Text>
           )}
           <Text size="xs" c="dimmed">
-            导出保存在独立的新目录，停止后保留已导出的文件。导入 STRM
-            只读取网络地址，不访问或下载视频。
+            导出保存在独立的新目录，停止后保留已导出的文件。
           </Text>
           {(error || state.error) && (
             <Alert color="red" role="alert">

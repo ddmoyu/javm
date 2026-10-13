@@ -8,7 +8,6 @@ import {
   Menu,
   Modal,
   Paper,
-  Progress,
   Stack,
   Table,
   Text,
@@ -17,24 +16,15 @@ import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import { ObjectMenu, objectMenuKey } from "../../components/ObjectMenu";
-import type { MediaDirectory, ScanState } from "../../contracts/library";
+import type { MediaDirectory } from "../../contracts/library";
 import { libraryError } from "../../services/library/LibraryService";
 import { openMediaDirectory } from "../../platform/neutralino/directoryPicker";
 import { LibraryMaintenanceModal } from "./LibraryMaintenanceModal";
 import type { MaintenanceMode } from "../../contracts/maintenance";
 import { DirectoryWatchControl } from "./DirectoryWatchControl";
-import { LibraryDocumentsPanel } from "./LibraryDocumentsPanel";
 import { FileOrganizationPanel } from "./FileOrganizationPanel";
+import { DirectoryScanStatus, scanLabels } from "./DirectoryScanStatus";
 
-const labels: Record<ScanState, string> = {
-  idle: "待扫描",
-  scanning: "扫描中",
-  completed: "已完成",
-  partial: "部分完成",
-  failed: "扫描失败",
-  cancelled: "已停止",
-  interrupted: "扫描中断",
-};
 export function Directories() {
   const { add, library, libraryState: state, notice, go } = useWorkspace();
   const [pending, setPending] = useState(false);
@@ -42,14 +32,14 @@ export function Directories() {
   const [removing, setRemoving] = useState<MediaDirectory | null>(null);
   const [removeError, setRemoveError] = useState("");
   const [maintenanceOpened, setMaintenanceOpened] = useState(false);
-  const openMaintenance = (mode: MaintenanceMode) => {
-    if (!library.maintenance) return;
-    setMaintenanceOpened(true);
-    void library.maintenance.scan(mode);
-  };
   const scanning = state.scan?.state === "scanning";
   const scan = state.scan;
   const disabled = scanning || pending || !state.available || !state.ready;
+  const openMaintenance = (mode: MaintenanceMode) => {
+    if (disabled || !library.maintenance) return;
+    setMaintenanceOpened(true);
+    void library.maintenance.scan(mode);
+  };
   const perform = async (action: () => Promise<void>) => {
     if (pendingRef.current) return;
     pendingRef.current = true;
@@ -84,9 +74,9 @@ export function Directories() {
     });
   };
   return (
-    <Stack gap="md">
-      <Group justify="space-between">
-        <Group gap="sm" align="flex-end">
+    <Stack gap="sm">
+      <Group justify="space-between" gap="sm">
+        <Group gap="xs">
           <Button
             size="xs"
             leftSection={<Icon name="plus" size={15} />}
@@ -95,57 +85,60 @@ export function Directories() {
           >
             添加目录
           </Button>
-          <Button
+          <ActionIcon
             variant="default"
-            size="xs"
-            leftSection={<Icon name="refresh" size={15} />}
+            size="input-xs"
+            aria-label="刷新列表"
+            title="刷新列表"
             loading={pending}
             onClick={() => void perform(() => library.refresh())}
           >
-            刷新列表
-          </Button>
-          <Button
-            variant="default"
-            size="xs"
-            leftSection={<Icon name="copy" size={15} />}
-            disabled={disabled || !library.maintenance}
-            onClick={() => openMaintenance("duplicates")}
-          >
-            重复视频
-          </Button>
-          <Button
-            variant="default"
-            size="xs"
-            leftSection={<Icon name="filter" size={15} />}
-            disabled={disabled || !library.maintenance}
-            onClick={() => openMaintenance("ads")}
-          >
-            广告视频
-          </Button>
-          <Button
-            variant="default"
-            size="xs"
-            disabled={disabled || !library.maintenance}
-            onClick={() => openMaintenance("health")}
-          >
-            健康检查
-          </Button>
-          <Button
-            variant="default"
-            size="xs"
-            disabled={disabled || !library.maintenance}
-            onClick={() => openMaintenance("all")}
-          >
-            清理资源
-          </Button>
+            <Icon name="refresh" size={15} />
+          </ActionIcon>
+          <Menu position="bottom-start">
+            <Menu.Target>
+              <Button
+                variant="default"
+                size="xs"
+                rightSection={<Icon name="down" size={13} />}
+                disabled={disabled || !library.maintenance}
+              >
+                目录工具
+              </Button>
+            </Menu.Target>
+            <Menu.Dropdown>
+              <Menu.Item
+                leftSection={<Icon name="copy" size={16} />}
+                disabled={disabled}
+                onClick={() => openMaintenance("duplicates")}
+              >
+                重复视频
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<Icon name="filter" size={16} />}
+                disabled={disabled}
+                onClick={() => openMaintenance("ads")}
+              >
+                广告视频
+              </Menu.Item>
+              <Menu.Item
+                leftSection={<Icon name="shield" size={16} />}
+                disabled={disabled}
+                onClick={() => openMaintenance("health")}
+              >
+                健康检查
+              </Menu.Item>
+            </Menu.Dropdown>
+          </Menu>
+          {library.organization && <FileOrganizationPanel service={library.organization} />}
         </Group>
-        <Text size="sm" c="dimmed">
-          {state.directories.length} 个目录 · {state.total} 部影片
-        </Text>
+        <Group gap="md">
+          {library.watcher && <DirectoryWatchControl service={library.watcher} />}
+          <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+            {state.directories.length} 个目录 · {state.total} 部影片
+          </Text>
+        </Group>
       </Group>
-      {library.watcher && <DirectoryWatchControl service={library.watcher} />}
-      {library.documents && <LibraryDocumentsPanel service={library.documents} />}
-      {library.organization && <FileOrganizationPanel service={library.organization} />}
       {state.error && (
         <Alert color="red" title="媒体库连接失败" role="alert">
           {state.error}
@@ -157,88 +150,12 @@ export function Directories() {
         </Text>
       )}
       {scan && (
-        <Paper withBorder p="md">
-          <Stack gap="sm">
-            <Group justify="space-between">
-              <Text component="output" fw={600} aria-live="polite">
-                {labels[scan.state]}
-              </Text>
-              {scanning ? (
-                <Button
-                  size="compact-xs"
-                  variant="default"
-                  loading={pending}
-                  onClick={() => void perform(() => library.cancel())}
-                >
-                  停止扫描
-                </Button>
-              ) : (
-                <Button size="compact-xs" variant="subtle" onClick={() => go("library")}>
-                  查看片库
-                </Button>
-              )}
-            </Group>
-            {scanning && (
-              <Progress
-                value={scan.discovered ? (scan.processed / scan.discovered) * 100 : 0}
-                animated
-                aria-label="当前已发现文件的处理进度"
-              />
-            )}
-            <Text size="sm">
-              已处理 {scan.processed} / 已发现 {scan.discovered} · 新增或更新 {scan.imported} ·
-              视频未变化 {scan.unchanged} · 非视频 {scan.skipped}
-            </Text>
-            {scanning && (
-              <Text size="xs" c="dimmed">
-                发现数量会随扫描增加，停止后保留已导入的影片。
-              </Text>
-            )}
-            {scan.current && (
-              <Text size="xs" c="dimmed" truncate title={scan.current}>
-                {scan.current}
-              </Text>
-            )}
-            {scan.warnings > 0 && (
-              <Alert color="yellow" title={`${scan.warnings} 项兼容提示`}>
-                <Stack gap={5} mah={160} style={{ overflowY: "auto" }}>
-                  {scan.notices.map((item, index) => (
-                    <Text
-                      key={`${item.path}-${index}`}
-                      size="xs"
-                      style={{ overflowWrap: "anywhere" }}
-                    >
-                      {item.path}：{item.message}
-                    </Text>
-                  ))}
-                </Stack>
-                <Text size="xs" mt="xs">
-                  原始 NFO 保持原样，已读取的内容保存了快照。
-                </Text>
-              </Alert>
-            )}
-            {scan.errors > 0 && (
-              <Alert color="yellow" title={`${scan.errors} 项需要处理，已有资料已保留`}>
-                <Stack gap={5} mah={200} style={{ overflow: "auto" }}>
-                  {scan.issues.map((issue, index) => (
-                    <Text
-                      key={`${index}:${issue.path}`}
-                      size="xs"
-                      style={{ overflowWrap: "anywhere" }}
-                    >
-                      {issue.path}：{issue.message}
-                    </Text>
-                  ))}
-                </Stack>
-                {scan.errors > scan.issues.length && (
-                  <Text size="xs" mt="xs">
-                    显示前 {scan.issues.length} 项。处理后可重新扫描。
-                  </Text>
-                )}
-              </Alert>
-            )}
-          </Stack>
-        </Paper>
+        <DirectoryScanStatus
+          scan={scan}
+          pending={pending}
+          onCancel={() => void perform(() => library.cancel())}
+          onOpenLibrary={() => go("library")}
+        />
       )}
       {state.directories.length > 0 && (
         <Paper withBorder style={{ overflow: "hidden" }}>
@@ -307,7 +224,7 @@ export function Directories() {
                                 : "gray"
                           }
                         >
-                          {labels[directory.state]}
+                          {scanLabels[directory.state]}
                         </Badge>
                         <Text
                           size="xs"
