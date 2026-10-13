@@ -1,13 +1,39 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
+import { runInNewContext } from "node:vm";
 import {
   createPosixHiddenWebview,
   posixHiddenConfig,
+  posixCaptureScript,
   readPosixCandidates,
 } from "../frontend/src/platform/neutralino/posixHiddenWebview";
 
 vi.mock("@neutralinojs/lib", () => ({ filesystem: {}, os: {} }));
 vi.mock("../frontend/src/platform/neutralino/process", () => ({ runNativeProcess: vi.fn() }));
 afterEach(() => vi.unstubAllGlobals());
+
+it("候选通过 WebKit 消息通道回传，不依赖网页 WebSocket 或原生认证全局量", () => {
+  let tick: (() => void) | undefined;
+  const postMessage = vi.fn();
+  runInNewContext(posixCaptureScript({ provider: "webview", url: "https://safe.example" }), {
+    __javmStreamCapture: {
+      read: () => ({ urls: ["https://safe.example/list.m3u8"], pageUrl: "https://safe.example" }),
+    },
+    webkit: { messageHandlers: { javmCapture: { postMessage } } },
+    navigator: { userAgent: "safe-browser" },
+    setInterval: (callback: () => void) => {
+      tick = callback;
+      return 1;
+    },
+    clearInterval: vi.fn(),
+    addEventListener: vi.fn(),
+  });
+  tick!();
+  expect(JSON.parse(postMessage.mock.calls[0]![0])).toEqual({
+    urls: ["https://safe.example/list.m3u8"],
+    pageUrl: "https://safe.example",
+    userAgent: "safe-browser",
+  });
+});
 
 it("隐藏页面只允许官方事件与退出，强制独立会话且没有原生扩展", () => {
   const config = posixHiddenConfig("https://safe.example/forest");
@@ -18,6 +44,7 @@ it("隐藏页面只允许官方事件与退出，强制独立会话且没有原�
     skipTaskbar: true,
     webviewArgs: "--javm-isolated",
     newWindowPolicy: "custom",
+    injectGlobals: false,
   });
   expect(() => posixHiddenConfig("file:///private/sample")).toThrow();
 });

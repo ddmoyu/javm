@@ -12,6 +12,7 @@ import { root, target, run } from "./third-party/posix/common.mjs";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true", "桌面验证仅在隔离的 CI 桌面运行");
 assert.ok(["linux", "darwin"].includes(process.platform));
+await mkdir(path.join(root, ".tmp"), { recursive: true });
 const directory = await mkdtemp(path.join(root, ".tmp/safe-desktop-"));
 const application = path.join(directory, "安全 ' 空格");
 await mkdir(path.join(application, "bin/tools"), { recursive: true });
@@ -60,12 +61,17 @@ const http = createServer((request, response) => {
     captures++;
     cookieReused ||= (request.headers.cookie ?? "").includes("SAFE_SESSION");
     response.setHeader("Content-Type", "text/html");
+    response.setHeader("Content-Security-Policy", "default-src 'self'; connect-src 'self'");
     response.setHeader("Set-Cookie", "SAFE_SESSION=fixture; Path=/; SameSite=Lax");
     response.end('<!doctype html><title>Safe forest page</title><iframe src="/frame"></iframe>');
     return;
   }
   if (name === "frame") {
     response.setHeader("Content-Type", "text/html");
+    response.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; connect-src 'self'",
+    );
     response.end(
       '<!doctype html><title>Safe frame</title><script>void fetch(["/play","list.m3u8"].join(""))</script>',
     );

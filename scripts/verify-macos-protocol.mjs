@@ -13,7 +13,7 @@ const directory = await mkdtemp(path.join(tmpdir(), "javm-safe-mac-links-"));
 const bundle = path.join(directory, "安全 ' 空格/JAVM.app");
 const payload = path.join(bundle, "Contents/MacOS");
 const receipts = path.join(directory, "receipts");
-await mkdir(path.join(payload, ".tmp"), { recursive: true });
+await mkdir(payload, { recursive: true });
 await mkdir(receipts);
 await copyFile(path.join(root, "bin/javm_launcher"), path.join(payload, "JAVM"));
 await copyFile(path.join(root, "bin", desktopHostFile()), path.join(payload, "JAVM-host"));

@@ -8,7 +8,7 @@
 
 Neutralino 6.10.0 的全局脚本直接拼接单引号字符串，安装路径含单引号时无法初始化前端。POSIX 配方从锁定源码与 SHA 构建，使用 JSON 序列化替换这些拼接，并保留上游提交和补丁标识。该缺陷已用隔离 cloud 宿主和安全 Unicode 路径复现。
 
-隐藏取流复用这个官方宿主和官方广播事件。专用 `--javm-isolated` 模式采用 WebKitGTK ephemeral view 或 WKWebsiteDataStore nonPersistentDataStore，不显示窗口、不复用应用 Cookie；页面只有 `app.broadcast` 和 `app.exit` 权限，没有扩展及文件/进程 API。页面消息视为不可信数据，候选、长度、协议和公开请求头有硬限制。运行受 20 秒期限和既有进程监督约束。macOS 13 无独立代理接口时明确失败，不隐式改变用户的代理选择。
+隐藏取流复用这个官方宿主和官方广播事件。专用 `--javm-isolated` 模式采用 WebKitGTK ephemeral view 或 WKWebsiteDataStore nonPersistentDataStore，不显示窗口、不复用应用 Cookie；页面不注入认证全局量或官方客户端，没有扩展及文件/进程 API。专用 WebKit 消息通道只能向既有官方事件连接转发候选，不接受原生方法名；最多 128 条、每条 160 KB。这样不依赖网页 CSP 允许连接本机 WebSocket，也不新增业务服务器或数据库协议。页面消息视为不可信数据，候选、长度、协议和公开请求头继续受限。运行受 20 秒期限和既有进程监督约束。macOS 13 无独立代理接口时明确失败，不隐式改变用户的代理选择。
 
 macOS APP 入口负责接收 LaunchServices 的 URL 事件，并通过新官方宿主的现有单实例队列转交。正常再次打开 APP 同样唤回主窗口；Command-Q 通过官方菜单事件进入任务异步收尾。Linux 使用 GIO 的当前用户协议关联，保持既有 Windows 注册表实现。
 

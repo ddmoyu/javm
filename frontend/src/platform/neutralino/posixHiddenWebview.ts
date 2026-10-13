@@ -13,8 +13,9 @@ import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { runNativeProcess } from "./process";
 import { executableExists } from "./toolPaths";
 
-// Only the isolated host exposes these two official methods to the remote page.
-// It has no extensions, filesystem/process API, application cookies or saved profile.
+// The isolated page receives no auth globals or official client library. Its
+// WebKit message channel emits bounded candidates through the host's existing
+// official event channel, without adding a business server or an extension.
 export function posixHiddenConfig(url: string) {
   return {
     applicationId: "net.ddmoyu.javm.resolver",
@@ -39,7 +40,7 @@ export function posixHiddenConfig(url: string) {
         skipTaskbar: true,
         useSavedState: false,
         enableInspector: false,
-        injectGlobals: true,
+        injectGlobals: false,
         injectClientLibrary: false,
         injectScript: "/capture.js",
         exitProcessOnClose: true,
@@ -52,19 +53,19 @@ export function posixHiddenConfig(url: string) {
 
 export function posixCaptureScript(request: ResolutionRequest) {
   const rule = JSON.stringify(request.failRule ?? null);
-  return `${installCapture}\n(()=>{
-    const token=NL_TOKEN, connect=NL_CONNECT_TOKEN, port=NL_PORT;
-    const socket=new WebSocket('ws://127.0.0.1:'+port+'/?connectToken='+encodeURIComponent(connect));
-    const send=(method,data)=>{if(socket.readyState===1)socket.send(JSON.stringify({id:crypto.randomUUID(),method,accessToken:token,data}))};
+  return `${installCapture};\n(()=>{
+    const channel=globalThis.webkit?.messageHandlers?.javmCapture;
+    if(!channel)return;
     const started=Date.now(); let count=0;
     const timer=setInterval(()=>{
       if(Date.now()-started>19000||count++>80){clearInterval(timer);return}
       try {
         const result=globalThis.__javmStreamCapture.read(${rule},false);
-        send('app.broadcast',{event:'javmResolutionCandidate',data:{...result,userAgent:navigator.userAgent.slice(0,1024)}});
+        const text=JSON.stringify({...result,userAgent:navigator.userAgent.slice(0,1024)});
+        if(text.length<=160000)channel.postMessage(text);
       } catch {}
     },250);
-    addEventListener('pagehide',()=>{clearInterval(timer);socket.close()},{once:true});
+    addEventListener('pagehide',()=>{clearInterval(timer)},{once:true});
   })();`;
 }
 
