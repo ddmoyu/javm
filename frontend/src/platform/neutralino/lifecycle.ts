@@ -22,7 +22,31 @@ function setTrayMenu() {
   });
 }
 
+function setMacMenu() {
+  if (window.NL_OS !== "Darwin") return;
+  // Cocoa key equivalents use Command by default. Route Command-Q through the
+  // same asynchronous task shutdown as the tray's explicit Quit action.
+  void nativeWindow
+    .setMainMenu([
+      {
+        text: "JAVM",
+        menuItems: [
+          { id: "javm-show", text: "显示 JAVM", isDisabled: exiting },
+          { text: "-" },
+          {
+            id: "javm-quit",
+            text: exiting ? "正在退出…" : "退出 JAVM",
+            shortcut: "q",
+            isDisabled: exiting,
+          },
+        ],
+      },
+    ])
+    .catch(() => logEvent("warn", "app", "menu_update_failed", "应用菜单更新失败"));
+}
+
 function refreshTrayMenu() {
+  setMacMenu();
   if (!trayReady) return;
   void setTrayMenu().catch(() => {
     logEvent("warn", "app", "tray_update_failed", "托盘状态更新失败");
@@ -90,6 +114,15 @@ export function initializeLifecycle(
     if (event.detail.id === "show") void nativeWindow.show().then(() => nativeWindow.focus());
     if (event.detail.id === "exit") void exitApplication().catch(report);
   });
+  if (window.NL_OS === "Darwin") {
+    void events.on("mainMenuItemClicked", (event: CustomEvent<{ id: string }>) => {
+      if (exiting) return;
+      if (event.detail.id === "javm-show")
+        void nativeWindow.show().then(() => nativeWindow.focus());
+      if (event.detail.id === "javm-quit") void exitApplication().catch(report);
+    });
+    setMacMenu();
+  }
   traySetup = setTrayMenu()
     .then(() => {
       trayReady = true;

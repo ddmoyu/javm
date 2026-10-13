@@ -80,7 +80,7 @@ pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部�
 
 适用于 Windows 10/11 x64；满足上述系统前提后，本地片库、扫描和播放可离线使用。网络下载、MetaTube 在线资料和 AI 服务仍需要网络，AI 需要自行配置接口。个人数据仍保存在当前 Windows 用户的数据目录，不随软件包分发。
 
-Alpha 发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS、Linux 与其他架构尚未完成适配，具体缺口与实施安排见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md) 和 [适配计划](docs/CROSS_PLATFORM_PLAN.md)。
+Alpha 发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS 13+（Apple Silicon / Intel）和 Ubuntu 24.04 x64 的开发构建已接入 APP/DMG、AppImage/DEB 与便携包，完整桌面和安装验证仍在推进；正式可下载平台以 Release 实际附件为准。当前验证状态与构建入口见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md) 和 [适配计划](docs/CROSS_PLATFORM_PLAN.md)。
 
 FFmpeg 采用参考老版 `ddmoyu/ffmepg` 裁剪配置的 **8.0.1 精简构建**，保留 JPEG 抽帧、MP4 无损合并与进度输出，关闭网络、硬件加速与视频转码。媒体轨道和时长检查复用内置 MediaInfo，不再构建或分发 ffprobe。打包会校验构建凭据、二进制哈希、体积和实际能力，拒绝混入完整版。来源与复现方式见 [精简 FFmpeg](docs/decisions/0013-lightweight-ffmpeg.md)。
 
@@ -95,7 +95,7 @@ pnpm native:build
 & .\build\native\windows-msvc\bin\javm_database.exe --version
 ```
 
-脚本通过 `vswhere -prerelease` 发现 Visual Studio，并使用 `vcvars64.bat` 初始化 MSVC 环境。通用构建入口为 `cmake --preset native` 与 `cmake --build --preset native`；macOS/Linux 尚未实测。
+脚本通过 `vswhere -prerelease` 发现 Visual Studio，并使用 `vcvars64.bat` 初始化 MSVC 环境。通用构建入口为 `cmake --preset native` 与 `cmake --build --preset native`；macOS 双架构和 Linux x64 的核心矩阵已通过，完整桌面与安装验证单独记录。
 
 `javm_database --version` 只验证 C++ 与 SQLite 链接，不创建数据库。桌面已启用官方 Extension；新媒体库 `library.sqlite3`（schema 1）与下载库 `downloads-v1.sqlite3` 独立保存。启动发现 0.5.3 旧库时显示引导；确认后备份新旧库、转换作品与资源、归档原始记录并校验，成功后清理旧库，保留恢复副本和完成记录。新版已有资料优先，失败或取消保留原数据；详见 [旧库导入](docs/decisions/0018-legacy-database-import.md)。不兼容开发期媒体 schema，未知文件不删除重建。扫描读取 NFO；刮削可以安全更新规范 NFO 并保留原文件备份。构建同时准备 MediaInfo.dll 和依赖许可证，发布时须携带它们。
 

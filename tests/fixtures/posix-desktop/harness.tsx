@@ -237,7 +237,9 @@ async function run() {
     );
     await nativeWindow.show();
     results.push("Tray close keeps downloads active and the window can reopen");
-    await exitApplication();
+    if (window.NL_OS === "Darwin")
+      await events.dispatch("mainMenuItemClicked", { id: "javm-quit" });
+    else await exitApplication();
   }
 }
 void events.on("ready", () => {

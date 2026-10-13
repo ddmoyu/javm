@@ -23,6 +23,7 @@
     "window.unminimize",
     "window.isMinimized",
     "window.setTitle",
+    "window.setMainMenu",
     "window.move",
     "window.center",
     "window.getPosition",

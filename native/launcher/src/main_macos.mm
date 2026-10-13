@@ -79,6 +79,12 @@
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication*)sender {
     (void)sender; return NO;
 }
+- (BOOL)applicationShouldHandleReopen:(NSApplication*)sender hasVisibleWindows:(BOOL)visible {
+    (void)sender; (void)visible;
+    if(self.started && !self.stopping && self.primary.running)
+        [self launch:@[@"--window-hidden"] secondary:YES];
+    return YES;
+}
 @end
 
 int javmMacApplication(int argc, char* argv[], const std::string& host) {

@@ -56,6 +56,9 @@ jobs:
       - name: 验证 Linux 链接关联
         if: runner.os == 'Linux'
         run: node scripts/verify-linux-protocol.mjs
+      - name: 验证 macOS 系统链接事件
+        if: runner.os == 'macOS'
+        run: node scripts/verify-macos-protocol.mjs
       - name: 验证 Linux 安全桌面与媒体业务
         if: runner.os == 'Linux'
         run: dbus-run-session -- xvfb-run -a node scripts/verify-posix-desktop.mjs

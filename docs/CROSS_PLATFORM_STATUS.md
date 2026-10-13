@@ -1,44 +1,38 @@
 # 跨平台支持核对
 
-核对日期：2026-10-13。依据当前 `dev` 源码、构建脚本及实际 GitHub Release。跨平台核心已在 Windows 上编译，并使用模拟宿主和真实官方宿主验证；没有在 macOS、Linux 或 ARM64 设备上编译运行。
+更新：2026-10-13。基础模块四平台验证已通过，完整桌面和安装包的目标系统验收正在推进；尚未发布 macOS / Linux 的 JAVM Alpha。
 
-## 当前可交付范围
+| 范围 | 实现 | 验证证据 |
+| --- | --- | --- |
+| Windows x64 Alpha 4 | Setup、Portable、简洁更新日志和下载表格 | [已发布版本](https://github.com/ddmoyu/javm/releases/tag/v1.0.5-alpha.4) |
+| 原生基础、官方 Extension、媒体文件层 | Windows、macOS 双架构、Linux x64 | [四平台核心 CI 全部通过](https://github.com/ddmoyu/javm/actions/runs/38375841919) |
+| POSIX 组件 | 精确配方、独立 Release、下载回读校验 | [组件与完整构建验证](https://github.com/ddmoyu/javm/actions/runs/38385520758)；该轮完整构建发现的 curl 导入作用域问题已修复，不能视为桌面成功 |
+| 系统凭据、网络与链接 | Keychain、Secret Service、系统协议关联及 macOS Apple Event 桥接 | 新增目标系统集成夹具，待完整 CI 验收 |
+| 桌面业务 | 工具下载、播放传输、隐藏取流、更新附件、托盘与退出 | 新增安全 GUI 夹具，待目标 WebKit 实际运行 |
+| 安装和发布汇总 | APP/DMG、AppImage/DEB、便携包及跨平台下载表格 | 附件合并边界用例通过；实际安装与桌面验证未全部完成 |
 
-当前公开的 [v1.0.5-alpha.4](https://github.com/ddmoyu/javm/releases/tag/v1.0.5-alpha.4) 已完成 Windows x64 Setup、便携包和下载表格发布；[Actions](https://github.com/ddmoyu/javm/actions/runs/38341935243) 构建与安装验证成功，资产已回读。后续 macOS / Linux 适配见[实施计划](CROSS_PLATFORM_PLAN.md)，本地开发版本为 `1.0.5-alpha.9`；独立核心、工具监督与媒体探测模块已实现，完整应用移植仍在推进。
+## 已消除的主要平台限制
 
-React、Mantine、SQLite、FFmpeg、MediaInfo、curl、MetaTube 和 Neutralino 架构可以复用，但 JAVM 的平台适配尚未完成。不能仅添加 Actions 系统矩阵就宣称支持 macOS 或 Linux。
+- 数据和缓存使用各系统用户目录；Windows 保留原 LocalAppData 布局。POSIX 路径保留大小写、反斜线、Unicode 与空格。
+- 原生通信、数据库拥有者锁、文件身份、排序、NFO 编码、原子替换和 MediaInfo 动态库加载已提供平台实现。
+- 媒体工具使用对应架构的无后缀程序，检查执行权限；POSIX 子进程通过已有官方进程 API 启动受管监督器。
+- 下载、资料、刮削和 HTTP 解析入口已接入桌面能力判断；外部播放器支持 POSIX 程序与 macOS APP；更新服务按操作系统和架构选择安装包或便携包。
+- 官方 Neutralino 6.10.0 的 POSIX 构建修复特殊路径的全局变量转义，并增加隐藏取流专用的临时 WebKit 会话。版本、源码 SHA、补丁和附件哈希均进入组件记录。
 
-| 目标                        | 当前状态                                                | 拟交付形式                                              |
-| --------------------------- | ------------------------------------------------------- | ------------------------------------------------------- |
-| Windows x64                 | Alpha 4 安装包和便携包均已发布，CI 及发布资产回读完成   | Setup EXE + Portable ZIP                                |
-| macOS Apple Silicon / Intel | 已有独立核心构建与 curl 通信，目标系统及完整业务未验收  | 完成适配后再提供 APP / DMG                              |
-| Linux x64                   | 已有独立核心构建，媒体构建仍受限，目标系统未验收        | 先验证目标发行版，再选择 AppImage / DEB；RPM 后续按需求 |
-| Windows 原生 ARM64          | 现有配方与附件均为 x64，没有 ARM64 完整组件链及运行证据 | 需独立构建、验证和标记；x64 仿真不等于原生 ARM64 支持   |
-| Android                     | 不在当前桌面重构范围，没有移动端外壳与原生适配          | 不能把参考图中的 APK 入口直接加入下载表格               |
+## 仍须通过的交付门槛
 
-## 缺口与源码证据
+1. 三个 POSIX 目标完整编译，并通过系统密钥库、证书与代理、系统 URL 关联验证。
+2. 真实 WebKit 运行安全界面、下载与合并、MP4/HLS、Range、隐藏取流及取消；关窗继续下载，显式退出不遗留受管任务。
+3. 安装包、便携包启动及覆盖安装成功，卸载保留用户数据；所有验证绑定同一源码提交和附件哈希。
+4. 后续已授权版本的发布流程同时得到四架构结果，下载表格只包含真实附件。
 
-| 优先级 | 缺口                                 | 当前证据                                                                                                                             | 所需工作                                                                                                                  |
-| ------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| P0     | 原生核心的目标系统验证待完成         | `JAVM_CORE_ONLY`、curl WebSocket、POSIX 数据库锁已实现；三平台启动命令在独立官方宿主夹具中；Windows 两种通信已验证                   | 在 macOS / Linux 验证构建、文件锁、证书和宿主生命周期；完整媒体与能力开关就绪后再接入正式应用配置                         |
-| P0     | 完整媒体服务不能在非 Windows 构建    | `native/probe` 已隔离动态加载、Unicode 和工作进程；`native/media/CMakeLists.txt` 仍受限，`common.cpp`、NFO 与旧库导入仍有 Win32 调用 | 验收 POSIX 探测；继续适配 NFO 编码、原子替换、文件身份与锁、符号链接和大小写语义，再接入完整扫描服务                      |
-| P0     | 目标 TLS 与代理行为待验证            | `native/http/CMakeLists.txt` 已区分 Schannel、OpenSSL、macOS SecTrust；Windows 上 HTTP 回环、并发、取消及超时验证通过                | 在各目标系统验证 HTTPS、代理、证书库及安装后运行库装载，不能用 Windows Schannel 结果替代                                  |
-| P0     | POSIX 工具监督器待目标系统验收       | `toolPaths.ts` 已适配名称 / 路径 / 权限；`native/process` 提供进程组和宿主监护，`native/probe` 已复用；手动 CI 用例已准备            | 在 macOS / Linux 验证官方进程 API、动态库和回收；继续适配 MetaTube 端口和平台组件，完整业务仍受限                         |
-| P0     | 业务启动被 Windows 条件限制          | `downloads.ts`、`metadataServices.ts`、`scraping.ts`、`streamResolution.ts` 检查 `NL_OS === "Windows"`                               | 完成底层实现后按能力启用服务；不可只移除判断，否则会触发尚未移植的实现                                                    |
-| P0     | 密钥保护仍仅适配 Windows             | 四处目录和缓存调用已接入统一系统路径，Windows 保留原位置；`metadataHttp.ts` 仍用 DPAPI                                               | 为 macOS / Linux 选定系统密钥存储并验证，核对数据库与其他服务的数据位置；不能以明文保存替代 DPAPI                         |
-| P1     | 桌面集成需要分别实现                 | `systemIntegration.ts` / `systemProtocol.ts` 使用注册表和 `JAVM.exe`；`PlaybackSettingsService.ts` 要求 Windows EXE 绝对路径         | 实现 macOS URL Scheme / Linux desktop entry、外部播放器启动与选择；验证托盘、窗口恢复、多显示器、DPI 和明确退出           |
-| P1     | 隐藏 WebView 与播放器依赖平台引擎    | `hiddenWebview.ts` 通过 PowerShell、WebView2 配置和 CDP 启动隐藏宿主                                                                 | 为各平台确定有界隐藏解析方案；在 WKWebView / WebKitGTK 验证视频编码、HLS、Range、全屏与自动播放权限，不套用 WebView2 参数 |
-| P0     | 组件与完整应用构建链只有 Windows x64 | 独立核心已有三平台开发入口和手动矩阵；`scripts/third-party/components.mjs`、打包器、MetaTube 与 FFmpeg 配方仍仅 Windows              | 平台组件指纹、SDK / 运行库路径、Mach-O / ELF 校验、缓存和完整应用构建继续适配                                             |
-| P1     | 安装分发与更新识别尚不通用           | 现有更新检查只识别 `windows-x64-offline-*.zip`，与目前 Release 的无时间戳 ZIP 名称已有差异；发布构建只验证 Windows                   | 统一资产命名和平台识别；完成 macOS bundle / DMG / 签名公证及 Linux 包依赖；单独验证安装、覆盖安装和卸载                   |
+## 平台边界
 
-## 建议实施顺序
+- 首发最低系统：macOS 13、Ubuntu 24.04；macOS CI 实际运行在 15，Linux CI 使用 X11。未进行 macOS 13 真机、所有 Linux 桌面环境及不同 GPU 的验证。
+- macOS 开发包只有 ad-hoc 签名，没有 Developer ID 或公证。
+- macOS 13 的隐藏 WebKit 无独立代理接口；目前 POSIX 隐藏取流遇到应用代理或自定义请求头会明确失败。普通 HTTP 解析、播放传输及下载保留代理支持。
+- macOS 系统链接声明随 APP 管理；应用内不能使用私有 API 强制注销。Linux 仅删除当前用户由 JAVM 创建的关联，不覆盖其他应用或删除系统安装的 desktop entry。
+- AppImage 和便携包不捆绑整套桌面系统库，需要与 DEB 相同的 Ubuntu 24.04 运行依赖。
+- 不包含 Android、Windows ARM64、Linux ARM64、RPM、字幕和音轨选择。
 
-1. Windows x64 Setup + Portable 发布已闭合；保持其现有数据和运行行为。
-2. 系统路径、Unicode、宿主选择、独立 Extension 核心、工具监督和隔离媒体探测已实现。接下来完成文件身份 / 原子替换 / NFO 等文件语义，并在目标系统验收；按模块解除非 Windows 构建限制。
-3. 用户已授权规划并推进无需确认的跨平台部分。手动矩阵已准备 Linux x64、macOS ARM64 / x64 的核心验收，远端尚未运行；完整移植、组件 Release 与平台发布分别按实施计划验收。
-4. 用安全合成样例验证扫描、数据库、下载、播放、封面、后台任务取消、关闭到托盘及退出清理。覆盖慢 I/O、大数据、中文和空格路径；不可仅凭编译成功验收。
-5. 完成各平台安装、覆盖安装、卸载保留数据、系统运行时前提及目标设备验证后，再把该平台加入 Release 下载表格。
-
-Windows 代码签名、macOS 签名与公证、Linux 各发行版 WebKitGTK / 系统依赖仍需独立验收；本次不据此承诺已支持的平台或版本。
-
-官方配置依据：[Neutralino 系统数据目录与扩展配置](https://neutralino.js.org/docs/configuration/neutralino.config.json/)。本表的平台完成状态以仓库源码为依据，框架自身的能力不代表 JAVM 已完成适配。
+详细实施与命令见[适配计划](CROSS_PLATFORM_PLAN.md)。
