@@ -60,10 +60,14 @@ await writeFile(
   path.join(payload, "index.html"),
   `<!doctype html><title>Safe links</title><script src="/neutralino.js"></script><script>
 Neutralino.events.on('ready',async()=>{
+ const diagnostic=async(value)=>Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/diagnostic-'+NL_PID+'.json',JSON.stringify(value));
+ await diagnostic({args:NL_ARGS,ready:true});
+ try {
  const links=NL_ARGS.filter(value=>value.startsWith('javm://safe-fixture/'));
  for(const link of links){const key=new URL(link).pathname.slice(1);if(['cold','warm'].includes(key))await Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/'+key+'.json',JSON.stringify({link,pid:NL_PID}));}
  await Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/host-'+NL_PID+'.json',JSON.stringify({pid:NL_PID,port:NL_PORT,token:NL_TOKEN,connectToken:NL_TOKEN.split('.')[1]}));
  if(links.length||NL_ARGS.includes('--window-hidden'))await Neutralino.app.exit();
+ } catch(error) {await diagnostic({args:NL_ARGS,error:String(error),code:error?.code});await Neutralino.app.exit(1);}
 });Neutralino.init();</script>`,
 );
 await run("codesign", ["--force", "--deep", "--sign", "-", bundle]);
@@ -114,6 +118,7 @@ try {
   const registered = await host.request("platform.protocol", { operation: "status", entry });
   assert.equal(registered.state, "current");
   assert.equal(registered.canRemove, false);
+  console.log("macOS: 默认 APP 关联已回读确认");
   // Finder/LaunchServices sends Apple Events, rather than passing URL arguments.
   await run("open", ["-a", bundle, "javm://safe-fixture/cold"]);
   assert.equal((await receipt("cold.json")).link, "javm://safe-fixture/cold");
@@ -172,6 +177,12 @@ try {
     return true;
   });
   console.log("macOS: APP 注册、冷启动和运行期间的系统 URL 事件通过");
+} catch (error) {
+  const files = await readdir(receipts);
+  console.error("安全链接回执文件", files);
+  for (const name of files.filter((name) => /^diagnostic-\d+\.json$/.test(name)))
+    console.error("安全链接启动诊断", await readFile(path.join(receipts, name), "utf8"));
+  throw error;
 } finally {
   for (const socket of clients) socket.close();
   for (const pid of owned) {

@@ -31,6 +31,7 @@ export function isolateWebview(source) {
   replace(
     "    m_webview = webkit_web_view_new();",
     `    const bool isolated = args == "--javm-isolated";
+    m_isolated = isolated;
     if(isolated) {
       auto getType = reinterpret_cast<GType(*)()>(dlsym(dlib, "webkit_web_view_get_type"));
       if(!getType) { initCode = 1; return; }
@@ -72,6 +73,14 @@ export function isolateWebview(source) {
     `    if(isolated) gtk_widget_realize(m_window); // Native handles exist without mapping a visible window.
     gtk_widget_show_all(parentContainer);
     if(!isolated) gtk_widget_show(m_window);`,
+  );
+  replace(
+    "js.c_str(), WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,",
+    "js.c_str(), m_isolated ? WEBKIT_USER_CONTENT_INJECT_ALL_FRAMES : WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,",
+  );
+  replace(
+    "  GtkWidget *m_window;\n  GtkWidget *m_webview;",
+    "  bool m_isolated = false;\n  GtkWidget *m_window;\n  GtkWidget *m_webview;",
   );
   replace(
     'app, "setActivationPolicy:"_sel, NSApplicationActivationPolicyRegular);',
