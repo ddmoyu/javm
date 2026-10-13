@@ -28,8 +28,9 @@ Json Store::fileOperations(const std::string& method,const Json& params) {
     if(method=="library.files.relinkPreview") {
         const fs::path oldRoot=fs::path(pathFromText(params.at("oldRoot"))).lexically_normal(),newRoot=fs::path(pathFromText(params.at("newRoot"))).lexically_normal();
         if(!oldRoot.is_absolute() || !newRoot.is_absolute() || !fs::is_directory(newRoot)) throw std::runtime_error("请选择有效的旧根目录和新根目录");
-        const auto prefix=pathKey(oldRoot)+"/"; Json result=Json::array();
-        for(const auto& row:rows(db_,"SELECT id,path,file_size,fast_hash FROM media_files WHERE substr(path_key,1,?)=? AND id>? ORDER BY id LIMIT 500",{prefix.size(),prefix,params.value("after",std::string{})})) {
+        auto prefix=pathKey(oldRoot); if(!prefix.ends_with('/')) prefix+='/';
+        Json result=Json::array();
+        for(const auto& row:rows(db_,"SELECT id,path,file_size,fast_hash FROM media_files WHERE instr(path_key,?)=1 AND id>? ORDER BY id LIMIT 500",{prefix,params.value("after",std::string{})})) {
             const fs::path old(pathFromText(row["path"])),target=newRoot/old.lexically_relative(oldRoot);
             auto item=row;item["target"]=pathText(target); item["matched"]=false;
             try {

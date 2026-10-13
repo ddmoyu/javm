@@ -1,6 +1,7 @@
 #include "common.hpp"
 #include "file_platform.hpp"
 #include "nfo_compat.hpp"
+#include "store.hpp"
 #include "../../native/common/unicode.hpp"
 #include <fstream>
 #include <iostream>
@@ -107,6 +108,30 @@ int main() {
             rejects([&] { media::fileIdentity(link); });
             rejects([&] { writeScrapedNfo(link, metadata, source, stamp(first)); });
         } else std::cout << "symlink checks skipped: OS privilege unavailable\n";
+        {
+            // Only synthetic records are checked; registering the filesystem root
+            // in this isolated Store does not enumerate or scan that filesystem.
+            Store store(root / "safe-library.sqlite3");
+            const auto sourceDirectory = root / pathFromText("安全媒体😀");
+            const auto sibling = root / pathFromText("安全媒体😀-other");
+            const auto destination = root / "destination";
+            for(const auto& folder : {sourceDirectory, sibling, destination}) fs::create_directory(folder);
+            const auto present = sourceDirectory / "present.mp4", missing = sourceDirectory / "missing.mp4", outside = sibling / "outside.mp4";
+            createExclusiveFile(present, "safe fixture");
+            createExclusiveFile(outside, "safe fixture");
+            for(const auto& file : {present, missing, outside})
+                store.save({{"path",pathText(file)},{"parent",pathText(file.parent_path())},{"name","Safe fixture"}}, Json::object());
+            const auto directory = store.addDirectory(root.root_path(), true, Json::array({"mp4"}));
+            require(store.directories()[0]["video_count"] == 3, "root directory counts synthetic records");
+            store.finish(directory, "completed", "", true);
+            require(store.find(missing)["missing"] == 1 && store.find(present)["missing"] == 0, "root directory reconciles missing files");
+            require(store.directories()[0]["video_count"] == 2, "root count excludes missing files");
+            const auto preview = [&](const fs::path& oldRoot) {
+                return store.fileOperations("library.files.relinkPreview", {{"oldRoot",pathText(oldRoot)},{"newRoot",pathText(destination)}});
+            };
+            require(preview(sourceDirectory).size() == 2, "Unicode directory relink excludes prefix sibling");
+            require(preview(root.root_path()).size() == 3, "root directory relink includes synthetic records");
+        }
         fs::remove_all(root);
         std::cout << checks << " safe filesystem and NFO checks passed\n";
         return 0;

@@ -193,7 +193,7 @@ Json Store::prepareWork(const Json& params) {
 
 Json Store::directories() {
     std::lock_guard lock(mutex_);
-    auto result=rows(db_,"SELECT d.*,(SELECT count(*) FROM media_files m WHERE m.path_key>=d.path_key||'/' AND m.path_key<d.path_key||'0' AND m.missing=0) AS video_count FROM directories d ORDER BY created_at,id");
+    auto result=rows(db_,"SELECT d.*,(SELECT count(*) FROM media_files m WHERE m.path_key>=rtrim(d.path_key,'/')||'/' AND m.path_key<rtrim(d.path_key,'/')||'0' AND m.missing=0) AS video_count FROM directories d ORDER BY created_at,id");
     for(auto& dir:result) { dir["formats"]=Json::parse(dir["formats"].get<std::string>()); dir["recursive"]=dir["recursive"].get<int>()!=0; }
     return result;
 }
@@ -237,7 +237,8 @@ Json Store::removeDirectory(const std::string& id) {
     return {{"removedVideos",0}};
 }
 void Store::finish(const Json& directory,const std::string& state,const std::string& error,bool reconcile,const std::atomic_bool* cancelled) {
-    const auto prefix=pathKey(fs::path(pathFromText(directory["path"])))+"/";
+    auto prefix=pathKey(fs::path(pathFromText(directory["path"])));
+    if(!prefix.ends_with('/')) prefix+='/';
     if(reconcile) for(std::string after;;) {
         if(cancelled && *cancelled) break;
         Json files;

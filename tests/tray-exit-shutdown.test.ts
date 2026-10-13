@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { DownloadService } from "../frontend/src/services/downloads/DownloadService";
 import type { DownloadEngine, DownloadRepository } from "../frontend/src/services/downloads/ports";
 import { BackgroundSettingsService } from "../frontend/src/services/settings/BackgroundSettingsService";
@@ -34,6 +34,7 @@ vi.mock("../frontend/src/services/logging/events", () => ({
 }));
 
 beforeEach(() => {
+  vi.stubGlobal("window", { NL_OS: "Windows" });
   vi.resetModules();
   vi.resetAllMocks();
   native.handlers.clear();
@@ -47,6 +48,7 @@ beforeEach(() => {
   ])
     fn.mockResolvedValue(undefined);
 });
+afterEach(() => vi.unstubAllGlobals());
 
 async function fixture() {
   let closed = false;

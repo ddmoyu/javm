@@ -4,13 +4,13 @@
 
 ## 首发范围
 
-| 系统 | 架构 | 交付形式 |
-| --- | --- | --- |
-| Windows 10/11 | x64 | Setup EXE、Portable ZIP，延续已有交付 |
-| macOS 13+ | Apple Silicon、Intel | JAVM.app、DMG、Portable ZIP |
-| Ubuntu 24.04 | x64 | AppImage、DEB、Portable tar.gz |
+| 系统          | 架构                 | 交付形式                              |
+| ------------- | -------------------- | ------------------------------------- |
+| Windows 10/11 | x64                  | Setup EXE、Portable ZIP，延续已有交付 |
+| macOS 13+     | Apple Silicon、Intel | JAVM.app、DMG、Portable ZIP           |
+| Ubuntu 24.04  | x64                  | AppImage、DEB、Portable tar.gz        |
 
-macOS 开发包使用本地 ad-hoc 签名以满足执行要求，不包含 Developer ID 或公证；Linux 开发包不签名。本地开发版本为 `1.0.5-alpha.9`，不代表已经发布此版本。现有公开 Alpha 4 不覆盖、不替换。
+macOS 开发包使用本地 ad-hoc 签名以满足执行要求，不包含 Developer ID 或公证；Linux 开发包不签名。本轮发布版本为 `1.0.5-alpha.10`，下载以 [Release 实际附件](https://github.com/ddmoyu/javm/releases/tag/v1.0.5-alpha.10)为准。现有公开 Alpha 4 不覆盖、不替换。
 
 继续使用 React、Mantine、TypeScript、官方 Neutralino API 和 Extension 协议。目录、数据库、探测和进程管理保留现有原生模块边界。不加入 Android、Windows ARM64、字幕或多音轨选择。验证只使用合成素材、空白页面、临时数据库和回环服务。
 
@@ -20,7 +20,7 @@ macOS 开发包使用本地 ad-hoc 签名以满足执行要求，不包含 Devel
 2. **桌面业务：已完成目标系统验收。** 系统凭据、播放器参数、更新附件选择、系统链接、托盘与退出、WebKit 播放和隐藏取流。
 3. **组件：按精确配方构建、校验并回读。** curl、MediaInfo、FFmpeg、MetaTube、Neutralino 按系统和架构独立发布 `deps-*`，不标为 Latest。配方未变时复用已验证组件。
 4. **桌面与安装：三个 POSIX 目标手动 Actions 全部通过。** GUI 安全夹具验证下载、MP4/HLS 播放、Range、隐藏取流及取消；安装夹具验证便携启动、安装、覆盖安装和卸载保留数据。证据见 [完整桌面 CI](https://github.com/ddmoyu/javm/actions/runs/38398786888)。
-5. **发布：仅在另一次明确版本授权后执行。** 标签流程等待 Windows 及三个 POSIX 目标成功，核对提交、组件指纹、附件哈希、桌面与安装记录，再生成下载表格和公开 Release。
+5. **发布：本轮已获 Alpha 发布授权。** 标签流程等待 Windows 及三个 POSIX 目标成功，核对提交、组件指纹、附件哈希、桌面与安装记录，再生成下载表格和公开 Release。
 
 ## 开发与验证入口
 

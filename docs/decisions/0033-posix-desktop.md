@@ -26,4 +26,4 @@ curl、MediaInfo、FFmpeg、MetaTube 和 Neutralino 各自记录系统、架构�
 
 最低编译目标和 CI 运行系统分别记录。macOS 15 CI 不能证明 macOS 13 真机表现；Xvfb 不能证明所有 Linux 桌面环境的托盘与图形行为。未签名开发发行不等于已完成 Developer ID、公证或商店发行。
 
-参考：[锁定宿主源码](https://github.com/neutralinojs/neutralinojs/tree/v6.10.0)、[官方 Extension](https://neutralino.js.org/docs/how-to/extensions-overview/)、[WebKitGTK 临时会话](https://webkitgtk.org/reference/webkit2gtk/stable/property.WebView.is-ephemeral.html)、[Apple 临时数据存储](https://developer.apple.com/documentation/webkit/wkwebsitedatastore/nonpersistent())。
+参考：[锁定宿主源码](https://github.com/neutralinojs/neutralinojs/tree/v6.10.0)、[官方 Extension](https://neutralino.js.org/docs/how-to/extensions-overview/)、[WebKitGTK 临时会话](https://webkitgtk.org/reference/webkit2gtk/stable/property.WebView.is-ephemeral.html)、[Apple 临时数据存储](<https://developer.apple.com/documentation/webkit/wkwebsitedatastore/nonpersistent()>)。

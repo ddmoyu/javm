@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { BackgroundSettingsService } from "../frontend/src/services/settings/BackgroundSettingsService";
 import type { DownloadService } from "../frontend/src/services/downloads/DownloadService";
 import { deferred } from "./helpers/deferred";
@@ -25,6 +25,7 @@ vi.mock("@neutralinojs/lib", () => ({
 }));
 
 beforeEach(() => {
+  vi.stubGlobal("window", { NL_OS: "Windows" });
   vi.resetModules();
   vi.resetAllMocks();
   native.handlers.clear();
@@ -38,6 +39,7 @@ beforeEach(() => {
   ])
     mock.mockResolvedValue(undefined);
 });
+afterEach(() => vi.unstubAllGlobals());
 
 async function fixture(runInBackground = true) {
   const lifecycle = await import("../frontend/src/platform/neutralino/lifecycle");

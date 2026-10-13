@@ -4,6 +4,7 @@ build/
 bin/
 .neutralino/
 .tmp/
+tests/fixtures/posix-desktop/.build/
 data/catalogs/javbus/*.bak
 data/catalogs/javbus/*.part
 .vite/

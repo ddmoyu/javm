@@ -6,7 +6,15 @@ export default defineConfig({
   lint: {
     plugins: ["typescript", "react", "jsx-a11y"],
     options: { typeAware: true, typeCheck: true },
-    ignorePatterns: ["build/**", "dist/**", "bin/**", ".neutralino/**", ".tmp/**"],
+    ignorePatterns: [
+      "build/**",
+      "dist/**",
+      "bin/**",
+      ".neutralino/**",
+      ".tmp/**",
+      "tests/fixtures/posix-desktop/media/**",
+      "tests/fixtures/posix-desktop/.build/**",
+    ],
   },
   fmt: {
     ignorePatterns: [
@@ -15,6 +23,8 @@ export default defineConfig({
       "docs/REFACTOR_PLAN.md",
       "pnpm-lock.yaml",
       "resources/licenses/**",
+      "tests/fixtures/posix-desktop/media/**",
+      "tests/fixtures/posix-desktop/.build/**",
       "build/**",
       "dist/**",
       "bin/**",
