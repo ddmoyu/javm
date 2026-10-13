@@ -35,9 +35,9 @@ it("候选通过 WebKit 消息通道回传，不依赖网页 WebSocket 或原生
   });
 });
 
-it("隐藏页面只允许官方事件与退出，强制独立会话且没有原生扩展", () => {
+it("隐藏页面仅保留宿主退出权限，强制独立会话且没有原生扩展", () => {
   const config = posixHiddenConfig("https://safe.example/forest");
-  expect(config.nativeAllowList).toEqual(["app.broadcast", "app.exit"]);
+  expect(config.nativeAllowList).toEqual(["app.exit"]);
   expect(config.enableExtensions).toBe(false);
   expect(config.modes.window).toMatchObject({
     hidden: true,

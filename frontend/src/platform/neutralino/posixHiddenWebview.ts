@@ -30,7 +30,7 @@ export function posixHiddenConfig(url: string) {
     dataLocation: "app",
     storageLocation: "app",
     logging: { enabled: false },
-    nativeAllowList: ["app.broadcast", "app.exit"],
+    nativeAllowList: ["app.exit"],
     modes: {
       window: {
         title: "JAVM",
@@ -61,6 +61,7 @@ export function posixCaptureScript(request: ResolutionRequest) {
       if(Date.now()-started>19000||count++>80){clearInterval(timer);return}
       try {
         const result=globalThis.__javmStreamCapture.read(${rule},false);
+        if(!result.missing&&!result.interaction&&!result.urls?.length)return;
         const text=JSON.stringify({...result,userAgent:navigator.userAgent.slice(0,1024)});
         if(text.length<=160000)channel.postMessage(text);
       } catch {}

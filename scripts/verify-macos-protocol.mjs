@@ -56,11 +56,11 @@ await writeFile(
 );
 await writeFile(
   path.join(payload, "index.html"),
-  `<!doctype html><title>Safe links</title><script src="/__neutralino_globals.js"></script><script src="/neutralino.js"></script><script>
+  `<!doctype html><title>Safe links</title><script src="/neutralino.js"></script><script>
 Neutralino.events.on('ready',async()=>{
  const links=NL_ARGS.filter(value=>value.startsWith('javm://safe-fixture/'));
  for(const link of links){const key=new URL(link).pathname.slice(1);if(['cold','warm'].includes(key))await Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/'+key+'.json',JSON.stringify({link,pid:NL_PID}));}
- await Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/host-'+NL_PID+'.json',JSON.stringify({pid:NL_PID,port:NL_PORT,token:NL_TOKEN,connectToken:NL_CONNECT_TOKEN}));
+ await Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/host-'+NL_PID+'.json',JSON.stringify({pid:NL_PID,port:NL_PORT,token:NL_TOKEN,connectToken:NL_TOKEN.split('.')[1]}));
  if(links.length||NL_ARGS.includes('--window-hidden'))await Neutralino.app.exit();
 });Neutralino.init();</script>`,
 );
