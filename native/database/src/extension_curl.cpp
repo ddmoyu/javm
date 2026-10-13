@@ -37,7 +37,7 @@ class CurlTransport final : public Transport {
     std::deque<std::string> incoming_;
     std::deque<std::shared_ptr<Outgoing>> outgoing_;
     std::size_t incomingBytes_ = 0, outgoingBytes_ = 0, outgoingCount_ = 0;
-    std::jthread worker_;
+    std::thread worker_;
 
     static void check(CURLcode code) {
         // 不输出包含 connectToken 的 URL 或 bootstrap。
@@ -169,7 +169,7 @@ public:
         check(curl_easy_getinfo(easy_.get(), CURLINFO_ACTIVESOCKET, &socket_));
         if (status != 101 || socket_ == CURL_SOCKET_BAD) throw std::runtime_error("Neutralino WebSocket handshake failed");
         connected_ = true;
-        worker_ = std::jthread([this] { run(); });
+        worker_ = std::thread([this] { run(); });
     }
     ~CurlTransport() override { close(); }
     bool connected() const noexcept override { return connected_ && !stopping_; }

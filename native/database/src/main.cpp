@@ -11,6 +11,7 @@
 #include "probe_service.hpp"
 #endif
 #include "http_service.hpp"
+#include "service.hpp"
 #include <atomic>
 #include <iostream>
 #include <memory>
@@ -60,6 +61,7 @@ int runMain(int argc, Char* argv[]) {
         media::ProbeService mediaProbes;
 #endif
         javm::http::Service http;
+        javm::platform::Service platform;
         // 主实例握手先于下载数据库独占锁；第二次启动可转发参数并退出。
         auto ensureDatabase=[&] {if(!database) database=std::make_unique<Database>(databasePath);};
         std::string message;
@@ -79,6 +81,9 @@ int runMain(int argc, Char* argv[]) {
                 if (method == "capabilities") {
                     response["result"] = {{"protocol", 1}, {"database", true}, {"http", true}, {"media", JAVM_WITH_MEDIA != 0},
                         {"transport", JAVM_USE_WINHTTP ? "winhttp" : "curl"}};
+                } else if (method.starts_with("platform.")) {
+                    platform.request(requestId, method, data.value("params", Json::object()), sendResponse);
+                    continue;
                 } else if (method == "http.request") {
                     http.request(requestId, data.at("params"), sendResponse);
                     continue;
@@ -139,6 +144,7 @@ int runMain(int argc, Char* argv[]) {
             if (closing) break;
         }
         disconnected = true;
+        platform.shutdown();
         http.shutdown();
 #if JAVM_WITH_MEDIA
         mediaProbes.shutdown();

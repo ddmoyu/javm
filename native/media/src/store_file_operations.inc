@@ -101,7 +101,8 @@ Json Store::fileOperations(const std::string& method,const Json& params) {
     if(method=="library.files.inspect" || method=="library.files.verify") {
         sameOperationFile(source,item["source_identity"],item["source_stamp"]);
         sameOperationFile(temporary,item["temporary_identity"]);
-        const auto length=fs::file_size(temporary),verified=item["verified"].get<uint64_t>(),total=item["size"].get<uint64_t>();
+        const auto length=fs::file_size(temporary);
+        const auto verified=item["verified"].get<uint64_t>(),total=item["size"].get<uint64_t>();
         if(length<verified || length>total) throw std::runtime_error("临时文件大小异常，源文件已保留");
         if(method=="library.files.verify" && verified<length) {
             const auto count=static_cast<size_t>(std::min<uint64_t>(1024*1024,length-verified));

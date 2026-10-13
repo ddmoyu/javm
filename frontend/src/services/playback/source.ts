@@ -1,3 +1,4 @@
+import { windowsPath } from "../paths";
 export type PlaybackFormat = "video" | "hls";
 export interface PlaybackOptions {
   title?: string;
@@ -40,7 +41,9 @@ export function playbackRequest(source: string, options: PlaybackOptions = {}): 
     if (url.hostname && url.hostname !== "localhost") source = `//${url.hostname}${source}`;
     else if (/^\/[a-z]:\//i.test(source)) source = source.slice(1);
   }
-  source = source.replaceAll("\\", "/");
+  if (windowsPath(source)) source = source.replaceAll("\\", "/");
+  if (Array.from(source).some((char) => char.charCodeAt(0) < 32))
+    throw new Error("视频路径包含无效字符。");
   if (
     !/^(?:[a-z]:\/|\/)/i.test(source) ||
     source.split("/").some((part) => part === "." || part === "..")

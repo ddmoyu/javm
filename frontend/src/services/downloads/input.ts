@@ -3,6 +3,7 @@ import { downloadTaskLimit } from "../../contracts/downloads";
 import { keepTextTail } from "./text";
 import { identifyCode, normalizeCode } from "../scraping/identity";
 import { downloadCode, duplicateDownloadCodes, DuplicateDownloadError } from "./duplicates";
+import { windowsPath } from "../paths";
 
 export function normalizeDownloadUrl(value: string) {
   let url: URL;
@@ -32,7 +33,7 @@ export function safeName(value: string) {
 }
 
 export function joinPath(root: string, ...parts: string[]) {
-  return `${root.replace(/[\\/]+$/, "")}/${parts.join("/")}`;
+  return `${root.replace(windowsPath(root) ? /[\\/]+$/ : /\/+$/, "")}/${parts.join("/")}`;
 }
 
 export function validateDirectory(value: string) {

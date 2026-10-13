@@ -4,6 +4,7 @@ import type { MetaTubeHost } from "../../services/metadata/MetaTubeService";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { runNativeProcess } from "./process";
 import { runPowerShell } from "./metadataHttp";
+import { NativeLibraryPort } from "./library";
 import { logEvent } from "../../services/logging/events";
 import { OutputLines } from "../../services/downloads/progress";
 import {
@@ -26,6 +27,7 @@ export function metatubeDiagnostic(line: string) {
 }
 
 export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHost {
+  const portService = new NativeLibraryPort();
   const root = () => `${window.NL_DATAPATH}/metatube`;
   const directory = async () => {
     try {
@@ -60,17 +62,18 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
       }
     },
     async start(path, signal) {
-      // 路径已适配；端口分配、凭据和组件分发尚未完成，不能误调用 PowerShell。
-      if (toolPlatform() !== "Windows") throw new Error("当前平台的 MetaTube 启动尚未开放。");
       if (!(await filesystem.getStats(path)).isFile)
         throw new Error("内置 MetaTube 组件缺失，请完整解压或重新获取 JAVM 运行包。");
       const base = await directory();
-      const port = Number(
-        await runPowerShell(
-          "$l=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); try { $l.Start(); [Console]::Write($l.LocalEndpoint.Port) } finally { $l.Stop() }",
-          signal,
-        ),
-      );
+      const port =
+        toolPlatform() === "Windows"
+          ? Number(
+              await runPowerShell(
+                "$l=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0); try { $l.Start(); [Console]::Write($l.LocalEndpoint.Port) } finally { $l.Stop() }",
+                signal,
+              ),
+            )
+          : (await portService.request<{ port: number }>("platform.loopbackPort")).port;
       if (!Number.isInteger(port) || port < 1024 || port > 65535)
         throw new Error("无法分配 MetaTube 本地端口。");
       const token = crypto.randomUUID() + crypto.randomUUID(),

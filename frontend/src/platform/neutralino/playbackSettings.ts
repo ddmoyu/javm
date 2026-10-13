@@ -7,12 +7,16 @@ import type { PlaybackRequest } from "../../services/playback/source";
 import type { Runtime } from "./bootstrap";
 import { encodedPowerShell, quoteWindowsArgument } from "./process";
 import { nativeSettingsStorage as playbackStorage } from "./settingsStorage";
+import { executableExists, toolPlatform } from "./toolPaths";
+import { quotePosixArgument } from "./posixProcess";
 
 export { playbackStorage };
 
 async function validatePlayerPath(path: string) {
   const stat = await filesystem.getStats(path).catch(() => null);
-  if (!stat?.isFile) throw new Error("外部播放器不存在或无法读取，请重新选择 .exe 文件。");
+  if (toolPlatform() === "Darwin" && path.endsWith(".app") && stat?.isDirectory) return;
+  if (!stat?.isFile || !(await executableExists(path)))
+    throw new Error("外部播放器不存在、不可读取或没有执行权限，请重新选择。");
 }
 
 let settings: PlaybackSettingsService | undefined;
@@ -23,11 +27,17 @@ export function createPlaybackSettings(runtime: Runtime) {
     async () =>
       (
         await os.showOpenDialog("选择外部播放器", {
-          filters: [{ name: "Windows 播放器", extensions: ["exe"] }],
+          filters:
+            toolPlatform() === "Windows"
+              ? [{ name: "Windows 播放器", extensions: ["exe"] }]
+              : toolPlatform() === "Darwin"
+                ? [{ name: "macOS 应用", extensions: ["app", "*"] }]
+                : undefined,
           multiSelections: false,
         })
       )[0],
     validatePlayerPath,
+    runtime === "desktop" ? toolPlatform() : "Windows",
   );
   void settings.initialize();
   return settings;
@@ -59,12 +69,24 @@ export async function openExternalPlayer(
     await os.open(request.source);
     return;
   }
-  validatePlaybackSettings({
-    defaultPlayer: "external",
-    externalPlayerPath: path,
-  });
+  validatePlaybackSettings(
+    {
+      defaultPlayer: "external",
+      externalPlayerPath: path,
+    },
+    toolPlatform(),
+  );
   await validatePlayerPath(path);
   signal?.throwIfAborted();
-  const result = await os.execCommand(externalPlayerCommand(path, request.source));
+  const platform = toolPlatform();
+  const macApp = platform === "Darwin" && path.endsWith(".app");
+  const command =
+    platform === "Windows"
+      ? externalPlayerCommand(path, request.source)
+      : macApp
+        ? `/usr/bin/open -a ${quotePosixArgument(path)} -- ${quotePosixArgument(request.source)}`
+        : `${quotePosixArgument(path)} ${quotePosixArgument(request.source)}`;
+  // 外部播放器归用户所有。POSIX 普通可执行文件沿用官方后台启动，不纳入任务进程组。
+  const result = await os.execCommand(command, { background: platform !== "Windows" && !macApp });
   if (result.exitCode !== 0) throw new Error("无法启动外部播放器，请检查所选程序是否可运行。");
 }

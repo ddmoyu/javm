@@ -16,6 +16,7 @@ import type { NativeVideo } from "../../contracts/library";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { createMetadataPipeline } from "./metadataPipeline";
 import { MovieMetadataResolver } from "../../services/metadata/MovieMetadataResolver";
+import { pathRelativeTo } from "../../services/paths";
 
 // 应用级共享端口，批量添加不会重复注册 Extension 事件监听器。
 const port = new NativeLibraryPort();
@@ -157,13 +158,7 @@ export async function enqueueLibraryScrapes(
     for (const video of page) {
       signal.throwIfAborted();
       if (missingOnly && (video.scan_status ?? 0) >= 2) continue;
-      if (
-        directory &&
-        !(video.video_path ?? video.nfo_path)
-          .replaceAll("\\", "/")
-          .toLowerCase()
-          .startsWith(`${directory.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase()}/`)
-      )
+      if (directory && pathRelativeTo(video.video_path ?? video.nfo_path, directory) === undefined)
         continue;
       await service.enqueue({
         workId: video.id,

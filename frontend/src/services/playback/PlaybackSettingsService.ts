@@ -1,4 +1,5 @@
 export type PlaybackWindowMode = "reuse" | "new";
+export type PlaybackPlatform = "Windows" | "Linux" | "Darwin";
 
 export interface PlaybackSettings {
   defaultPlayer: "internal" | "external";
@@ -17,7 +18,10 @@ export const defaultPlaybackSettings: PlaybackSettings = {
   externalPlayerPath: "",
 };
 
-export function validatePlaybackSettings(value: unknown): PlaybackSettings {
+export function validatePlaybackSettings(
+  value: unknown,
+  platform: PlaybackPlatform = "Windows",
+): PlaybackSettings {
   const input = value as Partial<PlaybackSettings> | null;
   if (
     !input ||
@@ -29,12 +33,18 @@ export function validatePlaybackSettings(value: unknown): PlaybackSettings {
   const path = input.externalPlayerPath.trim();
   if (
     path &&
-    (!/^(?:[a-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+[\\/]).+\.exe$/i.test(path) ||
-      /["<>|?*]/.test(path) ||
+    ((platform === "Windows"
+      ? !/^(?:[a-z]:[\\/]|[\\/]{2}[^\\/]+[\\/][^\\/]+[\\/]).+\.exe$/i.test(path) ||
+        /["<>|?*]/.test(path)
+      : !path.startsWith("/") || path.split("/").some((part) => part === "." || part === "..")) ||
       Array.from(path).some((char) => char.charCodeAt(0) < 32) ||
       path.length > 4096)
   )
-    throw new Error("请选择播放器 .exe 的完整路径，不要附加命令参数。");
+    throw new Error(
+      platform === "Windows"
+        ? "请选择播放器 .exe 的完整路径，不要附加命令参数。"
+        : "请选择播放器的绝对路径，不要附加命令参数。",
+    );
   return {
     defaultPlayer: input.defaultPlayer!,
     // 兼容尚未包含窗口模式的已保存偏好。
@@ -61,6 +71,7 @@ export class PlaybackSettingsService {
     available = true,
     private choose?: () => Promise<string | undefined>,
     private validatePath?: (path: string) => Promise<void>,
+    private platform: PlaybackPlatform = "Windows",
   ) {
     this.snapshot = { settings: defaultPlaybackSettings, ready: false, available, error: "" };
   }
@@ -84,7 +95,10 @@ export class PlaybackSettingsService {
       try {
         const value = this.snapshot.available ? await this.store.read() : null;
         this.publish({
-          settings: value === null ? defaultPlaybackSettings : validatePlaybackSettings(value),
+          settings:
+            value === null
+              ? defaultPlaybackSettings
+              : validatePlaybackSettings(value, this.platform),
           error: "",
           ready: true,
         });
@@ -99,7 +113,7 @@ export class PlaybackSettingsService {
   async update(value: PlaybackSettings) {
     if (this.saving) throw new Error("正在保存播放设置，请稍候。");
     if (!this.snapshot.available) throw new Error("请在桌面端保存播放设置。");
-    const settings = validatePlaybackSettings(value);
+    const settings = validatePlaybackSettings(value, this.platform);
     this.saving = true;
     try {
       await this.initialize();

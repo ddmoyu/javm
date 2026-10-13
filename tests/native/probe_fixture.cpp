@@ -1,4 +1,5 @@
 #include "probe.hpp"
+#include "../../native/common/cancellable_thread.hpp"
 #include <iostream>
 #include <thread>
 
@@ -21,11 +22,11 @@ int run(int argc, Char* argv[]) {
         };
         const int timeout = milliseconds(3, 15000), cancelAfter = milliseconds(4, -1);
         if (cancelAfter == 0) cancelled = true;
-        std::jthread timer([&](std::stop_token stop) {
+        javm::CancellableThread timer([&](const std::atomic_bool& stop) {
             if (cancelAfter <= 0) return;
             const auto at = std::chrono::steady_clock::now() + std::chrono::milliseconds(cancelAfter);
-            while (!stop.stop_requested() && std::chrono::steady_clock::now() < at) std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            if (!stop.stop_requested()) cancelled = true;
+            while (!stop && std::chrono::steady_clock::now() < at) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (!stop) cancelled = true;
         });
         std::cout << probe::inspect(executable, file, cancelled, std::chrono::milliseconds(timeout)).dump();
         return 0;

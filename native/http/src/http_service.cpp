@@ -178,7 +178,7 @@ struct Service::State {
     std::set<std::string> ids;
     std::map<CURL*, std::unique_ptr<Transfer>> active;
     bool stopping = false;
-    std::jthread worker;
+    std::thread worker;
     State() {
         if (curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) throw std::runtime_error("HTTP 初始化失败");
         multi = curl_multi_init();
@@ -187,7 +187,7 @@ struct Service::State {
         curl_multi_setopt(multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, static_cast<long>(maxActive));
         curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, 6L);
         curl_multi_setopt(multi, CURLMOPT_MAXCONNECTS, 24L);
-        worker = std::jthread([this] { run(); });
+        worker = std::thread([this] { run(); });
     }
     ~State() { shutdown(); curl_multi_cleanup(multi); curl_global_cleanup(); }
     void shutdown() {

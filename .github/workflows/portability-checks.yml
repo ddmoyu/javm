@@ -51,7 +51,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: 准备 Linux 开发依赖
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libicu-dev libgtk-3-0t64 libwebkit2gtk-4.1-0
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libicu-dev libsecret-1-dev libgtk-3-0t64 libwebkit2gtk-4.1-0
       - name: 准备 macOS 开发依赖
         if: runner.os == 'macOS'
         run: |
@@ -64,6 +64,8 @@ jobs:
         run: pnpm exec vp test run tests/application-paths.test.ts tests/cache-platform-paths.test.ts
       - name: 检查工具路径与 POSIX 进程适配
         run: pnpm exec vp test run tests/tool-paths-platform.test.ts tests/posix-process-adapter.test.ts
+      - name: 检查 POSIX 文件路径与外部播放器
+        run: pnpm exec vp test run tests/desktop-paths-platform.test.ts tests/playback-platform.test.ts
       - name: 编译原生基础夹具
         run: pnpm native:build --portability-checks
       - name: 检查原生 UTF-8 边界
@@ -94,6 +96,10 @@ jobs:
           JAVM_CORE_EXE: build/native/${{ matrix.core }}
           JAVM_CORE_TRANSPORT: ${{ matrix.transport }}
         run: node --disable-warning=ExperimentalWarning --test scripts/core-extension.test.mjs
+      - name: 检查系统服务协议与回环端口
+        env:
+          JAVM_CORE_EXE: build/native/${{ matrix.core }}
+        run: node --test scripts/platform-services.test.mjs
       - name: 准备官方 Neutralino 宿主
         run: pnpm desktop:setup
       - name: 检查官方 POSIX 进程 API 与执行权限

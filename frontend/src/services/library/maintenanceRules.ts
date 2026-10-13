@@ -4,13 +4,14 @@ import type {
   MaintenanceVideo,
   RemovalTarget,
 } from "../../contracts/maintenance";
+import { normalizedPath, pathComparisonKey } from "../paths";
 
 export function filename(path: string) {
-  return path.split(/[\\/]/).at(-1) ?? "";
+  return normalizedPath(path).split("/").at(-1) ?? "";
 }
 export function parentDirectory(path: string) {
-  const parent = path.replaceAll("\\", "/").replace(/\/[^/]*$/, "");
-  return /^[a-z]:$/i.test(parent) ? `${parent}/` : parent;
+  const parent = normalizedPath(path).replace(/\/[^/]*$/, "");
+  return /^[a-z]:$/i.test(parent) ? `${parent}/` : parent || (path.startsWith("/") ? "/" : "");
 }
 export function normalizeKeywords(lines: string[]) {
   const seen = new Set<string>();
@@ -124,7 +125,7 @@ export function duplicateRows(videos: MaintenanceVideo[]): MaintenanceRow[] {
         if (video.hash) groupHashes.add(video.hash);
       }
       const crossDirectory =
-        new Set(group.map((video) => parentDirectory(video.path).toLowerCase())).size > 1;
+        new Set(group.map((video) => pathComparisonKey(parentDirectory(video.path)))).size > 1;
       const name = group.find((video) => video.code.trim())?.code || `文件指纹 ${group[0]!.hash}`;
       const reason =
         sameCode && sameHash ? "番号与文件指纹关联" : sameHash ? "相同文件指纹" : "相同番号";

@@ -1,5 +1,6 @@
 import type { LibraryService } from "./LibraryService";
 import type { MediaDirectory } from "../../contracts/library";
+import { pathComparisonKey } from "../paths";
 
 export interface WatchSettings {
   enabled: boolean;
@@ -203,9 +204,8 @@ export class DirectoryWatchService {
     const directory = this.directories().find((dir) => this.watches.get(dir.id)?.id === event.id);
     if (!directory) return;
     // Non-recursive library roots ignore nested file events from the recursive host watcher.
-    const normalize = (value: string) =>
-      value.replaceAll("\\", "/").replace(/\/$/, "").toLowerCase();
-    if (!directory.recursive && normalize(event.dir) !== normalize(directory.path)) return;
+    if (!directory.recursive && pathComparisonKey(event.dir) !== pathComparisonKey(directory.path))
+      return;
     const now = Date.now(),
       previous = this.pending.get(directory.id);
     this.pending.set(directory.id, {

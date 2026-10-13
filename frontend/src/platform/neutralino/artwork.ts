@@ -16,6 +16,7 @@ import { yieldToUi } from "../../services/yieldToUi";
 import { AutoCoverService } from "../../services/library/AutoCoverService";
 import { logEvent } from "../../services/logging/events";
 import { isDmmImage } from "../../services/images/dmm";
+import { normalizedPath } from "../../services/paths";
 
 export function createArtworkService(
   runtime: Runtime,
@@ -57,7 +58,7 @@ export function createArtworkService(
     async remove(path) {
       if (
         !/\/metadata\/[A-Za-z0-9_-]+\/images\/(?:[a-f0-9-]+\.jpg|\.work-[a-f0-9-]+)$/i.test(
-          path.replaceAll("\\", "/"),
+          normalizedPath(path),
         )
       )
         throw new Error("图片清理路径无效。");

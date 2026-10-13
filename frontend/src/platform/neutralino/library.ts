@@ -13,6 +13,7 @@ import { DirectoryWatchService } from "../../services/library/DirectoryWatchServ
 import type { WatchEvent, WatchSettings } from "../../services/library/DirectoryWatchService";
 import { LibraryDocumentsService } from "../../services/library/LibraryDocumentsService";
 import { FileOrganizationService } from "../../services/library/FileOrganizationService";
+import { normalizedPath, pathComparisonKey, pathRelativeTo } from "../../services/paths";
 
 export class NativeLibraryPort implements LibraryPort {
   private listening?: Promise<unknown>;
@@ -77,7 +78,6 @@ export class NativeLibraryPort implements LibraryPort {
     });
   }
   async mount(directories: Pick<MediaDirectory, "id" | "path">[], metadataDirectory?: string) {
-    const normalize = (path: string) => path.replaceAll("\\", "/").replace(/\/+$/, "");
     const roots = [
       ...directories.map(({ id, path }) => ({ id, path })),
       ...(metadataDirectory ? [{ id: "metadata", path: metadataDirectory }] : []),
@@ -95,24 +95,23 @@ export class NativeLibraryPort implements LibraryPort {
     const available: { prefix: string; path: string }[] = [];
     for (const directory of roots) {
       const prefix = `/javm-media/${directory.id}`;
-      const path = normalize(directory.path);
+      const path = normalizedPath(directory.path);
       try {
         if (!(prefix in mounts)) await server.mount(prefix, directory.path);
         // Neutralino 返回正斜杠目录；Windows 原始路径不能直接与挂载记录比较。
-        else if (normalize(mounts[prefix]!).toLowerCase() !== path.toLowerCase()) continue;
+        else if (pathComparisonKey(mounts[prefix]!) !== pathComparisonKey(path)) continue;
         available.push({ prefix, path });
       } catch {
         /* 离线目录仍显示已有资料，封面使用占位图。 */
       }
     }
     return (path: string) => {
-      const normalized = path.replaceAll("\\", "/");
-      for (const root of available)
-        if (normalized.toLowerCase().startsWith(`${root.path.toLowerCase()}/`)) {
-          const relative = normalized.slice(root.path.length + 1).split("/");
-          if (relative.some((part) => part === "." || part === "..")) return undefined;
-          return `http://localhost:${window.NL_PORT}${root.prefix}/${relative.map(encodeURIComponent).join("/")}`;
+      for (const root of available) {
+        const relative = pathRelativeTo(path, root.path);
+        if (relative !== undefined) {
+          return `http://localhost:${window.NL_PORT}${root.prefix}/${relative.split("/").map(encodeURIComponent).join("/")}`;
         }
+      }
       return undefined;
     };
   }

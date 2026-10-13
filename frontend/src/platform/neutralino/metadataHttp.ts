@@ -6,6 +6,8 @@ import { encodedPowerShell } from "./process";
 import { requestHttp } from "./http";
 import { playbackStorage } from "./playbackSettings";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
+import { NativeLibraryPort } from "./library";
+import { toolPlatform } from "./toolPaths";
 
 export const psString = (value: string) => `'${value.replaceAll("'", "''")}'`;
 export async function runPowerShell(
@@ -36,9 +38,17 @@ async function crypt(value: string, decrypt: boolean) {
     : encoded;
 }
 export function protectedSettingsStore<T>(key: string): Store<T> {
+  // macOS/Linux 只通过官方 Extension 访问系统密钥库，不回退明文 storage。
+  const port = new NativeLibraryPort();
   const storage = playbackStorage<{ version: number; protected: string }>(key);
   return {
     async read() {
+      if (toolPlatform() !== "Windows") {
+        const value = await port.request<string | null>("platform.credentials.read", { key });
+        if (value === null) return null;
+        if (typeof value !== "string" || value.length > 80000) throw new Error("无效的服务配置。");
+        return JSON.parse(value) as unknown;
+      }
       const value = await storage.read();
       if (value === null) return null;
       const envelope = value as { version: number; protected: string };
@@ -53,6 +63,10 @@ export function protectedSettingsStore<T>(key: string): Store<T> {
     async write(value) {
       const input = JSON.stringify(value);
       if (input.length > 20000) throw new Error("服务配置过大。");
+      if (toolPlatform() !== "Windows") {
+        await port.request("platform.credentials.write", { key, value: input });
+        return;
+      }
       await storage.write({ version: 1, protected: await crypt(input, false) });
     },
   };
