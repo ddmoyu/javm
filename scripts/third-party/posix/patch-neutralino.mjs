@@ -69,7 +69,8 @@ export function isolateWebview(source) {
   );
   replace(
     "    gtk_widget_show_all(m_window);",
-    `    gtk_widget_show_all(parentContainer);
+    `    if(isolated) gtk_widget_realize(m_window); // Native handles exist without mapping a visible window.
+    gtk_widget_show_all(parentContainer);
     if(!isolated) gtk_widget_show(m_window);`,
   );
   replace(

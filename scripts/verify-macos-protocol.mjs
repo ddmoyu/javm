@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { ExtensionFixture } from "../tests/fixtures/core-extension/host.mjs";
@@ -9,7 +9,9 @@ import { desktopHostFile } from "./desktop-host.mjs";
 
 assert.equal(process.env.GITHUB_ACTIONS, "true");
 assert.equal(process.platform, "darwin");
-const directory = await mkdtemp(path.join(tmpdir(), "javm-safe-mac-links-"));
+const applications = path.join(homedir(), "Applications");
+await mkdir(applications, { recursive: true });
+const directory = await mkdtemp(path.join(applications, "javm-safe-mac-links-"));
 const bundle = path.join(directory, "安全 ' 空格/JAVM.app");
 const payload = path.join(bundle, "Contents/MacOS");
 const receipts = path.join(directory, "receipts");
@@ -180,6 +182,7 @@ try {
     }
   }
   await host.close();
+  assert.equal(path.dirname(directory), applications);
   assert.match(path.basename(directory), /^javm-safe-mac-links-/);
   await rm(directory, { recursive: true, force: true });
 }

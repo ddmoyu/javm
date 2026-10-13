@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -157,13 +157,17 @@ async function launch(binary, args, reuse = false) {
     socket.send(
       JSON.stringify({ id: randomUUID(), method: "app.exit", accessToken, data: { code: 0 } }),
     );
-    const [code] = await Promise.race([
+    const [code, signal] = await Promise.race([
       exit,
       delay(12000).then(() => {
         throw new Error("宿主未完成退出");
       }),
     ]);
-    assert.equal(code, 0);
+    assert.equal(
+      code,
+      0,
+      `${path.basename(binary)} 启动 ${completed.length + 1}: ${code}/${signal} ${diagnostics}`,
+    );
     completed.push(path.basename(binary));
   } finally {
     socket?.close();
@@ -207,9 +211,11 @@ try {
     ]);
     await run("codesign", ["--verify", "--deep", "--strict", path.join(mounted, "JAVM.app")]);
     const installedApp = path.join(directory, "Applications/JAVM.app");
-    await cp(path.join(mounted, "JAVM.app"), installedApp, { recursive: true });
+    await run("ditto", [path.join(mounted, "JAVM.app"), installedApp]);
+    await run("codesign", ["--verify", "--deep", "--strict", installedApp]);
     await launch(path.join(installedApp, "Contents/MacOS/JAVM"), [], true);
-    await cp(path.join(mounted, "JAVM.app"), installedApp, { recursive: true, force: true });
+    await run("ditto", [path.join(mounted, "JAVM.app"), installedApp]);
+    await run("codesign", ["--verify", "--deep", "--strict", installedApp]);
     await launch(path.join(installedApp, "Contents/MacOS/JAVM"), [], true);
     assert.ok(installedApp.startsWith(directory + path.sep));
     await rm(installedApp, { recursive: true });

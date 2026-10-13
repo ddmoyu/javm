@@ -1,8 +1,10 @@
 #include "protocol.hpp"
 #include <CoreServices/CoreServices.h>
 #include <filesystem>
+#include <chrono>
 #include <stdexcept>
 #include <string>
+#include <thread>
 
 namespace javm::platform {
 namespace {
@@ -41,7 +43,13 @@ nlohmann::json protocol(const nlohmann::json& params) {
         if(!url.value || LSRegisterURL(url.value, true) != noErr ||
             LSSetDefaultHandlerForURLScheme(CFSTR("javm"), CFSTR("net.ddmoyu.javm")) != noErr)
             throw std::runtime_error("无法设置 macOS 链接关联，请在 Finder 中打开此 APP 后重试");
-        current = currentApplication();
+        // LaunchServices updates its registration database asynchronously. This
+        // bounded wait runs on the platform service worker, never the UI thread.
+        for(int attempt = 0; attempt < 20; ++attempt) {
+            current = currentApplication();
+            if(isCurrent()) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
         if(!isCurrent()) throw std::runtime_error("系统仍关联到另一份 APP，请在 Finder 中打开此 APP 后重试");
     }
     return {{"state", current.empty() ? "missing" : isCurrent() ? "current" : "other"},

@@ -134,13 +134,13 @@ if (mac) {
 <key>CFBundleIdentifier</key><string>net.ddmoyu.javm</string><key>CFBundleName</key><string>JAVM</string>
 <key>CFBundleDisplayName</key><string>JAVM</string><key>CFBundleExecutable</key><string>JAVM</string>
 <key>CFBundlePackageType</key><string>APPL</string><key>CFBundleIconFile</key><string>JAVM.icns</string>
-<key>CFBundleShortVersionString</key><string>${pkg.version.split("-")[0]}</string><key>CFBundleVersion</key><string>${pkg.version.split(".").at(-1)}</string>
+<key>CFBundleShortVersionString</key><string>${pkg.version.split("-")[0]}</string><key>CFBundleVersion</key><string>${pkg.version.replace("-alpha.", "a")}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLName</key><string>net.ddmoyu.javm.links</string><key>CFBundleURLSchemes</key><array><string>javm</string></array></dict></array>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 </dict></plist>\n`,
   );
-  for (const relative of [...executables.filter((file) => file !== "JAVM"), `bin/${library}`]) {
+  for (const relative of [...executables, `bin/${library}`]) {
     const file = path.join(payload, relative);
     const links = await run("otool", ["-L", file], root, true);
     assert.ok(
@@ -149,7 +149,7 @@ if (mac) {
       ),
       `包内文件依赖构建机: ${relative}`,
     );
-    await run("codesign", ["--force", "--sign", "-", file]);
+    if (relative !== "JAVM") await run("codesign", ["--force", "--sign", "-", file]);
   }
   // Apple Silicon 运行所需的 ad-hoc 校验，不使用开发者证书，不执行公证。
   // The main executable is signed with the outer APP after every nested binary.
