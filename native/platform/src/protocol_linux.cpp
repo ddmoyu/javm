@@ -1,5 +1,6 @@
 #include "protocol.hpp"
 #include <gio/gdesktopappinfo.h>
+#include <cstdlib>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -19,10 +20,16 @@ void check(bool success, GError* error) {
 }
 nlohmann::json protocol(const nlohmann::json& params) {
     const auto operation = params.at("operation").get<std::string>();
-    const auto entry = params.at("entry").get<std::string>();
+    const auto requestedEntry = params.at("entry").get<std::string>();
+    // AppImage mounts/extracts its payload in a temporary directory. Persist the
+    // original image path supplied by its runtime, never that transient launcher.
+    const auto* appImage = std::getenv("APPIMAGE");
+    const auto entry = appImage && *appImage ? std::string(appImage) : requestedEntry;
     if(operation != "status" && operation != "register" && operation != "remove") throw std::runtime_error("链接操作无效");
-    if(entry.size() > 32768 || entry.find('\0') != std::string::npos || !std::filesystem::path(entry).is_absolute() ||
-       std::filesystem::path(entry).filename() != "JAVM" || access(entry.c_str(), X_OK) != 0)
+    if(requestedEntry.size() > 32768 || requestedEntry.find('\0') != std::string::npos ||
+       !std::filesystem::path(requestedEntry).is_absolute() || std::filesystem::path(requestedEntry).filename() != "JAVM" ||
+       access(requestedEntry.c_str(), X_OK) != 0 || entry.size() > 32768 || entry.find_first_of("\r\n") != std::string::npos ||
+       !std::filesystem::path(entry).is_absolute() || access(entry.c_str(), X_OK) != 0)
         throw std::runtime_error("请在完整的 JAVM 安装包或便携包中设置链接关联");
     App current{g_app_info_get_default_for_uri_scheme("javm")};
     const auto existing = command(current.value);

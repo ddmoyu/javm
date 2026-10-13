@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -26,33 +26,44 @@ await writeFile(
   `#!/usr/bin/env python3\nimport json,sys,pathlib\npathlib.Path(${JSON.stringify(receipt)}).write_text(json.dumps(sys.argv[1:]))\n`,
 );
 await chmod(application, 0o755);
-const fixture = new ExtensionFixture(
-  path.join(root, "bin/javm_database"),
-  path.join(directory, "unused.sqlite3"),
-  { env },
-);
+const image = path.join(directory, "安全 ' 百分% 应用.AppImage");
+await copyFile(application, image);
+await chmod(image, 0o755);
 try {
-  await fixture.start();
-  const request = (operation, expected = "") =>
-    fixture.request("platform.protocol", { operation, entry: application, expected });
-  assert.equal((await request("status")).state, "missing");
-  assert.equal((await request("register")).state, "current");
-  await run("gio", ["open", "javm://safe-fixture/search?query=forest"], directory, true, env);
-  let received;
-  for (let i = 0; i < 100; ++i) {
+  for (const imagePath of ["", image]) {
+    const fixture = new ExtensionFixture(
+      path.join(root, "bin/javm_database"),
+      path.join(directory, "unused.sqlite3"),
+      { env: { ...env, APPIMAGE: imagePath } },
+    );
     try {
-      received = JSON.parse(await readFile(receipt, "utf8"));
-      break;
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
+      await fixture.start();
+      const request = (operation, expected = "") =>
+        fixture.request("platform.protocol", { operation, entry: application, expected });
+      assert.equal((await request("status")).state, "missing");
+      const registered = await request("register");
+      assert.equal(registered.state, "current");
+      assert.equal(registered.entry, imagePath || application);
+      await rm(receipt, { force: true });
+      await run("gio", ["open", "javm://safe-fixture/search?query=forest"], directory, true, env);
+      let received;
+      for (let i = 0; i < 100; ++i) {
+        try {
+          received = JSON.parse(await readFile(receipt, "utf8"));
+          break;
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        await delay(50);
+      }
+      assert.deepEqual(received, ["javm://safe-fixture/search?query=forest"]);
+      assert.equal((await request("remove")).state, "missing");
+    } finally {
+      await fixture.close();
     }
-    await delay(50);
   }
-  assert.deepEqual(received, ["javm://safe-fixture/search?query=forest"]);
-  assert.equal((await request("remove")).state, "missing");
-  console.log("Linux 链接注册、特殊字符路径、参数传递与解除通过");
+  console.log("Linux 链接注册、便携包与 AppImage 持久路径、参数传递与解除通过");
 } finally {
-  await fixture.close();
   assert.equal(path.dirname(directory), path.resolve(tmpdir()));
   assert.match(path.basename(directory), /^javm-safe-protocol-/);
   await rm(directory, { recursive: true, force: true });
