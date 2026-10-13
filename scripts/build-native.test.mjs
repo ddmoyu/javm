@@ -32,11 +32,14 @@ test("所有平台支持隔离基础夹具，不隐式启用应用构建", () =>
   }
 });
 
-test("拒绝未移植目标、冲突参数和未知选项，避免误发布", () => {
+test("完整桌面构建使用相应开发或已验证组件发布 preset", () => {
   for (const platform of ["linux", "darwin"]) {
-    assert.throws(() => nativeBuildPlan(platform), /not ported/);
-    assert.throws(() => nativeBuildPlan(platform, ["--release"]), /not ported/);
+    const name = platform === "darwin" ? "macos" : "linux";
+    assert.equal(nativeBuildPlan(platform)[0].args.at(-1), `${name}-app`);
+    assert.equal(nativeBuildPlan(platform, ["--release"])[0].args.at(-1), `${name}-release`);
   }
+});
+test("拒绝未支持的平台、冲突参数和未知选项", () => {
   for (const args of [
     ["--release", "--core-only"],
     ["--portability-checks", "--core-only"],

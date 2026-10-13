@@ -77,7 +77,9 @@
   "extensions": [
     {
       "id": "net.ddmoyu.javm.database",
-      "commandWindows": "\"${NL_PATH}/bin/javm_database.exe\" --database \"${NL_OSDATAPATH}/JAVM/downloads-v1.sqlite3\""
+      "commandWindows": "\"${NL_PATH}/bin/javm_database.exe\" --database \"${NL_OSDATAPATH}/JAVM/downloads-v1.sqlite3\"",
+      "commandLinux": "exec ./bin/javm_database --system-database",
+      "commandDarwin": "exec ./bin/javm_database --system-database"
     }
   ],
   "dataLocation": "system",

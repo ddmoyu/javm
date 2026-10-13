@@ -1,4 +1,8 @@
 if(JAVM_USE_PREBUILT_DEPENDENCIES)
+    if(NOT WIN32)
+        set(OPENSSL_ROOT_DIR "${JAVM_PREBUILT_CURL}/sdk/openssl")
+        set(OPENSSL_USE_STATIC_LIBS TRUE)
+    endif()
     # A new component fingerprint must replace a cached SDK from an older release.
     set(CURL_DIR "${JAVM_PREBUILT_CURL}/sdk/lib/cmake/CURL" CACHE PATH "Verified CURL component SDK" FORCE)
     find_package(CURL CONFIG REQUIRED PATHS "${JAVM_PREBUILT_CURL}/sdk/lib/cmake/CURL" NO_DEFAULT_PATH)

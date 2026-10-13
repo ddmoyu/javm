@@ -3,10 +3,11 @@ import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { desktopHostFile } from "./desktop-host.mjs";
 
 // neu uses and removes cwd/.tmp. Never expose the workspace's fixtures, local
 // databases or dependency downloads to that packaging scratch directory.
-if (process.platform !== "win32") throw new Error("Desktop packaging currently supports Windows.");
+const hostName = desktopHostFile();
 const archiveEnabled = !process.argv.includes("--no-archive");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const buildRoot = path.resolve(root, "build");
@@ -14,6 +15,15 @@ await mkdir(buildRoot, { recursive: true });
 const stage = await mkdtemp(path.join(buildRoot, "desktop-package-"));
 const require = createRequire(import.meta.url);
 const config = JSON.parse(await readFile(path.join(root, "neutralino.config.json"), "utf8"));
+if (process.platform !== "win32") {
+  config.cli.copyItems = [
+    "bin/javm_database",
+    "bin/javm_process",
+    process.platform === "darwin" ? "bin/libmediainfo.0.dylib" : "bin/libmediainfo.so.0",
+    "bin/licenses",
+    "bin/tools",
+  ];
+}
 config.cli.distributionPath = "/dist/desktop";
 // Vite's public directory also holds distribution-only documents. The native
 // icon is embedded separately by neu; its public-root copy is unused by the UI.
@@ -32,7 +42,7 @@ const copy = async (relative) => {
 };
 try {
   await copy("dist/frontend");
-  await copy("bin/neutralino-win_x64.exe");
+  await copy(`bin/${hostName}`);
   // neu 将窗口/托盘图标及 EXE 图标嵌入主程序，只需放入构建暂存区。
   await copy("resources/icon.png");
   for (const item of config.cli.copyItems || []) await copy(item);
@@ -65,7 +75,7 @@ try {
     if (error.code !== "ENOENT") throw error;
   }
   console.log(
-    "Windows desktop package: dist/desktop/javm" +
+    `${process.platform} desktop package: dist/desktop/javm` +
       (archiveEnabled ? " and dist/desktop/javm-release.zip" : ""),
   );
 } finally {

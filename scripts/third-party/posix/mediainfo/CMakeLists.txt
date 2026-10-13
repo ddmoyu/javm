@@ -1,0 +1,11 @@
+cmake_minimum_required(VERSION 3.25)
+project(JAVM_POSIX_MEDIAINFO LANGUAGES C CXX)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(ZLIB_LIBRARIES ZLIB::ZLIBSTATIC)
+get_filename_component(JAVM_REPOSITORY_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
+add_subdirectory("${JAVM_REPOSITORY_ROOT}/native/media/mediainfo" mediainfo)
+set_target_properties(mediainfo PROPERTIES OUTPUT_NAME mediainfo SOVERSION 0 VERSION 0.0.0
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/runtime")
+if(APPLE)
+    set_target_properties(mediainfo PROPERTIES INSTALL_NAME_DIR "@rpath")
+endif()

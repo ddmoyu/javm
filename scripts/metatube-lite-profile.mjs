@@ -18,8 +18,13 @@ export async function metatubeRecipeHash() {
 
 export async function verifyMetatubeLite(directory, dependency) {
   const receipt = JSON.parse(await readFile(path.join(directory, "installed.json"), "utf8"));
-  const binary = path.join(directory, "metatube-server.exe");
+  const binary = path.join(
+    directory,
+    process.platform === "win32" ? "metatube-server.exe" : "metatube-server",
+  );
+  const target = `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"}-${process.arch}`;
   if (
+    (receipt.platform !== undefined && receipt.platform !== target) ||
     receipt.version !== dependency.version ||
     receipt.profile !== dependency.profile ||
     receipt.sourceCommit !== dependency.sourceCommit ||

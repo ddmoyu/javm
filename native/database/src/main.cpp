@@ -16,6 +16,7 @@
 #include <atomic>
 #include <iostream>
 #include <memory>
+#include <cstdlib>
 
 template<class Char>
 int runMain(int argc, Char* argv[]) {
@@ -34,7 +35,23 @@ int runMain(int argc, Char* argv[]) {
         std::cout << "JAVM " << JAVM_VERSION << " database extension, protocol 1\nSQLite " << sqlite3_libversion() << '\n';
         return 0;
     }
-    if (argc != 3 || command != "--database") return 2;
+    fs::path requestedDatabase;
+    if (argc == 3 && command == "--database") requestedDatabase = fs::path(argv[2]);
+#ifndef _WIN32
+    else if (argc == 2 && command == "--system-database") {
+        const auto home = std::getenv("HOME");
+        if (!home || !fs::path(home).is_absolute()) return 2;
+#ifdef __APPLE__
+        requestedDatabase = fs::path(home) / "Library/Application Support/JAVM/downloads-v1.sqlite3";
+#else
+        const auto xdg = std::getenv("XDG_DATA_HOME");
+        const auto base = xdg && *xdg ? fs::path(xdg) : fs::path(home) / ".local/share";
+        if (!base.is_absolute()) return 2;
+        requestedDatabase = base / "JAVM/downloads-v1.sqlite3";
+#endif
+    }
+#endif
+    else return 2;
     try {
         const auto bootstrap = javm::extension::readBootstrap(std::cin);
         auto socket = javm::extension::connect(bootstrap);
@@ -43,7 +60,7 @@ int runMain(int argc, Char* argv[]) {
 #else
         javm::extension::ConnectionLifetime hostLifetime([&] { return socket->connected(); });
 #endif
-        const auto databasePath = fs::absolute(fs::path(argv[2])).lexically_normal();
+        const auto databasePath = fs::absolute(requestedDatabase).lexically_normal();
 
         std::unique_ptr<Database> database;
 #if JAVM_WITH_MEDIA

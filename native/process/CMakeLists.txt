@@ -4,6 +4,11 @@ if(UNIX)
     target_link_libraries(javm_process PRIVATE nlohmann_json::nlohmann_json)
     target_compile_options(javm_process PRIVATE -Wall -Wextra -Wpedantic -Werror)
     set_target_properties(javm_process PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+    if(NOT JAVM_CORE_ONLY)
+        add_custom_command(TARGET javm_process POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/bin"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:javm_process>" "${PROJECT_SOURCE_DIR}/bin/javm_process")
+    endif()
 endif()
 
 if(JAVM_CORE_ONLY)

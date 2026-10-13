@@ -64,11 +64,7 @@ export function nativeBuildPlan(platform, args = []) {
       { command: "cmake", args: ["--build", "build/native/portability-checks"] },
     ];
   }
-  if (!has("CoreOnly"))
-    throw new Error(
-      "Media services and releases are not ported yet. Use --core-only for development.",
-    );
-  const preset = platform === "darwin" ? "macos-core" : "linux-core";
+  const preset = `${platform === "darwin" ? "macos" : "linux"}-${has("CoreOnly") ? "core" : has("Release") ? "release" : "app"}`;
   return [
     { command: "cmake", args: [...fresh, "--preset", preset] },
     { command: "cmake", args: ["--build", "--preset", preset] },

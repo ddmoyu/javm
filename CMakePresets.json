@@ -50,6 +50,29 @@
       "cacheVariables": { "JAVM_CORE_ONLY": true, "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0" }
     },
     {
+      "name": "linux-app",
+      "displayName": "Ubuntu 24.04 desktop",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "macos-app",
+      "displayName": "macOS 13 desktop",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": { "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0" }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "linux-app",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "JAVM_USE_PREBUILT_DEPENDENCIES": true }
+    },
+    {
+      "name": "macos-release",
+      "inherits": "macos-app",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "JAVM_USE_PREBUILT_DEPENDENCIES": true }
+    },
+    {
       "name": "windows-release",
       "displayName": "Windows x64 / Release portable",
       "inherits": "windows-msvc",
@@ -67,6 +90,10 @@
     { "name": "windows-core-curl", "configurePreset": "windows-core-curl" },
     { "name": "linux-core", "configurePreset": "linux-core" },
     { "name": "macos-core", "configurePreset": "macos-core" },
+    { "name": "linux-app", "configurePreset": "linux-app" },
+    { "name": "macos-app", "configurePreset": "macos-app" },
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "macos-release", "configurePreset": "macos-release" },
     { "name": "windows-release", "configurePreset": "windows-release" }
   ]
 }

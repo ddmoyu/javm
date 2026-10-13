@@ -9,8 +9,17 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const options = new Set(process.argv.slice(2));
 for (const option of options)
   if (!["--offline", "--install"].includes(option)) throw new Error(`未知参数：${option}`);
-if (process.platform !== "win32" || process.arch !== "x64")
-  throw new Error("MetaTube 精简构建当前仅支持 Windows x64。");
+if (
+  ![
+    ["win32", "x64"],
+    ["linux", "x64"],
+    ["darwin", "x64"],
+    ["darwin", "arm64"],
+  ].some(([os, arch]) => os === process.platform && arch === process.arch)
+)
+  throw new Error("尚未适配此 MetaTube 构建平台。");
+const target = `${process.platform === "win32" ? "windows" : process.platform === "darwin" ? "macos" : "linux"}-${process.arch}`;
+const binaryName = process.platform === "win32" ? "metatube-server.exe" : "metatube-server";
 const offline = options.has("--offline");
 const dependencies = JSON.parse(
   await readFile(path.join(root, "scripts/offline-dependencies.json"), "utf8"),
@@ -21,7 +30,10 @@ const lock = JSON.parse(
 );
 if (dependency.sourceCommit !== lock.commit || dependency.toolchain !== lock.toolchain)
   throw new Error("MetaTube 源码或工具链锁定记录不一致。");
-const output = path.join(root, "build/metatube-lite");
+const output = path.join(
+  root,
+  process.platform === "win32" ? "build/metatube-lite" : `build/metatube-lite-${target}`,
+);
 const cache = path.join(root, ".tmp/offline-dependencies");
 const sourceCache = path.join(cache, `metatube-source-${lock.commit}`);
 await mkdir(output, { recursive: true });
@@ -172,8 +184,8 @@ const environment = {
   ...process.env,
   GOTOOLCHAIN: lock.toolchain,
   CGO_ENABLED: "0",
-  GOOS: "windows",
-  GOARCH: "amd64",
+  GOOS: process.platform === "win32" ? "windows" : process.platform,
+  GOARCH: process.arch === "x64" ? "amd64" : "arm64",
   GOAMD64: "v1",
   GOFLAGS: "",
   GOWORK: "off",
@@ -202,7 +214,7 @@ const goVersion = await run("go", ["version"]);
 if (!goVersion.includes(` ${lock.toolchain} `)) throw new Error(`Go 工具链不匹配：${goVersion}`);
 await run("go", ["fmt", "./route", "./database", "./common/random"]);
 await run("go", ["mod", "tidy"]);
-const binary = path.join(output, "metatube-server.exe");
+const binary = path.join(output, binaryName);
 const moduleName = "github.com/metatube-community/metatube-sdk-go";
 await run("go", [
   "build",
@@ -241,8 +253,9 @@ for (const file of lock.files.filter(
     throw new Error(`来源实现被修改：${file.path}`);
 
 const officialArchive = path.join(cache, dependency.file);
-await download(officialArchive, dependency.url, (bytes) => sha256(bytes) === dependency.sha256);
-const zipScript = String.raw`$ErrorActionPreference='Stop'
+if (process.platform === "win32") {
+  await download(officialArchive, dependency.url, (bytes) => sha256(bytes) === dependency.sha256);
+  const zipScript = String.raw`$ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive=[IO.Compression.ZipFile]::OpenRead($env:JAVM_META_BASELINE_ZIP)
 try {
@@ -258,11 +271,13 @@ foreach ($name in @('official','lite')) {
   try { [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip,(Join-Path $env:JAVM_META_OUTPUT $inputFile),'metatube-server.exe',[IO.Compression.CompressionLevel]::Optimal) }
   finally { $zip.Dispose(); $stream.Dispose() }
 }`;
-await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", zipScript], {
-  JAVM_META_BASELINE_ZIP: officialArchive,
-  JAVM_META_OUTPUT: output,
-});
+  await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", zipScript], {
+    JAVM_META_BASELINE_ZIP: officialArchive,
+    JAVM_META_OUTPUT: output,
+  });
+}
 const receipt = {
+  platform: target,
   version: dependency.version,
   profile: dependency.profile,
   sourceCommit: lock.commit,
@@ -274,24 +289,42 @@ const receipt = {
 };
 await writeFile(path.join(output, "installed.json"), JSON.stringify(receipt, null, 2) + "\n");
 await writeFile(path.join(output, "build-info.txt"), buildInfo + "\n");
-const officialBytes = (await stat(path.join(output, "metatube-server-official.exe"))).size;
-const officialZipBytes = (await stat(path.join(output, "metatube-server-official.zip"))).size;
-const liteZipBytes = (await stat(path.join(output, "metatube-server-lite.zip"))).size;
-const comparison = {
-  sourceDirectory: source,
-  toolchain: lock.toolchain,
-  profile: dependency.profile,
-  officialBytes,
-  liteBytes: receipt.bytes,
-  executableReductionPercent: Number(((1 - receipt.bytes / officialBytes) * 100).toFixed(2)),
-  officialZipBytes,
-  liteZipBytes,
-  zipReductionPercent: Number(((1 - liteZipBytes / officialZipBytes) * 100).toFixed(2)),
-  officialDownloadZipBytes: (await stat(officialArchive)).size,
-  userAgentEntries: pool.length,
-  providerSourceFilesUnchanged: lock.files.filter((file) => file.path.startsWith("provider/"))
-    .length,
-};
+const officialBytes =
+  process.platform === "win32"
+    ? (await stat(path.join(output, "metatube-server-official.exe"))).size
+    : 0;
+const officialZipBytes =
+  process.platform === "win32"
+    ? (await stat(path.join(output, "metatube-server-official.zip"))).size
+    : 0;
+const liteZipBytes =
+  process.platform === "win32"
+    ? (await stat(path.join(output, "metatube-server-lite.zip"))).size
+    : 0;
+const comparison =
+  process.platform === "win32"
+    ? {
+        sourceDirectory: source,
+        toolchain: lock.toolchain,
+        profile: dependency.profile,
+        officialBytes,
+        liteBytes: receipt.bytes,
+        executableReductionPercent: Number(((1 - receipt.bytes / officialBytes) * 100).toFixed(2)),
+        officialZipBytes,
+        liteZipBytes,
+        zipReductionPercent: Number(((1 - liteZipBytes / officialZipBytes) * 100).toFixed(2)),
+        officialDownloadZipBytes: (await stat(officialArchive)).size,
+        userAgentEntries: pool.length,
+        providerSourceFilesUnchanged: lock.files.filter((file) => file.path.startsWith("provider/"))
+          .length,
+      }
+    : {
+        platform: target,
+        toolchain: lock.toolchain,
+        profile: dependency.profile,
+        bytes: receipt.bytes,
+        userAgentEntries: pool.length,
+      };
 await writeFile(
   path.join(output, "size-comparison.json"),
   JSON.stringify(comparison, null, 2) + "\n",
@@ -318,7 +351,7 @@ if (options.has("--install")) {
   const licenses = path.join(root, "bin/licenses/metatube-lite");
   await mkdir(installed, { recursive: true });
   await mkdir(licenses, { recursive: true });
-  for (const file of ["metatube-server.exe", "installed.json"])
+  for (const file of [binaryName, "installed.json"])
     await copyFile(path.join(output, file), path.join(installed, file));
   for (const file of ["MetaTube.txt", "gorm-datatypes.txt", "useragent.txt", "modifications.txt"])
     await copyFile(path.join(notices, file), path.join(licenses, file));

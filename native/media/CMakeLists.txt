@@ -34,17 +34,31 @@ if(JAVM_CORE_ONLY)
     include(tests.cmake)
     return()
 endif()
+if(WIN32)
+    set(JAVM_MEDIAINFO_RUNTIME_NAME MediaInfo.dll)
+elseif(APPLE)
+    set(JAVM_MEDIAINFO_RUNTIME_NAME libmediainfo.0.dylib)
+else()
+    set(JAVM_MEDIAINFO_RUNTIME_NAME libmediainfo.so.0)
+endif()
 if(JAVM_USE_PREBUILT_DEPENDENCIES)
     add_library(mediainfo SHARED IMPORTED GLOBAL)
     set_target_properties(mediainfo PROPERTIES
-        IMPORTED_LOCATION "${JAVM_PREBUILT_MEDIAINFO}/runtime/MediaInfo.dll")
+        IMPORTED_LOCATION "${JAVM_PREBUILT_MEDIAINFO}/runtime/${JAVM_MEDIAINFO_RUNTIME_NAME}")
     set(JAVM_MEDIAINFO_INCLUDE_DIR "${JAVM_PREBUILT_MEDIAINFO}/sdk/include")
     set(JAVM_MEDIAINFO_RECEIPT "${JAVM_PREBUILT_MEDIAINFO}/runtime/mediainfo-lite.json")
+    if(NOT WIN32)
+        set(JAVM_MEDIAINFO_RECEIPT "${JAVM_PREBUILT_MEDIAINFO}/manifest.json")
+    endif()
     set(JAVM_MEDIAINFO_LICENSE "${JAVM_PREBUILT_MEDIAINFO}/licenses/MediaInfo.html")
     set(JAVM_ZENLIB_LICENSE "${JAVM_PREBUILT_MEDIAINFO}/licenses/ZenLib.txt")
     set(JAVM_ZLIB_LICENSE "${JAVM_PREBUILT_MEDIAINFO}/licenses/zlib.txt")
 else()
     add_subdirectory(mediainfo)
+    if(NOT WIN32)
+        target_link_libraries(mediainfo PRIVATE ZLIB::ZLIBSTATIC)
+        set_target_properties(mediainfo PROPERTIES OUTPUT_NAME mediainfo SOVERSION 0 VERSION 0.0.0)
+    endif()
     set(JAVM_MEDIAINFO_INCLUDE_DIR "${JAVM_MEDIAINFO_SOURCE_DIR}/MediaInfoLib/Source")
     set(JAVM_MEDIAINFO_RECEIPT "$<TARGET_FILE_DIR:mediainfo>/mediainfo-lite.json")
     set(JAVM_MEDIAINFO_LICENSE "${JAVM_MEDIAINFO_SOURCE_DIR}/MediaInfoLib/License.html")
@@ -62,8 +76,8 @@ endif()
 target_link_libraries(javm_database PRIVATE javm_media)
 add_custom_target(javm_media_runtime ALL
     ${JAVM_MEDIAINFO_RECEIPT_COMMAND}
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:mediainfo>" "${PROJECT_SOURCE_DIR}/bin/MediaInfo.dll"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:mediainfo>" "$<TARGET_FILE_DIR:javm_database>/MediaInfo.dll"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:mediainfo>" "${PROJECT_SOURCE_DIR}/bin/${JAVM_MEDIAINFO_RUNTIME_NAME}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:mediainfo>" "$<TARGET_FILE_DIR:javm_database>/${JAVM_MEDIAINFO_RUNTIME_NAME}"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${JAVM_MEDIAINFO_RECEIPT}" "${PROJECT_SOURCE_DIR}/bin/mediainfo-lite.json"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${JAVM_MEDIAINFO_RECEIPT}" "$<TARGET_FILE_DIR:javm_database>/mediainfo-lite.json"
     COMMAND ${CMAKE_COMMAND} -E make_directory "${PROJECT_SOURCE_DIR}/bin/licenses"
