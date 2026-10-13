@@ -47,17 +47,39 @@ int64_t Store::importLegacyRows(sqlite3* source,const std::atomic_bool& cancelle
         }
         const auto path=fs::path(wide(stringValue(old,"video_path")));
         file["name"]=stringValue(old,"title").empty()?pathText(path.stem()):stringValue(old,"title");
+        file["pending"]=numeric(old,"scan_status")<2;
+        // 旧扫描器以文件名补标题；不能把它变成正式资料，阻止以后刮削补全。
+        if(file["pending"]==true && old.value("nfo_mtime",Json()).is_null()) {
+            if(stringValue(old,"title")==pathText(path.stem())) nfo.erase("title");
+            if(stringValue(old,"original_title")==pathText(path.stem())) nfo.erase("originaltitle");
+        }
+        bool present=false;
         if(path.is_absolute()) {
             file.update({{"path",pathText(path)},{"parent",pathText(path.parent_path())},{"size",old.value("file_size",Json())},{"mtime",old.value("file_mtime",Json())},{"fast_hash",stringValue(old,"fast_hash")},{"duration_ms",nfo["runtimeSeconds"].get<int64_t>()*1000}});
             const auto resolution=stringValue(old,"resolution"); std::smatch match;
             if(std::regex_match(resolution,match,std::regex("([0-9]{1,5})[xX]([0-9]{1,5})"))) { file["width"]=std::stoi(match[1]); file["height"]=std::stoi(match[2]); }
+            // saveWork 的普通扫描会替换技术信息；迁移先保留新版非空字段，只补空。
+            const auto current=rows(db_,"SELECT * FROM media_files WHERE path_key=?",{pathKey(path)});
+            if(!current.empty()) {
+                const auto& media=current[0];
+                for(const auto& [column,key]:{std::pair{"path","path"},{"dir_path","parent"},{"fast_hash","fast_hash"},{"file_stamp","file_stamp"},{"codec","codec"}})
+                    if(!stringValue(media,column).empty()) file[key]=media[column];
+                for(const auto& [column,key]:{std::pair{"file_size","size"},{"file_mtime","mtime"}})
+                    if(!media[column].is_null()) file[key]=media[column];
+                for(const auto* key:{"width","height","duration_ms"})
+                    if(numeric(media,key)>0) file[key]=media[key];
+            }
+            std::error_code ec; present=fs::is_regular_file(path,ec);
+            if(present && stringValue(file,"file_stamp").empty()) {
+                try { file["file_stamp"]=stamp(path); }
+                catch(const fs::filesystem_error&) { present=false; } // 离线或检查期间消失的文件仍保留关联。
+            }
         } else file["kind"]="metadata";
         for(const auto* kind:{"poster","thumb","fanart"}) if(!stringValue(old,kind).empty()) file[kind]=old[kind];
         const auto id=saveWork(file,nfo,nullptr);
         ids[old["id"].is_string()?old["id"].get<std::string>():old["id"].dump()]=id;
         run(db_,"UPDATE works SET favorite=MAX(favorite,?),created_at=COALESCE(?,created_at),scraped_at=COALESCE(?,scraped_at) WHERE id=?",{numeric(old,"favorite")!=0,old.value("created_at",Json()),old.value("scraped_at",Json()),id});
         if(path.is_absolute()) {
-            std::error_code ec; const bool present=fs::is_regular_file(path,ec);
             run(db_,"UPDATE media_files SET missing=? WHERE path_key=?",{!present,pathKey(path)});
         }
     }
