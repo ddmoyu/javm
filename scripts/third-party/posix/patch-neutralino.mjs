@@ -26,7 +26,7 @@ export function isolateWebview(source) {
   };
   replace(
     "static fileDropHandler_t filesDropped;",
-    "static fileDropHandler_t filesDropped;\nstatic std::function<void(const std::string&)> captureMessage;",
+    "static fileDropHandler_t filesDropped;\nstatic std::function<void(const std::string&)> captureMessage;\nstatic std::function<void()> requestApplicationExit;\nstatic bool applicationExitPending = false;",
   );
   replace(
     "    m_webview = webkit_web_view_new();",
@@ -75,6 +75,28 @@ export function isolateWebview(source) {
   replace(
     'app, "setActivationPolicy:"_sel, NSApplicationActivationPolicyRegular);',
     'app, "setActivationPolicy:"_sel, args == "--javm-isolated" ? NSApplicationActivationPolicyAccessory : NSApplicationActivationPolicyRegular);',
+  );
+  replace(
+    '    class_addProtocol(cls, objc_getProtocol("NSApplicationDelegate"));',
+    `    class_addProtocol(cls, objc_getProtocol("NSApplicationDelegate"));
+    class_addMethod(cls, "applicationShouldTerminate:"_sel,
+      (IMP)(+[](id, SEL, id) -> unsigned long {
+        if(!requestApplicationExit) return 1; // NSTerminateNow
+        if(!applicationExitPending) {
+          applicationExitPending = true;
+          requestApplicationExit();
+        }
+        return 2; // NSTerminateLater: app.exit completes the asynchronous shutdown.
+      }), "Q@:@");`,
+  );
+  replace(
+    "  void terminate(int exitCode = 0) {\n    close();",
+    `  void terminate(int exitCode = 0) {
+    if(applicationExitPending) {
+      id app = ((id(*)(id, SEL))objc_msgSend)("NSApplication"_cls, "sharedApplication"_sel);
+      ((void(*)(id, SEL, BOOL))objc_msgSend)(app, "replyToApplicationShouldTerminate:"_sel, YES);
+    }
+    close();`,
   );
   replace(
     "    objc_registerClassPair(cls);",
@@ -128,7 +150,12 @@ export function forwardCaptureMessages(source) {
   assert.equal(source.split(anchor).length, 2, "宿主事件转发补丁位置已变化");
   return source.replace(
     anchor,
-    `    if(windowProps.webviewArgs == "--javm-isolated") {
+    `    if(windowProps.webviewArgs == "--javm-managed") {
+        webview::requestApplicationExit = [] {
+            events::dispatchToAllApps("mainMenuItemClicked", {{"id", "javm-quit"}});
+        };
+    }
+    if(windowProps.webviewArgs == "--javm-isolated") {
         webview::captureMessage = [](const std::string& message) {
             static unsigned count = 0;
             if(message.size() > 160000 || count++ >= 128) return;

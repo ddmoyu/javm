@@ -140,7 +140,7 @@ std::string capture(const fs::path& worker, const fs::path& file, const std::ato
             const auto code = child.reap();
             if (cancelled) throw std::runtime_error("媒体探测已取消");
             if (code == 124) throw std::runtime_error("媒体探测超时");
-            if (code != 0) throw std::runtime_error("媒体探测进程异常退出");
+            if (code != 0) throw std::runtime_error("媒体探测进程异常退出（" + std::to_string(code) + "）");
             return text;
         }
         pollfd pending{output.read, POLLIN, 0};

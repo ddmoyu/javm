@@ -15,7 +15,7 @@ std::string currentApplication() {
     if(!app.value) return {};
     UInt8 buffer[32768];
     if(!CFURLGetFileSystemRepresentation(app.value, true, buffer, sizeof(buffer))) throw std::runtime_error("无法读取当前链接关联");
-    return reinterpret_cast<const char*>(buffer);
+    return std::filesystem::weakly_canonical(reinterpret_cast<const char*>(buffer)).string();
 }
 }
 nlohmann::json protocol(const nlohmann::json& params) {
@@ -29,7 +29,7 @@ nlohmann::json protocol(const nlohmann::json& params) {
         !std::filesystem::is_regular_file(bundle / "Contents/Info.plist"))
         throw std::runtime_error("请将完整的 JAVM.app 放入 Applications 后设置链接关联");
     auto current = currentApplication();
-    const auto expected = bundle.string();
+    const auto expected = std::filesystem::canonical(bundle).string();
     if(operation == "remove") throw std::runtime_error("macOS 管理 APP 的链接声明，请在其他应用中更改默认程序，或移除此 APP");
     if(operation == "register" && current != expected) {
         if(!current.empty() && params.value("expected", "") != current) throw std::runtime_error("链接关联已变化，请刷新后重新确认");

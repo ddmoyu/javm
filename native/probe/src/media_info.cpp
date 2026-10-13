@@ -10,10 +10,32 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <locale.h>
 #endif
 
 namespace javm::probe {
 namespace {
+#ifndef _WIN32
+class Utf8Locale {
+    locale_t value_ = nullptr;
+    locale_t previous_ = nullptr;
+public:
+    Utf8Locale() {
+        // ZenLib converts its wchar_t filenames with the current C locale.
+        // Scope UTF-8 to this probe thread even when the launcher uses LC_ALL=C.
+        for(const auto* name : {"C.UTF-8", "en_US.UTF-8", "UTF-8"}) {
+            value_ = newlocale(LC_CTYPE_MASK, name, nullptr);
+            if(value_) break;
+        }
+        if(!value_) throw std::runtime_error("无法初始化 UTF-8 媒体探测环境");
+        previous_ = uselocale(value_);
+        if(!previous_) { freelocale(value_); throw std::runtime_error("无法设置 UTF-8 媒体探测环境"); }
+    }
+    ~Utf8Locale() { uselocale(previous_); freelocale(value_); }
+    Utf8Locale(const Utf8Locale&) = delete;
+    Utf8Locale& operator=(const Utf8Locale&) = delete;
+};
+#endif
 class Library {
 #ifdef _WIN32
     HMODULE value_;
@@ -67,6 +89,9 @@ double number(const std::string& value, double maximum) {
 } // namespace
 Json readDirect(const fs::path& file, const fs::path& libraryPath) {
     if (!file.is_absolute() || !fs::is_regular_file(file)) throw std::runtime_error("媒体文件不存在或无法访问");
+#ifndef _WIN32
+    Utf8Locale locale;
+#endif
     Library library(libraryPath);
     const auto create = library.function<decltype(&MediaInfo_New)>("MediaInfo_New");
     const auto destroy = library.function<decltype(&MediaInfo_Delete)>("MediaInfo_Delete");

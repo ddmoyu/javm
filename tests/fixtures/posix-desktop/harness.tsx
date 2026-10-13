@@ -237,8 +237,7 @@ async function run() {
     );
     await nativeWindow.show();
     results.push("Tray close keeps downloads active and the window can reopen");
-    if (window.NL_OS === "Darwin")
-      await events.dispatch("mainMenuItemClicked", { id: "javm-quit" });
+    if (window.NL_OS === "Darwin") await write({ readyToQuit: true }); // The CI parent sends a real system Quit event.
     else await exitApplication();
   }
 }

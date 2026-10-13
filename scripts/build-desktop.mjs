@@ -16,6 +16,7 @@ const stage = await mkdtemp(path.join(buildRoot, "desktop-package-"));
 const require = createRequire(import.meta.url);
 const config = JSON.parse(await readFile(path.join(root, "neutralino.config.json"), "utf8"));
 if (process.platform !== "win32") {
+  config.modes.window.webviewArgs = "--javm-managed";
   config.cli.copyItems = [
     "bin/javm_database",
     "bin/javm_process",

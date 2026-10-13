@@ -30,6 +30,16 @@ for (const file of [
 ])
   await copyFile(path.join(root, "bin", file), path.join(application, "bin", file));
 await copyFile(path.join(root, "bin", desktopHostFile()), path.join(application, "JAVM-host"));
+const directProbe = JSON.parse(
+  await run(
+    path.join(application, "bin/javm_database"),
+    ["--media-probe", path.join(application, "media/pattern.mp4")],
+    application,
+    true,
+    { ...process.env, LC_ALL: "C", LANG: "C" },
+  ),
+);
+assert.ok(directProbe.video && directProbe.durationMs >= 2000, "C locale 下必须能探测中文路径");
 await build({
   configFile: false,
   root: path.join(root, "tests/fixtures/posix-desktop"),
@@ -164,6 +174,7 @@ const config = {
       exitProcessOnClose: false,
       enableInspector: false,
       injectGlobals: true,
+      webviewArgs: "--javm-managed",
       newWindowPolicy: "custom",
     },
   },
@@ -216,13 +227,39 @@ try {
     child.stderr.on("data", consume);
     try {
       const deadline = Date.now() + 160000;
+      let requestedQuit = false;
       while (
         child.exitCode === null &&
         child.signalCode === null &&
         !spawnError &&
         Date.now() < deadline
-      )
+      ) {
+        if (process.platform === "darwin" && phase === "desktop" && !requestedQuit) {
+          try {
+            const progress = JSON.parse(
+              await readFile(path.join(application, "desktop.json"), "utf8"),
+            );
+            if (progress.readyToQuit) {
+              requestedQuit = true;
+              const accepted = await run(
+                "osascript",
+                [
+                  "-l",
+                  "JavaScript",
+                  "-e",
+                  `ObjC.import('AppKit'); $.NSRunningApplication.runningApplicationWithProcessIdentifier(${child.pid}).terminate;`,
+                ],
+                root,
+                true,
+              );
+              assert.equal(accepted, "true", "系统未接收 APP 退出请求");
+            }
+          } catch (error) {
+            if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+          }
+        }
         await delay(100);
+      }
       if (spawnError) throw spawnError;
       let report;
       try {
