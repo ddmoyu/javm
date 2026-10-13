@@ -24,7 +24,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') && inputs.validation != 'desktop'
     uses: ./.github/workflows/portability-checks.yml
   desktop-posix:
-    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') && inputs.validation != 'core'
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.validation != 'core')
     permissions:
       contents: write
     uses: ./.github/workflows/desktop-posix.yml
@@ -86,7 +86,7 @@ jobs:
           retention-days: 14
 
   publish:
-    needs: build
+    needs: [build, desktop-posix]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -101,6 +101,12 @@ jobs:
         with:
           name: javm-alpha-windows-x64
           path: build/alpha-release
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: javm-development-*
+          path: build/posix-artifacts
+      - name: 合并已验证的跨平台附件
+        run: node scripts/release-alpha.mjs merge-posix
       - name: 上传、回读验证并公开 Alpha Release
         env:
           GH_TOKEN: ${{ github.token }}

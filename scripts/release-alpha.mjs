@@ -4,6 +4,7 @@ import path from "node:path";
 import { root, repository, readJson, sha256 } from "./third-party/components.mjs";
 import { findRelease } from "./third-party/github.mjs";
 import { changelogEntry, releaseAssetNames, renderReleaseNotes } from "./release-notes.mjs";
+import { collectPosixArtifacts } from "./release-posix.mjs";
 
 const command = process.argv[2];
 const pkg = await readJson(path.join(root, "package.json"));
@@ -127,6 +128,32 @@ if (command === "verify-source") {
     ) + "\n",
   );
   console.log(JSON.stringify({ tag, bytes: bundle.bytes, sha256: bundle.sha256 }));
+} else if (command === "merge-posix") {
+  verifySource();
+  const record = await readJson(recordPath);
+  if (record.tag !== tag || record.commit !== commit || record.dirty)
+    throw new Error("发布记录与当前已提交版本不一致");
+  const posix = await collectPosixArtifacts({
+    version: pkg.version,
+    commit,
+    source: path.join(root, "build/posix-artifacts"),
+    destination: directory,
+  });
+  const files = [...record.files.filter((file) => file.name !== "SHA256SUMS"), ...posix];
+  if (new Set(files.map((file) => file.name)).size !== files.length)
+    throw new Error("合并发布附件存在重名");
+  const sums = files.map((file) => `${file.sha256}  ${file.name}`).join("\n") + "\n";
+  await writeFile(path.join(directory, "SHA256SUMS"), sums);
+  files.push({ name: "SHA256SUMS", bytes: Buffer.byteLength(sums), sha256: sha256(sums) });
+  await writeFile(
+    recordPath,
+    JSON.stringify(
+      { ...record, files, platforms: ["windows-x64", "macos-arm64", "macos-x64", "linux-x64"] },
+      null,
+      2,
+    ) + "\n",
+  );
+  console.log("三系统、四架构的安装包、便携包和验证记录已合并");
 } else if (command === "notes") {
   const changes = changelogEntry(
     await readFile(path.join(root, "CHANGELOG.md"), "utf8"),
@@ -146,6 +173,12 @@ if (command === "verify-source") {
   const record = await readJson(recordPath);
   if (record.tag !== tag || record.commit !== commit || record.dirty)
     throw new Error("拒绝发布其他提交或未提交源码构建的附件");
+  if (
+    ["windows-x64", "macos-arm64", "macos-x64", "linux-x64"].some(
+      (platform) => !record.platforms?.includes(platform),
+    )
+  )
+    throw new Error("跨平台发布记录不完整，请先合并已验证的平台附件");
   const assets = [];
   for (const file of record.files) {
     if (path.basename(file.name) !== file.name) throw new Error("非法发布文件名");
@@ -223,5 +256,5 @@ if (command === "verify-source") {
   console.log(release.html_url);
 } else
   throw new Error(
-    "用法：node scripts/release-alpha.mjs verify-source|prepare|notes [--unreleased]|publish",
+    "用法：node scripts/release-alpha.mjs verify-source|prepare|merge-posix|notes [--unreleased]|publish",
   );
