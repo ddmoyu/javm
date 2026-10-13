@@ -123,7 +123,7 @@ function portraitFixture(load: PortraitPort["load"]) {
   return { service, run };
 }
 
-it("一百条头像分两批读取，最多四个下载并发，进度覆盖整页", async () => {
+it("一百条头像分两批读取，最多六个下载并发，进度覆盖整页", async () => {
   let active = 0,
     maximum = 0;
   const load = vi.fn(async (_url: string, _signal: AbortSignal, key: string) => {
@@ -139,7 +139,7 @@ it("一百条头像分两批读取，最多四个下载并发，进度覆盖整�
     const result = await service.load("actresses", names, new AbortController().signal, progress);
     expect(run.mock.calls.map(([, payload]) => payload.names.length)).toEqual([50, 50]);
     expect(load).toHaveBeenCalledTimes(100);
-    expect(maximum).toBeLessThanOrEqual(4);
+    expect(maximum).toBeLessThanOrEqual(6);
     expect(Object.keys(result)).toEqual(names);
     expect(progress).toHaveBeenLastCalledWith(100, 100, result);
   } finally {
@@ -164,7 +164,7 @@ it("离开当前页会取消头像余下批次，不再为旧页继续下载", a
       ),
     ).rejects.toThrow();
     expect(run).toHaveBeenCalledTimes(1);
-    expect(load.mock.calls.length).toBeLessThanOrEqual(4);
+    expect(load.mock.calls.length).toBeLessThanOrEqual(6);
   } finally {
     await service.shutdown();
   }

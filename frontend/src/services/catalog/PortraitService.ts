@@ -1,6 +1,8 @@
 import type { CatalogProcessor } from "./workerClient";
 import type { ActorDirectoryDimension } from "./discoveryData";
 
+const PORTRAIT_CONCURRENCY = 6;
+
 export interface PortraitPort {
   load(url: string, signal: AbortSignal, key: string): Promise<string>;
   cached?(
@@ -19,23 +21,38 @@ export class PortraitService {
   private index?: Promise<void>;
   private retryIndexAt = 0;
   private abortIndex = new AbortController();
-  private slots = Array.from({ length: 4 }, () => Promise.resolve());
-  private sequence = 0;
+  private downloading = 0;
+  // 最多两个批次、每批六个工作循环，等待队列最多六项。
+  private waiting: (() => void)[] = [];
   constructor(
     private processor: CatalogProcessor,
     private port: PortraitPort,
   ) {}
-  private loadImage(url: string, signal: AbortSignal, key: string) {
-    const slot = this.sequence++ % this.slots.length;
-    const task = this.slots[slot]!.then(() => {
+  private async loadImage(url: string, signal: AbortSignal, key: string) {
+    signal.throwIfAborted();
+    if (this.downloading >= PORTRAIT_CONCURRENCY) {
+      await new Promise<void>((resolve, reject) => {
+        const start = () => {
+          signal.removeEventListener("abort", cancel);
+          resolve();
+        };
+        const cancel = () => {
+          this.waiting = this.waiting.filter((item) => item !== start);
+          reject(signal.reason);
+        };
+        this.waiting.push(start);
+        signal.addEventListener("abort", cancel, { once: true });
+      });
+    } else this.downloading++;
+    try {
       signal.throwIfAborted();
-      return this.port.load(url, signal, key);
-    });
-    this.slots[slot] = task.then(
-      () => {},
-      () => {},
-    );
-    return task;
+      return await this.port.load(url, signal, key);
+    } finally {
+      const next = this.waiting.shift();
+      // 把空位直接交给下一张，慢请求不会阻塞其他空闲名额。
+      if (next) next();
+      else this.downloading--;
+    }
   }
   private prepareFallback() {
     if (Date.now() < this.retryIndexAt) return Promise.reject(new Error("备用头像暂不可用。"));
@@ -78,7 +95,7 @@ export class PortraitService {
     progress?: (completed: number, total: number, images: Record<string, string>) => void,
   ) {
     const result: Record<string, string> = Object.create(null);
-    // 当前页最多一百项，串行拆成五十项的 Worker 查询；图片下载仍共用四个并发槽。
+    // 当前页最多一百项，串行拆成五十项的 Worker 查询；图片下载共用六个并发名额。
     for (let offset = 0; offset < names.length; offset += 50) {
       signal.throwIfAborted();
       const images = await this.run(
@@ -120,7 +137,7 @@ export class PortraitService {
     const pool = async (batch: string[], urls: Record<string, string[]>, first: boolean) => {
       let cursor = 0;
       await Promise.all(
-        Array.from({ length: Math.min(4, batch.length) }, async () => {
+        Array.from({ length: Math.min(PORTRAIT_CONCURRENCY, batch.length) }, async () => {
           while (cursor < batch.length) {
             signal.throwIfAborted();
             const name = batch[cursor++]!;
