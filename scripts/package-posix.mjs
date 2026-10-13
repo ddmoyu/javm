@@ -192,7 +192,7 @@ if (mac) {
   );
   await writeFile(
     path.join(deb, "DEBIAN/control"),
-    `Package: javm\nVersion: ${pkg.version.replace("-alpha.", "~alpha.")}\nArchitecture: amd64\nMaintainer: JAVM <noreply@ddmoyu.net>\nSection: video\nPriority: optional\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, libsecret-1-0, libicu74, ca-certificates, libayatana-appindicator3-1\nRecommends: gnome-keyring\nHomepage: https://github.com/ddmoyu/javm\nDescription: JAVM local media library\n`,
+    `Package: javm\nVersion: ${pkg.version.replace("-alpha.", "~alpha.")}\nArchitecture: amd64\nMaintainer: JAVM <noreply@ddmoyu.net>\nSection: video\nPriority: optional\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, gstreamer1.0-libav, gstreamer1.0-plugins-good, libsecret-1-0, libicu74, ca-certificates, libayatana-appindicator3-1\nRecommends: gnome-keyring\nHomepage: https://github.com/ddmoyu/javm\nDescription: JAVM local media library\n`,
   );
   await run("desktop-file-validate", [
     path.join(deb, "usr/share/applications/net.ddmoyu.javm.desktop"),
@@ -229,6 +229,7 @@ const manifest = {
   version: pkg.version,
   platform: target,
   sourceCommit: await run("git", ["rev-parse", "HEAD"], root, true),
+  sourceDirty: !!(await run("git", ["status", "--porcelain", "--untracked-files=no"], root, true)),
   minimumOS: mac ? "macOS 13.0" : "Ubuntu 24.04",
   signing: mac ? "ad-hoc; no Developer ID or notarization" : "unsigned",
   components: Object.fromEntries(
