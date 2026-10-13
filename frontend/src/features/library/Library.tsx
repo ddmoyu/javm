@@ -38,24 +38,61 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [filters, setFilters] = useState(emptyLibraryFilters);
   const [backToTopVisible, setBackToTopVisible] = useState(false);
+  const scrollPositions = useRef<Record<LibraryScope, number>>({ all: 0, favorites: 0 });
+  const pendingScrollScope = useRef<LibraryScope | null>(null);
   const chips = libraryFilterLabels(filters, availability);
   const scrollTop = () => {
+    pendingScrollScope.current = null;
+    scrollPositions.current[scope] = 0;
     rootRef.current?.closest(".page-content")?.scrollTo({ top: 0 });
+  };
+  const changeScope = (next: LibraryScope) => {
+    if (next === scope) return;
+    const viewport = rootRef.current?.closest(".page-content");
+    // 加载期间再次离开时，不能用被浏览器截短的位置覆盖尚未恢复的进度。
+    if (viewport && pendingScrollScope.current !== scope)
+      scrollPositions.current[scope] = viewport.scrollTop;
+    pendingScrollScope.current = next;
+    setScope(next);
   };
   const clearFilters = () => {
     setFilters(emptyLibraryFilters());
-    setScope("all");
+    changeScope("all");
     setAvailability("all");
     setQuery("");
   };
-  const [view] = useState(() => library.createFilmQuery());
-  const results = usePagedQuery(
+  // 两个页签分别保留有界分页缓存，切换时不清空总数和虚拟列表高度。
+  const [views] = useState(() => ({
+    all: library.createFilmQuery(),
+    favorites: library.createFilmQuery(),
+  }));
+  const active = page === "library" && libraryState.ready;
+  const allResults = usePagedQuery(
     library,
-    view,
-    { filters, scope, availability, query: search, sort, direction },
-    page === "library" && libraryState.ready,
+    views.all,
+    { filters, scope: "all", availability, query: search, sort, direction },
+    active && scope === "all",
   );
-  useLayoutEffect(scrollTop, [query, scope, availability, filters, sort, direction, layout]);
+  const favoriteResults = usePagedQuery(
+    library,
+    views.favorites,
+    { filters, scope: "favorites", availability, query: search, sort, direction },
+    active && scope === "favorites",
+  );
+  const snapshots = { all: allResults, favorites: favoriteResults };
+  const results = snapshots[scope];
+  // 查询失效时先保留恢复请求；下一帧再读取虚拟列表完成测量后的滚动高度。
+  useLayoutEffect(() => {
+    if (page !== "library" || !results.ready || pendingScrollScope.current !== scope) return;
+    const frame = requestAnimationFrame(() => {
+      if (pendingScrollScope.current !== scope) return;
+      const viewport = rootRef.current?.closest(".page-content");
+      if (!viewport) return;
+      viewport.scrollTo({ top: scrollPositions.current[scope] });
+      pendingScrollScope.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [page, scope, results.ready, results.total]);
   useLayoutEffect(() => {
     const content = rootRef.current;
     const viewport = content?.closest<HTMLElement>(".page-content");
@@ -109,7 +146,7 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
           <CountTabs
             label="媒体库筛选"
             value={scope}
-            onChange={setScope}
+            onChange={changeScope}
             items={[
               ["all", "全部影片", libraryState.total],
               ["favorites", "我的收藏", libraryState.favorites],
@@ -223,68 +260,86 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
           </Group>
         )}
       </div>
-      {results.error && (
-        <Alert color="red" title="影片读取失败" mb="md" role="alert">
-          {results.error}
-          <Button variant="subtle" size="xs" onClick={view.retry}>
-            重试
-          </Button>
-        </Alert>
-      )}
-      {!results.ready && !results.total && !results.error ? (
-        <Group component="output" justify="center" py="xl">
-          <Loader size="sm" />
-          <Text size="sm">正在读取媒体库…</Text>
-        </Group>
-      ) : results.total === 0 && !results.error ? (
-        <Empty
-          icon="grid"
-          title={
-            !libraryState.total
-              ? "还没有影片"
-              : scope === "favorites" && !chips.length && !query
-                ? "还没有收藏"
-                : "没有找到影片"
-          }
-          description={
-            !libraryState.total
-              ? "添加媒体目录，开始整理你的片库。"
-              : "试试其他片名、番号或演员，或清除当前筛选。"
-          }
-        >
-          {!libraryState.total ? (
-            <Button leftSection={<Icon name="plus" size={16} />} onClick={() => add("import")}>
-              导入影片
-            </Button>
-          ) : (
-            <Button variant="light" onClick={clearFilters}>
-              清除筛选
-            </Button>
-          )}
-        </Empty>
-      ) : (
-        <div className="library-results" aria-busy={results.loading || search !== query.trim()}>
-          <FilmCollection
-            items={results.items}
-            count={results.total}
-            onRangeChange={view.loadRange}
-            layout={layout}
-            active={page === "library"}
-            openFilm={openFilm}
-            play={play}
-            toggleFavorite={toggleFavorite}
-          />
-        </div>
-      )}
+      {(["all", "favorites"] as const).map((tab) => {
+        const results = snapshots[tab];
+        const view = views[tab];
+        return (
+          <div key={tab} hidden={scope !== tab}>
+            {results.error && (
+              <Alert color="red" title="影片读取失败" mb="md" role="alert">
+                {results.error}
+                <Button variant="subtle" size="xs" onClick={view.retry}>
+                  重试
+                </Button>
+              </Alert>
+            )}
+            {!results.ready && !results.total && !results.error ? (
+              <Group component="output" justify="center" py="xl">
+                <Loader size="sm" />
+                <Text size="sm">正在读取媒体库…</Text>
+              </Group>
+            ) : results.total === 0 && !results.error ? (
+              <Empty
+                icon="grid"
+                title={
+                  !libraryState.total
+                    ? "还没有影片"
+                    : tab === "favorites" && !chips.length && !query
+                      ? "还没有收藏"
+                      : "没有找到影片"
+                }
+                description={
+                  !libraryState.total
+                    ? "添加媒体目录，开始整理你的片库。"
+                    : "试试其他片名、番号或演员，或清除当前筛选。"
+                }
+              >
+                {!libraryState.total ? (
+                  <Button
+                    leftSection={<Icon name="plus" size={16} />}
+                    onClick={() => add("import")}
+                  >
+                    导入影片
+                  </Button>
+                ) : (
+                  <Button variant="light" onClick={clearFilters}>
+                    清除筛选
+                  </Button>
+                )}
+              </Empty>
+            ) : (
+              <div
+                className="library-results"
+                aria-busy={results.loading || search !== query.trim()}
+              >
+                <FilmCollection
+                  items={results.items}
+                  count={results.total}
+                  onRangeChange={view.loadRange}
+                  layout={layout}
+                  active={page === "library" && scope === tab}
+                  openFilm={openFilm}
+                  play={play}
+                  toggleFavorite={toggleFavorite}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
       {page === "library" && backToTopVisible && (
         <Affix withinPortal={false} position={{ bottom: 18, right: 30 }} zIndex={7}>
           <Button
+            className="library-back-to-top"
             variant="default"
             size="xs"
-            rightSection={<Icon name="arrowUp" size={14} />}
+            aria-label="回到顶部"
             onClick={scrollTop}
           >
-            回到顶部
+            <span className="library-back-to-top-label" aria-hidden="true">
+              回到顶部
+            </span>
+            <Icon name="arrowUp" size={14} />
           </Button>
         </Affix>
       )}

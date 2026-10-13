@@ -249,6 +249,27 @@ html:has(:fullscreen) .window-resize-edges {
 .library-results {
   padding-bottom: 48px;
 }
+.library-back-to-top {
+  height: 34px;
+  padding-inline: 9px;
+}
+.library-back-to-top-label {
+  max-width: 0;
+  margin-inline-end: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition:
+    max-width 180ms ease,
+    margin-inline-end 180ms ease,
+    opacity 150ms ease;
+}
+.library-back-to-top:hover .library-back-to-top-label,
+.library-back-to-top:focus-visible .library-back-to-top-label {
+  max-width: 4em;
+  margin-inline-end: 8px;
+  opacity: 1;
+}
 .fill-column {
   height: 100%;
   min-height: 0;

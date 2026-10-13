@@ -450,13 +450,14 @@ export function FilmCollection({
                   />
                 );
               })}
-              {last && (
+              {totalHeight > 0 && (
                 <Table.Tr aria-hidden="true">
                   <Table.Td
                     colSpan={5}
                     p={0}
                     style={{
-                      height: Math.max(0, totalHeight - (last.end - geometry.margin)),
+                      // 重新启用时可见行尚未测量，也要保留总高度供滚动位置恢复。
+                      height: Math.max(0, totalHeight - (last ? last.end - geometry.margin : 0)),
                       border: 0,
                     }}
                   />
