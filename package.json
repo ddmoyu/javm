@@ -1,6 +1,6 @@
 {
   "name": "javm",
-  "version": "1.0.5-alpha.3",
+  "version": "1.0.5-alpha.4",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -20,6 +20,7 @@
     "desktop:dev": "pnpm native:build && neu run",
     "desktop:build": "pnpm native:build --Release && pnpm build && node scripts/build-desktop.mjs",
     "desktop:offline": "pnpm offline:setup && pnpm desktop:build && node scripts/package-offline.mjs",
+    "desktop:installer": "node scripts/package-installer.mjs",
     "offline:setup": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/setup-offline-tools.ps1",
     "metatube:build": "node --use-env-proxy scripts/build-metatube-lite.mjs",
     "metatube:verify": "node --disable-warning=ExperimentalWarning scripts/verify-metatube-lite.mjs",

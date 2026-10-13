@@ -2,7 +2,7 @@
 
 JAVM 新工程，基于 `dev` 分支使用 React、TypeScript、Mantine、Vite+ 和官方 Neutralinojs 重建。C++20 的 SQLite 扩展与后台媒体服务位于 `native/database` 和 `native/media`。
 
-当前版本为 **1.0.0**，采用全新数据模型，旧库迁移面向 `0.5.3`。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
+当前为 **1.0 系列 Alpha**，采用全新数据模型，旧库迁移面向 `0.5.3`。可下载版本以 [GitHub Releases](https://github.com/ddmoyu/javm/releases) 为准。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
 
 界面图标统一使用 [Phosphor](https://phosphoricons.com/)（`@phosphor-icons/react`，MIT 许可），从 `frontend/src/components/icons.tsx` 复用。默认线性图标，收藏等选中态使用填充样式；原 JAVM Logo 和旧版图箱保留。许可文本位于 `resources/licenses/phosphor-icons-react.txt`，随前端及 EXE 一起打包。
 
@@ -63,6 +63,7 @@ pnpm downloads:setup      # 复制已有 FFmpeg 到 bin/tools；完整运行依�
 pnpm desktop:dev          # 构建扩展，启动前端开发服务器与 Neutralino 窗口
 pnpm desktop:build        # 构建扩展和前端，打包桌面目录：dist/desktop
 pnpm desktop:offline      # 校验运行依赖并生成完整 Windows x64 离线包：dist/offline
+pnpm desktop:installer    # 使用最新完整运行包构建 Inno Setup 安装包：build/installer
 pnpm test:offline         # 解压最新离线包，验证启动入口、系统 WebView2 和独立数据库
 pnpm test:downloads       # 真实工具与 SQLite 下载集成测试
 pnpm test:downloads:public # 显式联网完整下载五条公开 HLS 样本
@@ -78,6 +79,8 @@ pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部�
 本地运行请使用 `pnpm desktop:offline` 生成的 ZIP，完整解压后双击 **`JAVM.exe`**。随包提供 Release 静态运行库数据库扩展、MediaInfo、FFmpeg、curl 和 MetaTube，无需另装 Node.js、pnpm 或开发工具。界面由官方 Neutralino 宿主调用系统已安装的 **Evergreen WebView2 Runtime**，包内不再携带固定版本运行时，也不覆盖系统的运行时选择。Windows 11 预装，绝大多数 Windows 10 已安装；缺少时需先安装[微软 WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)，无网设备可提前准备其离线安装程序。
 
 适用于 Windows 10/11 x64；满足上述系统前提后，本地片库、扫描和播放可离线使用。网络下载、MetaTube 在线资料和 AI 服务仍需要网络，AI 需要自行配置接口。个人数据仍保存在当前 Windows 用户的数据目录，不随软件包分发。
+
+后续 Alpha 发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS、Linux 与其他架构尚未完成适配，具体缺口见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md)。
 
 FFmpeg 采用参考老版 `ddmoyu/ffmepg` 裁剪配置的 **8.0.1 精简构建**，保留 JPEG 抽帧、MP4 无损合并与进度输出，关闭网络、硬件加速与视频转码。媒体轨道和时长检查复用内置 MediaInfo，不再构建或分发 ffprobe。打包会校验构建凭据、二进制哈希、体积和实际能力，拒绝混入完整版。来源与复现方式见 [精简 FFmpeg](docs/decisions/0013-lightweight-ffmpeg.md)。
 

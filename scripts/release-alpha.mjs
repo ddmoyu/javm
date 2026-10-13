@@ -3,6 +3,7 @@ import { copyFile, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/pro
 import path from "node:path";
 import { root, repository, readJson, sha256 } from "./third-party/components.mjs";
 import { findRelease } from "./third-party/github.mjs";
+import { changelogEntry, releaseAssetNames, renderReleaseNotes } from "./release-notes.mjs";
 
 const command = process.argv[2];
 const pkg = await readJson(path.join(root, "package.json"));
@@ -36,6 +37,9 @@ if (command === "verify-source") {
   const bundle = await readJson(path.join(root, "dist/offline/latest.json"));
   const manifest = await readJson(bundle.manifest);
   const validation = await readJson(path.join(root, ".tmp/offline-validation.json"));
+  const installer = await readJson(path.join(root, "build/installer/latest.json"));
+  const installation = await readJson(path.join(root, ".tmp/installer-validation.json"));
+  const names = releaseAssetNames(pkg.version);
   if (
     manifest.version !== pkg.version ||
     manifest.platform !== "windows-x64" ||
@@ -50,16 +54,36 @@ if (command === "verify-source") {
     sha256(await readFile(bundle.manifest)) !== bundle.manifestSha256
   )
     throw new Error("发布包或清单在验证后发生变化");
+  if (
+    installer.version !== pkg.version ||
+    installer.platform !== manifest.platform ||
+    installer.commit !== commit ||
+    installer.dirty !== manifest.source.dirty ||
+    installer.appId !== "net.ddmoyu.javm.neutralino" ||
+    installer.name !== names.setup ||
+    installer.portableArchiveSha256 !== bundle.sha256 ||
+    installer.manifestSha256 !== bundle.manifestSha256 ||
+    installation.version !== pkg.version ||
+    installation.installerSha256 !== installer.sha256 ||
+    installation.manifestSha256 !== bundle.manifestSha256 ||
+    installation.results?.length !== 3 ||
+    installation.results.some((result) => !result.ok) ||
+    (await stat(installer.installer)).size !== installer.bytes ||
+    sha256(await readFile(installer.installer)) !== installer.sha256
+  )
+    throw new Error("安装包与便携包、来源或安装验证记录不匹配");
   await mkdir(directory, { recursive: true });
   const name = "JAVM-" + pkg.version + "-windows-x64";
   const files = [
-    name + ".zip",
+    names.portable,
     name + "-manifest.json",
     "THIRD-PARTY-NOTICES.txt",
     "verification.json",
+    names.setup,
   ];
   await copyFile(bundle.archive, path.join(directory, files[0]));
   await copyFile(bundle.manifest, path.join(directory, files[1]));
+  await copyFile(installer.installer, path.join(directory, names.setup));
   await writeFile(
     path.join(directory, files[2]),
     manifest.licenseNotices
@@ -74,6 +98,12 @@ if (command === "verify-source") {
         commit,
         archiveSha256: bundle.sha256,
         results: validation.results,
+        installer: {
+          name: installer.name,
+          sha256: installer.sha256,
+          compilerSha256: installer.compilerSha256,
+          results: installation.results,
+        },
         componentReleases: manifest.componentReleases,
       },
       null,
@@ -97,6 +127,20 @@ if (command === "verify-source") {
     ) + "\n",
   );
   console.log(JSON.stringify({ tag, bytes: bundle.bytes, sha256: bundle.sha256 }));
+} else if (command === "notes") {
+  const changes = changelogEntry(
+    await readFile(path.join(root, "CHANGELOG.md"), "utf8"),
+    process.argv.includes("--unreleased") ? "Unreleased" : pkg.version,
+  );
+  const notes = renderReleaseNotes({
+    version: pkg.version,
+    repository,
+    changes,
+    assets: Object.values(releaseAssetNames(pkg.version)),
+  });
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "notes-preview.md"), notes);
+  console.log(path.join(directory, "notes-preview.md"));
 } else if (command === "publish") {
   verifySource();
   const record = await readJson(recordPath);
@@ -115,27 +159,17 @@ if (command === "verify-source") {
   }
   let release = findRelease(gh, repository, tag);
   if (release && !release.draft) throw new Error("拒绝覆盖已发布的 Alpha 版本");
+  const notes = path.join(directory, "notes.md");
+  await writeFile(
+    notes,
+    renderReleaseNotes({
+      version: pkg.version,
+      repository,
+      changes: changelogEntry(await readFile(path.join(root, "CHANGELOG.md"), "utf8"), pkg.version),
+      assets: record.files.map((file) => file.name),
+    }),
+  );
   if (!release) {
-    const notes = path.join(directory, "notes.md");
-    const changes = (await readFile(path.join(root, "CHANGELOG.md"), "utf8"))
-      .split(/(?=^## )/m)
-      .find((section) => section.startsWith("## " + pkg.version + " "));
-    if (!changes) throw new Error("缺少当前版本的更新日志：" + pkg.version);
-    await writeFile(
-      notes,
-      "JAVM " +
-        pkg.version +
-        " 完整便携包（Windows x64）\n\n" +
-        "下载 ZIP 后解压，运行 JAVM.exe。需要系统已安装 Evergreen WebView2。\n\n" +
-        "已包含精简 FFmpeg、MetaTube、MediaInfo 和 curl，首次启动无需另行下载这些组件。\n" +
-        "全部 MetaTube 刮削来源保留；功能验证仅使用安全合成数据与本地 mock。\n\n" +
-        "源码提交：" +
-        commit +
-        "\n\n" +
-        "附件包含 SHA-256、组件构建身份、许可证和解压验证记录。\n\n" +
-        changes.trim() +
-        "\n",
-    );
     gh([
       "release",
       "create",
@@ -151,6 +185,8 @@ if (command === "verify-source") {
       "--notes-file",
       notes,
     ]);
+  } else {
+    gh(["release", "edit", tag, "--repo", repository, "--notes-file", notes]);
   }
   gh(["release", "upload", tag, ...assets, "--repo", repository, "--clobber"]);
   release = findRelease(gh, repository, tag);
@@ -185,4 +221,7 @@ if (command === "verify-source") {
   release = api("/releases/tags/" + tag);
   if (release.draft || !release.prerelease) throw new Error("Alpha 预发布状态不正确");
   console.log(release.html_url);
-} else throw new Error("用法：node scripts/release-alpha.mjs verify-source|prepare|publish");
+} else
+  throw new Error(
+    "用法：node scripts/release-alpha.mjs verify-source|prepare|notes [--unreleased]|publish",
+  );

@@ -1,4 +1,4 @@
-name: JAVM Alpha 便携包
+name: JAVM Alpha 安装包与便携包
 
 on:
   push:
@@ -30,6 +30,8 @@ jobs:
         run: node scripts/release-alpha.mjs verify-source
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: 验证更新日志和下载表格
+        run: node --test scripts/release-notes.test.mjs
       - name: 执行默认测试集
         run: |
           New-Item -ItemType Directory -Force -Path .tmp | Out-Null
@@ -55,6 +57,10 @@ jobs:
         run: pnpm exec vp test run tests/artwork-native.integration.test.ts tests/metadata-fusion-native.integration.test.ts
       - name: 解压运行并验证安全样例
         run: pnpm test:offline
+      - name: 使用 Inno Setup 构建 Windows 安装包
+        run: node scripts/package-installer.mjs
+      - name: 验证安装、覆盖安装与卸载
+        run: ./scripts/verify-installer.ps1
       - name: 整理发布附件和验证记录
         run: node scripts/release-alpha.mjs prepare
       - uses: actions/upload-artifact@v7.0.2
