@@ -28,6 +28,7 @@ import { CountTabs, Empty, Pill } from "../../components/ui";
 import { activeScrape, scrapeLabels, scrapePhaseLabels } from "../../contracts/scraping";
 import type { ScrapeTask } from "../../contracts/scraping";
 import { DownloadTimeline } from "./DownloadTimeline";
+import { createDownloadScrapeLookup } from "./downloadScrapes";
 import { EditDownloadModal } from "./EditDownloadModal";
 
 const ignoreDownloadUpdates = () => () => {};
@@ -47,13 +48,13 @@ export function Downloads() {
     page === "downloads" && scraping ? scraping.subscribe : ignoreDownloadUpdates,
     scraping?.getSnapshot ?? (() => emptyScrapes),
   );
-  const byDownload = new Map(
-    scrapeState.tasks.filter((task) => task.downloadId).map((task) => [task.downloadId, task]),
-  );
-  const needsScrape = (task: DownloadTask) =>
-    byDownload.has(task.id)
-      ? ["failed", "partial", "needsInput", "interrupted"].includes(byDownload.get(task.id)!.status)
+  const findScrape = createDownloadScrapeLookup(scrapeState.tasks);
+  const needsScrape = (task: DownloadTask) => {
+    const scrape = findScrape(task);
+    return scrape
+      ? ["failed", "partial", "needsInput", "interrupted"].includes(scrape.status)
       : !!task.scrapeHandoffError;
+  };
   const state = useSyncExternalStore(
     page === "downloads" ? downloads.subscribe : ignoreDownloadUpdates,
     downloads.getSnapshot,
@@ -80,10 +81,7 @@ export function Downloads() {
   const currentPage = Math.min(resultPage, totalPages);
   const visibleTasks = shown.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const detail = tasks.find((task) => task.id === detailId);
-  const detailScrape = detail
-    ? (byDownload.get(detail.id) ??
-      scrapeState.tasks.find((task) => task.id === detail.scrapeTaskId))
-    : undefined;
+  const detailScrape = detail ? findScrape(detail) : undefined;
   const perform = async (id: string, action: () => Promise<void>) => {
     if (busy.has(id)) return;
     setBusy((previous) => new Set(previous).add(id));
@@ -155,10 +153,10 @@ export function Downloads() {
       {task.status === "completed" && scraping && (
         <Menu.Item
           leftSection={<Icon name="scan" />}
-          disabled={!!byDownload.get(task.id) && activeScrape(byDownload.get(task.id)!)}
+          disabled={!!findScrape(task) && activeScrape(findScrape(task)!)}
           onClick={() =>
             void perform(task.id, async () => {
-              const job = byDownload.get(task.id);
+              const job = findScrape(task);
               if (job?.status === "needsInput") {
                 if (showScrapeQueue) showScrapeQueue();
                 else go("scraper");
@@ -169,7 +167,7 @@ export function Downloads() {
             })
           }
         >
-          {byDownload.get(task.id)?.status === "needsInput" ? "确认刮削资料" : "重试刮削"}
+          {findScrape(task)?.status === "needsInput" ? "确认刮削资料" : "重试刮削"}
         </Menu.Item>
       )}
       {task.status !== "completed" && task.status !== "cancelled" && (
@@ -408,10 +406,10 @@ export function Downloads() {
                   </Pill>
                   {task.status === "completed" && (
                     <Text size="xs" c={needsScrape(task) ? "red" : "dimmed"} mt={4}>
-                      {byDownload.get(task.id)
-                        ? byDownload.get(task.id)!.status === "running"
-                          ? scrapePhaseLabels[byDownload.get(task.id)!.phase]
-                          : scrapeLabels[byDownload.get(task.id)!.status]
+                      {findScrape(task)
+                        ? findScrape(task)!.status === "running"
+                          ? scrapePhaseLabels[findScrape(task)!.phase]
+                          : scrapeLabels[findScrape(task)!.status]
                         : task.scrapeHandoffError
                           ? "刮削未入队"
                           : task.scrapeAfterDownload && !task.scrapeTaskId

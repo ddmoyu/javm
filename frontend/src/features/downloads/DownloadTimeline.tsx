@@ -5,7 +5,7 @@ import { Pill } from "../../components/ui";
 import type { Tone } from "../../components/ui";
 import { downloadLabels } from "../../contracts/downloads";
 import type { DownloadTask, DownloadStatus } from "../../contracts/downloads";
-import { scrapeLabels, scrapePhaseLabels } from "../../contracts/scraping";
+import { activeScrape, scrapeLabels, scrapePhaseLabels } from "../../contracts/scraping";
 import type { ScrapeTask } from "../../contracts/scraping";
 import { formatDownloadSize } from "../../services/downloads/progress";
 import { publicMessage } from "../../services/publicMessage";
@@ -104,6 +104,18 @@ function scrapeStage(
     description: "合并完成后检查入库，获取并保存资料。",
   };
   if (scrape) {
+    // 状态写入失败时仍可能保留 running 快照，不能将它当作仍在正常执行。
+    if (activeScrape(scrape) && queue.error)
+      return {
+        ...base,
+        state: "warning",
+        label: scrape.status === "running" ? "状态待确认" : "队列异常",
+        description:
+          scrape.status === "running"
+            ? `最后记录阶段：${scrapePhaseLabels[scrape.phase]}。服务异常，暂时无法确认执行状态。`
+            : "刮削队列已停止调度，请先处理服务异常。",
+        error: queue.error,
+      };
     const states: Record<ScrapeTask["status"], StageState> = {
       queued: queue.paused ? "paused" : "waiting",
       running: "running",
@@ -116,13 +128,9 @@ function scrapeStage(
     };
     return {
       ...base,
-      state: scrape.status === "queued" && queue.error ? "warning" : states[scrape.status],
+      state: states[scrape.status],
       label:
-        scrape.status === "queued" && queue.error
-          ? "队列异常"
-          : scrape.status === "queued" && queue.paused
-            ? "队列已暂停"
-            : scrapeLabels[scrape.status],
+        scrape.status === "queued" && queue.paused ? "队列已暂停" : scrapeLabels[scrape.status],
       description:
         scrape.status === "completed"
           ? "刮削与资料保存完成。"
@@ -131,7 +139,7 @@ function scrapeStage(
             : scrape.status === "queued"
               ? "等待检查入库、获取资料并保存。"
               : `${scrape.status === "running" ? "当前阶段" : "停留阶段"}：${scrapePhaseLabels[scrape.phase]}`,
-      error: scrape.error || (scrape.status === "queued" ? queue.error : undefined),
+      error: scrape.error,
     };
   }
   if (task.scrapeHandoffError)
