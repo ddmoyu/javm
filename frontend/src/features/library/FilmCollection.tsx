@@ -1,21 +1,12 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import {
-  ActionIcon,
-  Badge,
-  Button,
-  Group,
-  Modal,
-  Skeleton,
-  Table,
-  Text,
-  UnstyledButton,
-} from "@mantine/core";
+import { ActionIcon, Badge, Group, Skeleton, Table, Text, UnstyledButton } from "@mantine/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Film } from "../../contracts/media";
 import { Poster } from "../../components/Cover";
 import { Icon } from "../../components/icons";
 import { IconButton, Pill } from "../../components/ui";
 import { FilmMenuItems } from "../films/FilmMenu";
+import { FilmDeleteDialog } from "../films/FilmDeleteDialog";
 import { ObjectMenu, ObjectMenuButton, objectMenuKey } from "../../components/ObjectMenu";
 import { useWorkspace } from "../../app/state";
 
@@ -44,7 +35,7 @@ const FilmCard = memo(function FilmCard({
   activateFilm,
   toggleFavorite,
   cardClickToPlay,
-  remove,
+  deleteVideo,
   top,
   left,
   width,
@@ -60,14 +51,14 @@ const FilmCard = memo(function FilmCard({
   activateFilm: CollectionProps["openFilm"];
   toggleFavorite: CollectionProps["toggleFavorite"];
   cardClickToPlay: boolean;
-  remove: (film: Film) => void;
+  deleteVideo: (film: Film) => void;
 }) {
   const statsId = useId();
   cardClickToPlay =
     cardClickToPlay &&
     (film.files?.some((file) => file.kind === "video" && !file.missing) ?? false);
   return (
-    <ObjectMenu items={<FilmMenuItems film={film} remove={() => remove(film)} />}>
+    <ObjectMenu items={<FilmMenuItems film={film} deleteVideo={() => deleteVideo(film)} />}>
       <li
         style={{ transform: `translateY(${top}px)`, left, width, height }}
         aria-posinset={index + 1}
@@ -167,17 +158,17 @@ const FilmRow = memo(function FilmRow({
   activateFilm,
   cardClickToPlay,
   play,
-  remove,
+  deleteVideo,
 }: {
   film: Film;
   index: number;
   activateFilm: (film: Film) => void;
   cardClickToPlay: boolean;
   play: (film: Film) => void;
-  remove: (film: Film) => void;
+  deleteVideo: (film: Film) => void;
 }) {
   return (
-    <ObjectMenu items={<FilmMenuItems film={film} remove={() => remove(film)} />}>
+    <ObjectMenu items={<FilmMenuItems film={film} deleteVideo={() => deleteVideo(film)} />}>
       <Table.Tr
         aria-rowindex={index + 2}
         data-film-id={film.id}
@@ -273,7 +264,7 @@ export function FilmCollection({
   toggleFavorite,
   cardWidth: minCardWidth,
 }: CollectionProps) {
-  const { notice, cardClickToPlay, library } = useWorkspace();
+  const { cardClickToPlay } = useWorkspace();
   const activateFilm = useCallback(
     (film: Film) =>
       cardClickToPlay && film.files?.some((file) => file.kind === "video" && !file.missing)
@@ -281,8 +272,7 @@ export function FilmCollection({
         : openFilm(film),
     [cardClickToPlay, play, openFilm],
   );
-  const [removing, setRemoving] = useState<Film | null>(null);
-  const [removalBusy, setRemovalBusy] = useState(false);
+  const [deletingVideo, setDeletingVideo] = useState<Film | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const [geometry, setGeometry] = useState({ width: 900, margin: 0 });
   const poster = layout !== "list";
@@ -394,7 +384,7 @@ export function FilmCollection({
                       activateFilm={activateFilm}
                       toggleFavorite={toggleFavorite}
                       cardClickToPlay={cardClickToPlay}
-                      remove={setRemoving}
+                      deleteVideo={setDeletingVideo}
                       top={row.start - geometry.margin}
                       left={offset * (cardWidth + GAP)}
                       width={cardWidth}
@@ -456,7 +446,7 @@ export function FilmCollection({
                     activateFilm={activateFilm}
                     cardClickToPlay={cardClickToPlay}
                     play={play}
-                    remove={setRemoving}
+                    deleteVideo={setDeletingVideo}
                   />
                 );
               })}
@@ -476,44 +466,9 @@ export function FilmCollection({
           </Table>
         )}
       </div>
-      <Modal
-        opened={removing !== null}
-        onClose={() => !removalBusy && setRemoving(null)}
-        title="从片库移除"
-        centered
-        closeOnClickOutside={!removalBusy}
-        closeOnEscape={!removalBusy}
-      >
-        <Text size="sm">移除“{removing?.title}”的片库记录？</Text>
-        <Text size="sm" c="dimmed" mt={4}>
-          封面和 NFO 文件会保留；有关联视频的作品需先在媒体清理中处理视频。
-        </Text>
-        <Group justify="flex-end" mt="lg">
-          <Button variant="default" disabled={removalBusy} onClick={() => setRemoving(null)}>
-            取消
-          </Button>
-          <Button
-            color="red"
-            loading={removalBusy}
-            onClick={() => {
-              if (!removing || removalBusy) return;
-              setRemovalBusy(true);
-              void library
-                .removeWork(removing.id)
-                .then(() => {
-                  setRemoving(null);
-                  notice("已移出片库，资料文件已保留。");
-                })
-                .catch((error: unknown) =>
-                  notice(error instanceof Error ? error.message : "移除失败"),
-                )
-                .finally(() => setRemovalBusy(false));
-            }}
-          >
-            移除
-          </Button>
-        </Group>
-      </Modal>
+      {deletingVideo && (
+        <FilmDeleteDialog film={deletingVideo} onClose={() => setDeletingVideo(null)} />
+      )}
     </>
   );
 }

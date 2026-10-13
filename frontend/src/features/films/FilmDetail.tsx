@@ -29,6 +29,7 @@ import type { ScreenshotAction } from "./FilmScreenshots";
 import { FilmArtworkEditor } from "./FilmArtworkEditor";
 import type { ArtworkMode } from "./FilmArtworkEditor";
 import { FilmEditor } from "./FilmEditor";
+import { FilmDeleteDialog } from "./FilmDeleteDialog";
 import { FilmResources } from "./FilmResources";
 import { os } from "@neutralinojs/lib";
 import { libraryError } from "../../services/library/LibraryService";
@@ -68,11 +69,8 @@ function FilmDetailContent({
     resourceSearch,
   } = useWorkspace();
   const [busy, setBusy] = useState(false);
-  const [removing, setRemoving] = useState(false);
+  const [deletingVideo, setDeletingVideo] = useState<Film | null>(null);
   const [organizing, setOrganizing] = useState<{ id: string; path: string } | null>(null);
-  const [removingResource, setRemovingResource] = useState<{ id: string; path: string } | null>(
-    null,
-  );
   const playable = film.files?.some((file) => file.kind === "video" && !file.missing) ?? false;
   const operate = async (operation: () => Promise<unknown>) => {
     if (busy) return;
@@ -98,9 +96,7 @@ function FilmDetailContent({
   const [artwork, setArtwork] = useState<ArtworkMode | null>(null);
   const [artworkSource, setArtworkSource] = useState<string>();
   const [removingImages, setRemovingImages] = useState<{ ids?: string[] } | null>(null);
-  const [tab, setTab] = useState<string | null>(
-    initialView === "files" ? "files" : initialView === "links" ? "links" : "info",
-  );
+  const [tab, setTab] = useState<string | null>(initialView === "links" ? "links" : "info");
   const lookupWorkId = preview ? undefined : String(film.id);
   // 资源查找随详情页存在；关闭或切换到其他影片后结束该番号仍在进行的后台取流。
   useEffect(
@@ -123,13 +119,7 @@ function FilmDetailContent({
     });
   };
   const overlay =
-    opened ||
-    editing ||
-    artwork !== null ||
-    removing ||
-    !!removingResource ||
-    !!removingImages ||
-    !!organizing;
+    opened || editing || artwork !== null || !!deletingVideo || !!removingImages || !!organizing;
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -359,10 +349,14 @@ function FilmDetailContent({
                     <Menu.Divider />
                     <Menu.Item
                       color="red"
-                      disabled={film.files?.some((file) => file.kind === "video")}
-                      onClick={() => setRemoving(true)}
+                      disabled={
+                        busy ||
+                        !library.maintenance ||
+                        !film.files?.some((file) => file.kind === "video" && file.id && file.path)
+                      }
+                      onClick={() => setDeletingVideo(film)}
                     >
-                      从片库移除
+                      删除视频
                     </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
@@ -453,9 +447,9 @@ function FilmDetailContent({
                             variant="subtle"
                             size="xs"
                             disabled={busy}
-                            onClick={() => setRemovingResource({ id: file.id!, path: file.path })}
+                            onClick={() => setDeletingVideo({ ...film, files: [file] })}
                           >
-                            删除资源
+                            删除视频
                           </Button>
                         )}
                         {file.kind === "video" &&
@@ -486,33 +480,9 @@ function FilmDetailContent({
           )}
         </Tabs>
       </Drawer>
-      <Modal
-        opened={removing}
-        onClose={() => !busy && setRemoving(false)}
-        title="从片库移除资料"
-        centered
-        closeOnClickOutside={!busy}
-        closeOnEscape={!busy}
-      >
-        <Stack>
-          <Text size="sm">
-            移除这部未关联视频的作品及收藏记录。磁盘上的 NFO 和图片会保留，重新扫描可再次导入。
-          </Text>
-          <Button
-            color="red"
-            loading={busy}
-            onClick={() =>
-              void operate(async () => {
-                await library.removeWork(film.id);
-                setRemoving(false);
-                onClose();
-              })
-            }
-          >
-            移出片库，保留文件
-          </Button>
-        </Stack>
-      </Modal>
+      {deletingVideo && (
+        <FilmDeleteDialog film={deletingVideo} onClose={() => setDeletingVideo(null)} />
+      )}
       {editing && <FilmEditor film={film} onClose={() => setEditing(false)} />}
       {organizing && library.organization && (
         <FileOrganizationModal
@@ -521,39 +491,6 @@ function FilmDetailContent({
           onClose={() => setOrganizing(null)}
         />
       )}
-      <Modal
-        opened={!!removingResource}
-        onClose={() => !busy && setRemovingResource(null)}
-        title="删除本地视频资源"
-        centered
-        closeOnEscape={!busy}
-        closeOnClickOutside={!busy}
-      >
-        <Stack>
-          <Text size="sm" style={{ overflowWrap: "anywhere" }}>
-            {removingResource?.path}
-          </Text>
-          <Text size="sm">将永久删除这个视频文件。作品资料、NFO、封面、收藏和其他文件会保留。</Text>
-          <Group justify="flex-end">
-            <Button variant="default" disabled={busy} onClick={() => setRemovingResource(null)}>
-              取消
-            </Button>
-            <Button
-              color="red"
-              loading={busy}
-              onClick={() =>
-                void operate(async () => {
-                  await library.maintenance!.removeResource(removingResource!);
-                  setRemovingResource(null);
-                  notice("视频资源已删除，作品资料已保留。");
-                })
-              }
-            >
-              删除此资源
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
       <Modal
         opened={!!removingImages}
         onClose={() => !busy && setRemovingImages(null)}

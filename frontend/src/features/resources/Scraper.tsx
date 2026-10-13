@@ -20,7 +20,7 @@ import type { MovieCandidate, MovieDetails } from "../../services/metadata/MetaT
 export interface ScraperHandle {
   showSearch: (query?: string) => void;
   showQueue: () => void;
-  select: (film: Film, view: "match" | "links") => void;
+  select: (film: Film) => void;
 }
 const noSubscribe = () => () => {};
 export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
@@ -79,16 +79,10 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
       setSelected(null);
       setTab("batch");
     },
-    select: (film, view) => {
+    select: (film) => {
       setMatching(null);
-      if (view === "links") {
-        setSelected(null);
-        setTab("search");
-        openFilm(film, "links");
-      } else {
-        setSelected(film);
-        setTab(scraping ? "batch" : "search");
-      }
+      setSelected(film);
+      setTab(scraping ? "batch" : "search");
     },
   }));
   return (

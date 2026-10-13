@@ -17,7 +17,7 @@ import type { ResolutionService } from "../services/streamResolution/ResolutionS
 import type { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
 
 export type Page = "library" | "discover" | "directories" | "downloads" | "scraper" | "settings";
-export type FilmDetailView = "info" | "files" | "screenshots" | "edit" | "links";
+export type FilmDetailView = "info" | "edit" | "links";
 export interface WorkspaceState {
   page: Page;
   go: (page: Page) => void;
@@ -39,7 +39,7 @@ export interface WorkspaceState {
   openFilm: (film: Film, view?: FilmDetailView) => void;
   play: (film: Film) => void;
   playSource: (source: string, options?: PlaybackOptions) => void;
-  scrape: (film: Film, view?: "match" | "links") => void;
+  scrape: (film: Film) => void;
   browseFacet: (facet: FilmFacet, value: string) => void;
   notice: (message: string) => void;
   theme: "dark" | "light";

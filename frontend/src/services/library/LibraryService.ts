@@ -496,10 +496,6 @@ export class LibraryService {
     });
     await this.refreshAfterMutation();
   }
-  async removeWork(id: Film["id"]) {
-    await this.requirePort().request("library.work.remove", { id });
-    await this.refreshAfterMutation();
-  }
   async toggleFavorite(film: Film) {
     const id = film.id;
     if (this.favoritePending.has(id)) return;

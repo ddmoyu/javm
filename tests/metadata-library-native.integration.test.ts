@@ -200,24 +200,18 @@ describe.runIf(enabled)("1.0 资料与视频独立闭环", { timeout: 30000 }, (
     });
     await host.request("library.removeDirectory", { id: dir.directoryId });
     expect(await host.request("library.summary")).toMatchObject({ total: 1 });
-    await expect(host.request("library.work.remove", { id })).rejects.toThrow("仍关联视频");
+    expect(await fs.readFile(nfo, "utf8")).toBe(text);
   }, 30000);
 
-  it("资料写入前检查外部改动；纯资料记录移除保留 NFO，可通过作品身份再次导入", async () => {
+  it("资料写入前检查外部改动，拒绝覆盖已修改的 NFO", async () => {
     const { host } = await fixture();
     const target = await prepare(host, { candidate, collect: true });
     const saved = await commit(host, target);
     const second = await prepare(host, { workId: target.id });
     await fs.appendFile(saved.nfoPath, "<!-- external -->");
+    const modified = await fs.readFile(saved.nfoPath, "utf8");
     await expect(commit(host, second)).rejects.toThrow("NFO 已被修改");
-    await host.request("library.work.remove", { id: target.id });
-    expect(await host.request("library.summary")).toMatchObject({ total: 0 });
-    await host.request("library.add", { path: path.dirname(saved.nfoPath) });
-    await finish(host);
-    expect(await video(host, target.id)).toMatchObject({
-      availability: "metadata_only",
-      favorite: 0,
-    });
+    expect(await fs.readFile(saved.nfoPath, "utf8")).toBe(modified);
   });
 
   it("人工修正番号及清空时长后，旧 NFO 不恢复旧身份或视频时长", async () => {

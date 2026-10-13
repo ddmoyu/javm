@@ -191,12 +191,6 @@ Json Store::prepareWork(const Json& params) {
     return video(id);
 }
 
-void Store::removeWork(const std::string& id) {
-    std::lock_guard lock(mutex_);
-    if(!rows(db_,"SELECT id FROM media_files WHERE work_id=? LIMIT 1",{id}).empty()) throw std::runtime_error("作品仍关联视频，请先在媒体清理中处理视频");
-    run(db_,"DELETE FROM works WHERE id=?",{id});
-}
-
 Json Store::directories() {
     std::lock_guard lock(mutex_);
     auto result=rows(db_,"SELECT d.*,(SELECT count(*) FROM media_files m WHERE m.path_key>=d.path_key||'/' AND m.path_key<d.path_key||'0' AND m.missing=0) AS video_count FROM directories d ORDER BY created_at,id");

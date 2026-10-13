@@ -194,7 +194,7 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
         if(method=="library.related.save") {std::lock_guard progressLock(progressMutex_);++revision_;}
         return result;
     }
-    if((method=="library.scan" || method=="library.add" || method=="library.work.remove" || method=="library.removeDirectory" || method.starts_with("library.maintenance.") || method.starts_with("library.scrape.") || method=="library.documents.importStream") && store_.pendingFileOperations())
+    if((method=="library.scan" || method=="library.add" || method=="library.removeDirectory" || method.starts_with("library.maintenance.") || method.starts_with("library.scrape.") || method=="library.documents.importStream") && store_.pendingFileOperations())
         throw std::runtime_error("请先恢复或取消未完成的文件整理任务");
     if (method.starts_with("library.maintenance.")) return maintenance(method,params);
     if (method == "library.scrape.prepare" || method == "library.scrape.commit") {
@@ -211,13 +211,6 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
         refreshDirectories();
         std::lock_guard progressLock(progressMutex_); ++revision_;
         return result;
-    }
-    if(method=="library.work.remove") {
-        std::lock_guard lock(startMutex_);
-        if(busy_ || !removal_.is_null()) throw std::runtime_error("请等待当前片库操作结束");
-        store_.removeWork(params.at("id"));
-        std::lock_guard progressLock(progressMutex_); ++revision_;
-        return Json::object();
     }
     if (method == "library.videos") return store_.videos(std::max(0,params.value("offset",0)),std::clamp(params.value("limit",250),1,500));
     if (method == "library.query") return store_.query(params);

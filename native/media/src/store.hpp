@@ -40,7 +40,6 @@ public:
     Json find(const fs::path& path);
     std::string save(const Json& file, const Json& nfo, const std::string* nfoSource = nullptr);
     Json prepareWork(const Json& params);
-    void removeWork(const std::string& id);
     void finish(const Json& directory, const std::string& state, const std::string& error, bool reconcile, const std::atomic_bool* cancelled = nullptr);
     Json videos(int offset, int limit);
     Json query(const Json& params);

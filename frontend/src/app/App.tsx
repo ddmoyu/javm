@@ -275,13 +275,13 @@ export function App({
           else notice("这部影片尚未关联可播放的视频文件。");
         },
         playSource,
-        scrape: (film, view = "match") => {
-          if (view === "match" && scraping)
+        scrape: (film) => {
+          if (scraping)
             void scraping
               .enqueue({ workId: String(film.id), name: film.title })
               .catch((error: unknown) => notice(libraryError(error)));
-          if (scraperRef.current) scraperRef.current.select(film, view);
-          else pendingNavigation.current = () => scraperRef.current?.select(film, view);
+          if (scraperRef.current) scraperRef.current.select(film);
+          else pendingNavigation.current = () => scraperRef.current?.select(film);
           scrollPositions.current.delete("scraper");
           setPage("scraper");
         },
