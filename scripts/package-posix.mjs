@@ -124,6 +124,7 @@ if (mac) {
 <key>CFBundlePackageType</key><string>APPL</string><key>CFBundleIconFile</key><string>JAVM.icns</string>
 <key>CFBundleShortVersionString</key><string>${pkg.version.split("-")[0]}</string><key>CFBundleVersion</key><string>${pkg.version.split(".").at(-1)}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>JAVM links</string><key>CFBundleURLSchemes</key><array><string>javm</string></array></dict></array>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 </dict></plist>\n`,
   );

@@ -46,6 +46,9 @@ jobs:
         run: pnpm native:build --release
       - name: 验证系统凭据存储
         run: node scripts/verify-system-credentials.mjs
+      - name: 验证 Linux 链接关联
+        if: runner.os == 'Linux'
+        run: node scripts/verify-linux-protocol.mjs
       - name: 打包前端与原生宿主
         run: pnpm build && node scripts/build-desktop.mjs --no-archive
       - name: 生成安装包和便携包

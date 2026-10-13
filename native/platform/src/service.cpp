@@ -1,5 +1,6 @@
 #include "service.hpp"
 #include "credentials.hpp"
+#include "protocol.hpp"
 #include "../../media/src/work_queue.hpp"
 #include <atomic>
 #include <stdexcept>
@@ -21,7 +22,7 @@ Service::Service(): state_(std::make_unique<State>()) {}
 Service::~Service() = default;
 void Service::shutdown() { state_->shutdown(); }
 void Service::request(const std::string& requestId, const std::string& method, const Json& params, Reply reply) {
-    if (method != "platform.loopbackPort" && method != "platform.credentials.read" && method != "platform.credentials.write")
+    if (method != "platform.protocol" && method != "platform.loopbackPort" && method != "platform.credentials.read" && method != "platform.credentials.write")
         throw std::runtime_error("未知的系统服务请求");
     if (!params.is_object()) throw std::runtime_error("系统服务参数无效");
     std::string key, value;
@@ -36,13 +37,14 @@ void Service::request(const std::string& requestId, const std::string& method, c
         }
     }
     const auto submitted = std::chrono::steady_clock::now();
-    if (!state_->queue.trySubmit([this, requestId, method, key, value, submitted, reply = std::move(reply)] {
+    if (!state_->queue.trySubmit([this, requestId, method, key, value, params, submitted, reply = std::move(reply)] {
         if (state_->stopped) return;
         Json response{{"requestId", requestId}};
         try {
             if (std::chrono::steady_clock::now() - submitted > std::chrono::seconds(5))
                 throw std::runtime_error("系统服务等待超时，请稍后重试");
-            if (method == "platform.loopbackPort") response["result"] = {{"port", loopbackPort()}};
+            if (method == "platform.protocol") response["result"] = protocol(params);
+            else if (method == "platform.loopbackPort") response["result"] = {{"port", loopbackPort()}};
             else if (method.ends_with(".read")) {
                 const auto found = state_->credentials.read(key);
                 response["result"] = found ? Json(*found) : Json(nullptr);

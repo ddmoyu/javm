@@ -17,14 +17,14 @@ export function SystemIntegrationPanel() {
         </Text>
         <Text component="output" size="xs" c="dimmed" aria-live="polite">
           {!state.available
-            ? "请在 Windows 便携版中设置。"
+            ? "请在桌面版中设置。"
             : state.result?.state === "current"
               ? "已关联到当前程序"
               : state.result?.state === "other"
                 ? "当前关联到其他程序或旧位置"
                 : state.result?.state === "missing"
                   ? "尚未注册"
-                  : "点击检查，读取当前 Windows 用户的链接设置。"}
+                  : "点击检查，读取当前用户的链接设置。"}
         </Text>
         {state.result?.command && (
           <Text size="xs" style={{ overflowWrap: "anywhere" }}>

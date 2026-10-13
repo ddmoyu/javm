@@ -5,6 +5,7 @@
 #include <unistd.h>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
+int javmMacApplication(int argc, char* argv[], const std::string& host);
 #endif
 
 int main(int argc, char* argv[]) {
@@ -22,6 +23,11 @@ int main(int argc, char* argv[]) {
         const auto directory = launcher.parent_path();
         const auto host = (directory / "JAVM-host").string();
         std::filesystem::current_path(directory);
+#ifdef __APPLE__
+        bool cloud = false;
+        for (int i = 1; i < argc; ++i) if (std::string(argv[i]) == "--mode=cloud") cloud = true;
+        if (!cloud) return javmMacApplication(argc, argv, host);
+#endif
         // execv 不经过 shell；安装路径与启动参数中的特殊字符保持为数据。
         std::vector<char*> args{const_cast<char*>(host.c_str())};
         for (int i = 1; i < argc; ++i) args.push_back(argv[i]);
