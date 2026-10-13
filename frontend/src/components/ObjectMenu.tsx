@@ -1,9 +1,19 @@
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import { ActionIcon, Menu } from "@mantine/core";
 import { Icon } from "./icons";
 
-const ObjectActions = createContext<{ items: ReactNode; onOpen?: () => void } | null>(null);
+type MenuTrigger = "context" | "button";
+
+const ObjectActions = createContext<{
+  items: ReactNode;
+  onOpen?: () => void;
+  buttonOpened: boolean;
+  onButtonChange: (opened: boolean) => void;
+} | null>(null);
+
+// 右键按下会被 Mantine 停止冒泡；捕获阶段关闭旧菜单，并覆盖键盘触发的 contextmenu。
+const clickOutsideEvents = ["mousedown", "touchstart", "keydown", "contextmenu"];
 
 export function ObjectMenu({
   children,
@@ -14,8 +24,19 @@ export function ObjectMenu({
   items: ReactNode;
   onOpen?: () => void;
 }) {
+  const [activeMenu, setActiveMenu] = useState<MenuTrigger | null>(null);
+  const changeMenu = (trigger: MenuTrigger, opened: boolean) =>
+    setActiveMenu((current) => (opened ? trigger : current === trigger ? null : current));
+
   return (
-    <ObjectActions.Provider value={{ items, onOpen }}>
+    <ObjectActions.Provider
+      value={{
+        items,
+        onOpen,
+        buttonOpened: activeMenu === "button",
+        onButtonChange: (opened) => changeMenu("button", opened),
+      }}
+    >
       <Menu
         width={220}
         position="bottom-start"
@@ -23,6 +44,11 @@ export function ObjectMenu({
         loop
         returnFocus
         zIndex={350}
+        opened={activeMenu === "context"}
+        onChange={(opened) => changeMenu("context", opened)}
+        clickOutsideCapture
+        clickOutsideEvents={clickOutsideEvents}
+        transitionProps={{ exitDuration: 0 }}
         onOpen={onOpen}
       >
         <Menu.ContextMenu>{children}</Menu.ContextMenu>
@@ -42,6 +68,11 @@ export function ObjectMenuButton({ label }: { label: string }) {
       loop
       returnFocus
       zIndex={350}
+      opened={actions?.buttonOpened}
+      onChange={actions?.onButtonChange}
+      clickOutsideCapture
+      clickOutsideEvents={clickOutsideEvents}
+      transitionProps={{ exitDuration: 0 }}
       onOpen={actions?.onOpen}
     >
       <Menu.Target>
