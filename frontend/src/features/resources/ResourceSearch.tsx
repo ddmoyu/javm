@@ -99,15 +99,17 @@ export function ResourceSearchPanel({
   code,
   workId,
   documents,
-}: LookupProps & { documents?: LibraryDocumentsService }) {
+  notice,
+}: LookupProps & { documents?: LibraryDocumentsService; notice: (message: string) => void }) {
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const current = service.matches(code, workId);
   const searching = current && state.searching;
   const [saved, setSaved] = useState<SavedResource[]>([]);
   const [loadedHistory, setLoadedHistory] = useState("");
   const [readError, setReadError] = useState("");
-  const [error, setError] = useState("");
-  const [feedback, setFeedback] = useState("");
+  // 导出路径保留供核对，复制、入队等即时反馈使用悬浮通知。
+  const [exportResult, setExportResult] = useState("");
+  const [exportError, setExportError] = useState("");
   const [revision, setRevision] = useState(0);
   const historyKey = JSON.stringify([code, workId, state.archiveRevision, revision]);
   const loading = loadedHistory !== historyKey;
@@ -151,19 +153,21 @@ export function ResourceSearchPanel({
     acting.current = true;
     const key = linkKey(row.stream.manifestUrl);
     setBusy(key);
-    setError("");
-    setFeedback("");
     try {
       if (action === "remove") {
         for (const id of row.savedIds) await service.removeSaved(id);
         if (service.matches(code, workId)) service.dismissResult(row.stream.manifestUrl);
         setSaved((items) => items.filter((item) => !row.savedIds.includes(item.id)));
-        setFeedback("已移除保存的链接。");
+        notice("已移除保存的链接。");
         return;
       }
       if (action === "download" && (row.added || added.has(key))) return;
       const root = action === "strm" ? await os.showFolderDialog("导出 STRM 与 NFO") : "";
       if (action === "strm" && !root) return;
+      if (action === "strm") {
+        setExportResult("");
+        setExportError("");
+      }
       const live = row.liveSourceIds[0];
       let url = "";
       if (live && service.matches(code, workId) && action === "download") {
@@ -175,17 +179,24 @@ export function ResourceSearchPanel({
       }
       if (action === "strm") {
         await documents!.exportStream(workId!, root, url);
-        setFeedback("已导出至 " + documents!.getSnapshot().directory + "。地址失效后需重新导出。");
+        setExportResult(
+          "已导出至 " + documents!.getSnapshot().directory + "。地址失效后需重新导出。",
+        );
       } else if (action === "copy") {
         await navigator.clipboard.writeText(url);
-        setFeedback("已复制资源链接。");
+        notice("已复制资源链接。");
       } else {
         setAdded((value) => new Set(value).add(key));
-        setFeedback("已加入下载队列。");
+        notice("已加入下载队列。");
       }
     } catch (reason) {
-      if (!(reason instanceof DownloadAdditionCancelledError))
-        setError(reason instanceof Error ? reason.message : "操作失败，请重试。");
+      if (!(reason instanceof DownloadAdditionCancelledError)) {
+        const message = reason instanceof Error ? reason.message : "操作失败，请重试。";
+        if (action === "strm") {
+          setExportResult("");
+          setExportError(message);
+        } else notice(message);
+      }
     } finally {
       acting.current = false;
       setBusy(null);
@@ -258,7 +269,7 @@ export function ResourceSearchPanel({
               size="xs"
               variant="default"
               onClick={() => {
-                void service.retryCleanup().catch(() => setError("清理仍未完成，请重试。"));
+                void service.retryCleanup().catch(() => notice("清理仍未完成，请重试。"));
               }}
             >
               重试清理
@@ -278,14 +289,19 @@ export function ResourceSearchPanel({
             </Button>
           </Alert>
         )}
-        {error && (
+        {exportError && (
           <Alert color="red" role="alert">
-            {publicMessage(error)}
+            {publicMessage(exportError)}
           </Alert>
         )}
-        {feedback && (
-          <Text size="sm" component="output" aria-live="polite">
-            {feedback}
+        {exportResult && (
+          <Text
+            size="sm"
+            component="output"
+            aria-live="polite"
+            style={{ overflowWrap: "anywhere" }}
+          >
+            {exportResult}
           </Text>
         )}
         {loading && !rows.length && (

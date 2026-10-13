@@ -16,7 +16,6 @@ export function DownloadSettingsPanel() {
   const [action, setAction] = useState<"pick" | "check" | "save" | null>(null);
   const busy = action !== null;
   const [error, setError] = useState("");
-  const [toolsChecked, setToolsChecked] = useState(false);
   const dirty =
     edited !== null &&
     (Object.keys(edited) as (keyof DownloadSettings)[]).some(
@@ -25,7 +24,6 @@ export function DownloadSettingsPanel() {
   const update = (field: "directory" | "concurrency", value: string | number) => {
     setEdited((previous) => ({ ...(previous ?? current.settings), [field]: value }));
     setError("");
-    setToolsChecked(false);
   };
   const perform = async (kind: NonNullable<typeof action>, operation: () => Promise<void>) => {
     if (busy) return;
@@ -127,20 +125,14 @@ export function DownloadSettingsPanel() {
               disabled={!current.available || busy}
               onClick={() =>
                 void perform("check", async () => {
-                  setToolsChecked(false);
                   await downloads.checkTools(draft);
-                  setToolsChecked(true);
+                  notice("下载工具检查通过。");
                 })
               }
             >
               检查工具
             </Button>
           </SettingRow>
-          {toolsChecked && (
-            <Text component="output" size="xs" c="teal" py="md" display="block">
-              下载工具检查通过
-            </Text>
-          )}
         </SettingCard>
         {error && (
           <Alert color="red" title="操作未完成" icon={<Icon name="alert" />} role="alert">
@@ -167,7 +159,6 @@ export function DownloadSettingsPanel() {
               onClick={() => {
                 setEdited(null);
                 setError("");
-                setToolsChecked(false);
               }}
             >
               撤销修改

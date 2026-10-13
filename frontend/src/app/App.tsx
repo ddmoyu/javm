@@ -130,7 +130,7 @@ export function App({
   const detail = libraryState.selectedFilm;
   const filmId = detail?.id ?? null;
   const [detailView, setDetailView] = useState<FilmDetailView>("info");
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ message: string } | null>(null);
   const [downloadOpened, setDownloadOpened] = useState(false);
   const [downloadInitial, setDownloadInitial] = useState<{ url: string; name: string }>();
   const [downloadFilm, setDownloadFilm] = useState<Film | undefined>();
@@ -143,7 +143,9 @@ export function App({
   const collapsed = preferences.navCollapsed;
   const current = pages.find((item) => item.id === page)!;
   const notice = (message: string) => {
-    setToast(publicMessage(message));
+    const content = publicMessage(message);
+    // 每次创建新对象，让相同文案的连续操作也重新计算显示时间。
+    setToast(content ? { message: content } : null);
     logEvent("info", "ui", "notice", message);
   };
   useEffect(() => {
@@ -166,7 +168,7 @@ export function App({
           setDownloadOpened(true);
         }
       },
-      (message) => setToast(message),
+      (message) => setToast(message ? { message } : null),
     );
   }, [runtime, libraryState.ready, library, resourceSearch, setPage]);
   const playSource = (source: string, options?: PlaybackOptions) => {
@@ -187,7 +189,7 @@ export function App({
   }, [page]);
   useEffect(() => {
     if (!toast) return;
-    const timer = window.setTimeout(() => setToast(""), 5500);
+    const timer = window.setTimeout(() => setToast(null), 5500);
     return () => window.clearTimeout(timer);
   }, [toast]);
   useLayoutEffect(() => {
@@ -403,11 +405,11 @@ export function App({
               w="min(340px, calc(100vw - 48px))"
               withBorder
               icon={<Icon name="info" size={16} />}
-              onClose={() => setToast("")}
+              onClose={() => setToast(null)}
               closeButtonProps={{ "aria-label": "关闭提示" }}
               aria-live="polite"
             >
-              {toast}
+              {toast?.message}
             </Notification>
           )}
         </Transition>

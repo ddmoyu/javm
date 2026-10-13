@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { useWorkspace } from "../../app/state";
 import type { LibraryService } from "../../services/library/LibraryService";
 type Alias = { alias: string; canonical: string; blocked: number; label: string };
 export function EntityAliasesModal({
@@ -20,6 +21,7 @@ export function EntityAliasesModal({
   library: LibraryService;
   onClose(): void;
 }) {
+  const { notice } = useWorkspace();
   const [dimension, setDimension] = useState("actors"),
     [query, setQuery] = useState(""),
     [offset, setOffset] = useState(0);
@@ -31,7 +33,7 @@ export function EntityAliasesModal({
     [busy, setBusy] = useState(false),
     [restoring, setRestoring] = useState(false),
     [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [restoreSummary, setRestoreSummary] = useState("");
   const [reload, setReload] = useState(0);
   useEffect(() => {
     let alive = true;
@@ -130,7 +132,7 @@ export function EntityAliasesModal({
                 label,
                 blocked,
               });
-              setMessage("名称规则已保存。");
+              notice("名称规则已保存。");
             })
           }
         >
@@ -230,7 +232,7 @@ export function EntityAliasesModal({
                 aliases: number;
                 skipped: number;
               }>("restore");
-              setMessage(
+              setRestoreSummary(
                 `恢复收藏 ${result.favorites} 项、别名 ${result.aliases} 项，跳过待核对记录 ${result.skipped} 项。`,
               );
             })
@@ -246,9 +248,9 @@ export function EntityAliasesModal({
             取消恢复
           </Button>
         )}
-        {message && (
+        {restoreSummary && (
           <Alert color="blue" role="status">
-            {message}
+            {restoreSummary}
           </Alert>
         )}
         {error && (

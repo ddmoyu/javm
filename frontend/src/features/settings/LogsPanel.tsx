@@ -6,7 +6,7 @@ import { SettingCard, SettingRow } from "./SettingsPrimitives";
 
 const levels = { debug: "调试", info: "信息", warn: "警告", error: "错误" };
 export function LogsPanel() {
-  const { logs } = useWorkspace();
+  const { logs, notice } = useWorkspace();
   const current = useSyncExternalStore(logs.subscribe, logs.getSnapshot);
   const [opened, setOpened] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -84,7 +84,7 @@ export function LogsPanel() {
                 onClick={() => {
                   void logs
                     .openDirectory()
-                    .catch(() => setError("无法打开日志目录，请检查访问权限。"));
+                    .catch(() => notice("无法打开日志目录，请检查访问权限。"));
                 }}
               >
                 打开日志目录

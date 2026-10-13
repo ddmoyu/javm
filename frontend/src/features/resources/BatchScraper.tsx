@@ -29,7 +29,7 @@ const empty = {
 const ignore = () => () => {};
 
 export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void }) {
-  const { scraping, libraryState, page } = useWorkspace();
+  const { scraping, libraryState, page, notice } = useWorkspace();
   const state = useSyncExternalStore(
     page === "scraper" && scraping ? scraping.subscribe : ignore,
     scraping?.getSnapshot ?? (() => empty),
@@ -51,7 +51,9 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
     try {
       await action();
     } catch (reason) {
-      setError(serviceError(reason));
+      const message = serviceError(reason);
+      if (opened || editing) setError(message);
+      else notice(message);
     } finally {
       setBusy(false);
     }
@@ -70,7 +72,12 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
             variant="default"
             size="xs"
             disabled={!state.available || !state.ready}
-            onClick={() => scraping?.pauseQueue(!state.paused)}
+            onClick={() => {
+              if (!scraping) return;
+              const paused = !state.paused;
+              scraping.pauseQueue(paused);
+              notice(paused ? "队列已暂停，当前影片完成后停止调度。" : "队列已继续。");
+            }}
             leftSection={<Icon name={state.paused ? "play" : "pause"} size={15} />}
           >
             {state.paused ? "继续队列" : "暂停队列"}
@@ -85,15 +92,10 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
           </Button>
         </Group>
       </Group>
-      {(error || state.error) && (
+      {state.error && (
         <Alert color="red" role="alert" mb="sm">
-          {publicMessage(error || state.error)}
+          {publicMessage(state.error)}
         </Alert>
-      )}
-      {state.paused && (
-        <Text size="sm" c="dimmed" mb="sm">
-          队列已暂停，当前影片完成后停止调度。
-        </Text>
       )}
       <div className="table-panel">
         <Table stickyHeader verticalSpacing="sm" horizontalSpacing="md" layout="fixed" miw={660}>

@@ -4,7 +4,7 @@ import { useWorkspace } from "../../app/state";
 import { ResourceSearchPanel } from "../resources/ResourceSearch";
 
 export function FilmResources({ film, preview = false }: { film: Film; preview?: boolean }) {
-  const { resourceSearch, library } = useWorkspace();
+  const { resourceSearch, library, notice } = useWorkspace();
   return resourceSearch ? (
     <ResourceSearchPanel
       key={String(film.id) + ":" + film.code}
@@ -12,6 +12,7 @@ export function FilmResources({ film, preview = false }: { film: Film; preview?:
       code={film.code}
       workId={preview ? undefined : String(film.id)}
       documents={preview ? undefined : library.documents}
+      notice={notice}
     />
   ) : (
     <Empty icon="link" title="暂无资源链接" description="请在桌面应用中获取资源链接。" />

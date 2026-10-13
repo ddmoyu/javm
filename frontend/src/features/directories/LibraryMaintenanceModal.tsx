@@ -14,6 +14,7 @@ import {
   Text,
   Textarea,
 } from "@mantine/core";
+import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
 import { ObjectMenu, objectMenuKey } from "../../components/ObjectMenu";
 import { Empty } from "../../components/ui";
@@ -38,6 +39,7 @@ export function LibraryMaintenanceModal({
   opened: boolean;
   onClose: () => void;
 }) {
+  const { notice } = useWorkspace();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const [confirming, setConfirming] = useState(false);
   const [metadataOnly, setMetadataOnly] = useState(false);
@@ -65,7 +67,7 @@ export function LibraryMaintenanceModal({
     try {
       await openMediaDirectory(parentDirectory(path));
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "无法打开目录");
+      notice(error instanceof Error ? error.message : "无法打开目录");
     }
   };
   const select = (choice: "all" | "none" | "suggested" | "toggle", ids?: string[]) =>

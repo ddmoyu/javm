@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Checkbox, NumberInput, Stack, Text } from "@mantine/core";
+import { useWorkspace } from "../../app/state";
 import type {
   MetadataPipeline,
   MetadataPipelineSettings,
@@ -7,15 +8,14 @@ import type {
 import { SettingCard } from "./SettingsPrimitives";
 import { publicMessage } from "../../services/publicMessage";
 export function MetadataPipelinePanel({ service }: { service: MetadataPipeline }) {
+  const { notice } = useWorkspace();
   const state = useSyncExternalStore(service.settings.subscribe, service.settings.getSnapshot);
   const [edited, setEdited] = useState<MetadataPipelineSettings | null>(null),
-    [error, setError] = useState(""),
-    [saved, setSaved] = useState(false);
+    [error, setError] = useState("");
   const draft = edited ?? state.value,
     busy = !state.ready || state.saving || !state.available;
   const patch = (value: Partial<MetadataPipelineSettings>) => {
     setEdited({ ...draft, ...value });
-    setSaved(false);
   };
   return (
     <SettingCard title="资料补全与重试" icon="layers">
@@ -38,7 +38,6 @@ export function MetadataPipelinePanel({ service }: { service: MetadataPipeline }
           onChange={(v) => patch({ retries: Number(v) })}
         />
         {(error || state.error) && <Alert color="red">{publicMessage(error || state.error)}</Alert>}
-        {saved && <Text size="sm">设置已保存</Text>}
         <Button
           disabled={busy || !edited}
           loading={state.saving}
@@ -47,7 +46,7 @@ export function MetadataPipelinePanel({ service }: { service: MetadataPipeline }
             void service.settings.save(draft).then(
               () => {
                 setEdited(null);
-                setSaved(true);
+                notice("资料设置已保存。");
               },
               (e) => setError(e instanceof Error ? e.message : "保存失败"),
             );

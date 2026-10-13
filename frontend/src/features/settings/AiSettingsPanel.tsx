@@ -18,12 +18,11 @@ import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
 import classes from "./Settings.module.css";
 
 export function AiSettingsPanel() {
-  const { ai } = useWorkspace();
+  const { ai, notice } = useWorkspace();
   const current = useSyncExternalStore(ai.settings.subscribe, ai.settings.getSnapshot);
   const task = useSyncExternalStore(ai.subscribe, ai.getSnapshot);
   const [edited, setEdited] = useState<AiSettings | null>(null);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const draft = edited ?? current.value;
   const providers = aiProviders(draft);
   const dirty = JSON.stringify(draft) !== JSON.stringify(current.value);
@@ -31,7 +30,6 @@ export function AiSettingsPanel() {
   const patch = (value: Partial<AiSettings>) => {
     setEdited({ ...draft, ...value });
     setError("");
-    setMessage("");
   };
   const changeProviders = (value: AiProvider[]) => {
     const first = value[0]!;
@@ -48,15 +46,14 @@ export function AiSettingsPanel() {
   };
   const perform = async (test: boolean, providerId?: string) => {
     setError("");
-    setMessage("");
     try {
       if (test) {
         await ai.test(draft, providerId);
-        setMessage("连接成功，模型已正确响应测试。" + (dirty ? "当前修改尚未保存。" : ""));
+        notice("连接成功，模型已正确响应测试。" + (dirty ? "当前修改尚未保存。" : ""));
       } else {
         await ai.settings.save(draft);
         setEdited(null);
-        setMessage("AI 配置已保存。");
+        notice("AI 配置已保存。");
       }
     } catch (reason) {
       setError(serviceError(reason));
@@ -240,11 +237,6 @@ export function AiSettingsPanel() {
             {error || current.error}
           </Alert>
         )}
-        {message && (
-          <Alert color="green">
-            <output>{message}</output>
-          </Alert>
-        )}
         <div className={classes.saveBar}>
           <Text size="xs" c="dimmed">
             {dirty ? "有未保存的修改" : "修改后点击保存"}
@@ -256,7 +248,6 @@ export function AiSettingsPanel() {
               onClick={() => {
                 setEdited(null);
                 setError("");
-                setMessage("");
               }}
             >
               撤销修改

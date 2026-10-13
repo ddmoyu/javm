@@ -13,16 +13,19 @@ export function ApplicationUpdatePanel() {
         检查 JAVM 官方发布，找到兼容的离线包后可前往下载并手动升级。
       </Text>
       {state.error && <Alert color="red">{state.error}</Alert>}
-      {state.checked && !state.error && !state.release && (
-        <Text size="sm">暂无更高版本的正式发布。</Text>
-      )}
       <Group>
         <Button
           size="xs"
           variant="default"
-          disabled={!state.available}
+          disabled={!state.available || state.busy}
           loading={state.busy}
-          onClick={() => void service.check()}
+          onClick={() => {
+            void service.check().then(() => {
+              const result = service.getSnapshot();
+              if (result.checked && !result.error && !result.release)
+                notice("暂无更高版本的正式发布。");
+            });
+          }}
         >
           检查更新
         </Button>

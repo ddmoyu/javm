@@ -45,7 +45,13 @@ const search = new ResourceSearchService(
 );
 createRoot(document.getElementById("root")!).render(
   <MantineProvider>
-    <ResourceSearchPanel service={search} code="DEMO-001" />
+    <ResourceSearchPanel
+      service={search}
+      code="DEMO-001"
+      notice={(message) => {
+        reports.push({ scenario: "notice", message });
+      }}
+    />
   </MantineProvider>,
 );
 const expect = (value: unknown, label: string) => {

@@ -71,7 +71,9 @@ createRoot(document.getElementById("root")!).render(
       cssVariablesResolver={cssVariablesResolver}
       defaultColorScheme="dark"
     >
-      <WorkspaceContext.Provider value={{ ...services, runtime } as unknown as WorkspaceState}>
+      <WorkspaceContext.Provider
+        value={{ ...services, runtime, notice: () => {} } as unknown as WorkspaceState}
+      >
         <View />
       </WorkspaceContext.Provider>
     </MantineProvider>

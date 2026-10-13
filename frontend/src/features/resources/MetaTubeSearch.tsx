@@ -48,7 +48,7 @@ export function MetaTubeSearch({
   onLookupResources?: (code: string, trigger: HTMLButtonElement) => void;
   allowResourceLookup?: boolean;
 }) {
-  const { metatube } = useWorkspace();
+  const { metatube, notice } = useWorkspace();
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
   const [query, setQuery] = useState(initialQuery),
     [error, setError] = useState("");
@@ -113,8 +113,10 @@ export function MetaTubeSearch({
       setPage(1);
       setSearched(true);
     } catch (reason) {
-      if (current === revision.current)
-        setError(cancelled.current ? "已取消搜索。" : serviceError(reason));
+      if (current === revision.current) {
+        if (cancelled.current && !(reason instanceof StopUnconfirmedError)) notice("已取消搜索。");
+        else setError(serviceError(reason));
+      }
     } finally {
       searching.current = false;
       if (current === revision.current) {
@@ -172,8 +174,11 @@ export function MetaTubeSearch({
       setResourceCode(allowResourceLookup ? code : undefined);
       throw last ?? new Error("尚未取得影片详情，请重试。");
     } catch (reason) {
-      if (current === revision.current)
-        setError(cancelled.current ? "已取消。" : serviceError(reason));
+      if (current === revision.current) {
+        if (cancelled.current && !(reason instanceof StopUnconfirmedError))
+          notice("已取消获取详情。");
+        else setError(serviceError(reason));
+      }
     } finally {
       selecting.current = false;
       if (current === revision.current) {
