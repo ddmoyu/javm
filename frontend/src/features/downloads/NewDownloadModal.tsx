@@ -15,6 +15,7 @@ import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
 import { parseHeaders } from "../../services/downloads/input";
 import { describeError } from "../../services/downloads/DownloadService";
+import { DownloadAdditionCancelledError } from "../../services/downloads/duplicates";
 import type { NewDownload } from "../../contracts/downloads";
 import type { Film } from "../../contracts/media";
 
@@ -31,6 +32,7 @@ export function NewDownloadModal({
 }) {
   const { downloads, go, notice } = useWorkspace();
   const state = useSyncExternalStore(downloads.subscribe, downloads.getControls);
+  const confirmation = useSyncExternalStore(downloads.subscribe, downloads.getConfirmation);
   const [urls, setUrls] = useState(initial?.url ?? "");
   const [directory, setDirectory] = useState(downloads.getSnapshot().settings.directory);
   const [name, setName] = useState(initial?.name ?? film?.code ?? "");
@@ -66,12 +68,14 @@ export function NewDownloadModal({
         kind,
         headers: parseHeaders(headers),
         workId: film ? String(film.id) : undefined,
+        code: film?.code,
       });
       onClose();
       go("downloads");
       notice(`已加入 ${count} 个下载任务`);
     } catch (error) {
-      setError(describeError(error));
+      if (error instanceof DownloadAdditionCancelledError) onClose();
+      else setError(describeError(error));
     } finally {
       setBusy(false);
     }
@@ -86,6 +90,7 @@ export function NewDownloadModal({
       closeOnClickOutside={!busy}
       closeOnEscape={!busy}
       withCloseButton={!busy}
+      trapFocus={!confirmation}
     >
       <form
         onSubmit={(event) => {

@@ -11,6 +11,7 @@ export type DownloadStatus =
 export interface DownloadTask {
   rename?: { name: string; output: string; operationId: string };
   workId?: string;
+  code?: string;
   id: string;
   revision: number;
   name: string;
@@ -48,6 +49,7 @@ export interface DownloadSettings {
 
 export interface NewDownload {
   workId?: string;
+  code?: string;
   urls: string[];
   directory: string;
   name?: string;

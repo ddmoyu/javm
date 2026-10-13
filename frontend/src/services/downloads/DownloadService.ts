@@ -4,6 +4,8 @@ import { createDownloadTasks, redactLog, validateSettings, safeName, joinPath } 
 import type { DownloadEngine, DownloadProgress, DownloadRepository } from "./ports";
 import { StopUnconfirmedError } from "./ports";
 import { logEvent } from "../logging/events";
+import { DownloadAdditionCancelledError, DuplicateDownloadError } from "./duplicates";
+import type { DuplicateDownloadConfirmation } from "./duplicates";
 
 interface Snapshot {
   tasks: DownloadTask[];
@@ -11,8 +13,9 @@ interface Snapshot {
   ready: boolean;
   error: string;
   available: boolean;
+  confirmation: DuplicateDownloadConfirmation | null;
 }
-type Controls = Omit<Snapshot, "tasks">;
+type Controls = Omit<Snapshot, "tasks" | "confirmation">;
 interface Execution {
   controller: AbortController;
   stop?: "paused" | "cancelled";
@@ -35,6 +38,7 @@ export class DownloadService {
   private progressTimer?: ReturnType<typeof setTimeout>;
   private completedHandler?: (task: DownloadTask) => Promise<unknown>;
   private handoffs = new Set<Promise<void>>();
+  private pendingConfirmation?: { id: string; resolve: (confirmed: boolean) => void };
   private renameFile?: (
     task: DownloadTask,
     pending: NonNullable<DownloadTask["rename"]>,
@@ -137,11 +141,13 @@ export class DownloadService {
       ready: false,
       error: "",
       available,
+      confirmation: null,
     };
     this.controls = { settings: this.snapshot.settings, ready: false, error: "", available };
   }
   getSnapshot = () => this.snapshot;
   getControls = () => this.controls;
+  getConfirmation = () => this.snapshot.confirmation;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -312,14 +318,43 @@ export class DownloadService {
     if (this.stopping) throw new Error("应用正在退出，无法启动新任务。");
   }
   async add(input: NewDownload) {
-    const count = await this.exclusive(async () => {
-      this.requireReady();
-      const tasks = createDownloadTasks(input, this.snapshot.tasks);
-      for (const task of tasks) await this.save(task);
-      return tasks.length;
+    const draft = { ...input, urls: [...input.urls], headers: { ...input.headers } };
+    const confirmedCodes: string[] = [];
+    for (;;) {
+      try {
+        const count = await this.exclusive(async () => {
+          this.requireReady();
+          const tasks = createDownloadTasks(draft, this.snapshot.tasks, confirmedCodes);
+          for (const task of tasks) await this.save(task);
+          return tasks.length;
+        });
+        this.pump();
+        return count;
+      } catch (error) {
+        if (!(error instanceof DuplicateDownloadError)) throw error;
+        // 等待用户期间不占用串行队列，其他任务仍可下载、暂停和保存进度。
+        const confirmed = await this.requestDuplicateConfirmation(error);
+        if (!confirmed) throw new DownloadAdditionCancelledError();
+        confirmedCodes.push(...error.codes);
+      }
+    }
+  }
+  private requestDuplicateConfirmation(error: DuplicateDownloadError) {
+    this.requireReady();
+    if (this.pendingConfirmation) throw new Error("请先处理当前重复下载的确认。");
+    const id = crypto.randomUUID();
+    const response = new Promise<boolean>((resolve) => {
+      this.pendingConfirmation = { id, resolve };
     });
-    this.pump();
-    return count;
+    this.publish({ confirmation: { id, codes: error.codes, count: error.count } });
+    return response;
+  }
+  resolveDuplicateConfirmation(id: string, confirmed: boolean) {
+    const pending = this.pendingConfirmation;
+    if (!pending || pending.id !== id) return;
+    this.pendingConfirmation = undefined;
+    this.publish({ confirmation: null });
+    pending.resolve(confirmed);
   }
   async updateSettings(settings: DownloadSettings) {
     await this.exclusive(async () => {
@@ -539,6 +574,8 @@ export class DownloadService {
   async shutdown(beforeDatabaseClose?: () => Promise<void>) {
     await this.recovery?.catch(() => {});
     this.stopping = true;
+    if (this.pendingConfirmation)
+      this.resolveDuplicateConfirmation(this.pendingConfirmation.id, false);
     this.repository.beginShutdown?.();
     try {
       await this.pauseAll();

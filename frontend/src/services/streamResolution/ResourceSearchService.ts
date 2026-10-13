@@ -1,4 +1,5 @@
 import type { NewDownload } from "../../contracts/downloads";
+import { DownloadAdditionCancelledError } from "../downloads/duplicates";
 import type {
   ResolutionHandle,
   ResolutionState,
@@ -281,6 +282,7 @@ export class ResourceSearchService {
             urls: [url],
             kind: "hls",
             name: record.code,
+            code: record.code,
             directory: this.downloads.directory(),
             headers: { ...stream.context.publicHeaders },
             workId: workId ?? record.workId,
@@ -562,6 +564,7 @@ ${workId ?? ""}`;
           urls: [stream.manifestUrl],
           kind: "hls",
           name: code,
+          code,
           directory: this.downloads.directory(),
           headers: { ...stream.context.publicHeaders },
           workId,
@@ -581,7 +584,8 @@ ${workId ?? ""}`;
           this.publish();
         });
       } catch (error) {
-        patch({ error: error instanceof Error ? error.message : "加入下载失败，请重试。" });
+        if (!(error instanceof DownloadAdditionCancelledError))
+          patch({ error: error instanceof Error ? error.message : "加入下载失败，请重试。" });
         throw error;
       } finally {
         this.handles.delete(`download:${sourceId}`);

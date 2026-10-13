@@ -1,6 +1,8 @@
 import type { DownloadSettings, DownloadTask, NewDownload } from "../../contracts/downloads";
 import { downloadTaskLimit } from "../../contracts/downloads";
 import { keepTextTail } from "./text";
+import { identifyCode, normalizeCode } from "../scraping/identity";
+import { downloadCode, duplicateDownloadCodes, DuplicateDownloadError } from "./duplicates";
 
 export function normalizeDownloadUrl(value: string) {
   let url: URL;
@@ -77,7 +79,11 @@ export function validateSettings(settings: DownloadSettings) {
   return settings;
 }
 
-export function createDownloadTasks(input: NewDownload, existing: DownloadTask[]): DownloadTask[] {
+export function createDownloadTasks(
+  input: NewDownload,
+  existing: DownloadTask[],
+  confirmedCodes: string[] = [],
+): DownloadTask[] {
   if (input.workId !== undefined && !/^[a-f0-9-]{36}$/i.test(input.workId))
     throw new Error("关联作品标识无效，请重新打开作品。");
   const directory = validateDirectory(input.directory);
@@ -96,15 +102,7 @@ export function createDownloadTasks(input: NewDownload, existing: DownloadTask[]
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n"),
   );
-  if (
-    existing.some(
-      (task) =>
-        urls.includes(task.url) && task.status !== "completed" && task.status !== "cancelled",
-    )
-  ) {
-    throw new Error("列表中已有相同链接的未完成任务，请继续或重试原任务。");
-  }
-  return urls.map((url, index) => {
+  const tasks: DownloadTask[] = urls.map((url, index) => {
     const id = crypto.randomUUID();
     let leaf = new URL(url).pathname.split("/").pop() || "video";
     try {
@@ -147,8 +145,29 @@ export function createDownloadTasks(input: NewDownload, existing: DownloadTask[]
       updatedAt: now,
       scrapeAfterDownload: true,
       workId: input.workId,
+      code: input.code?.trim() || identifyCode(name),
     };
   });
+  const confirmed = new Set(confirmedCodes.map(normalizeCode));
+  const duplicates = duplicateDownloadCodes(tasks, existing).filter(
+    (code) => !confirmed.has(normalizeCode(code)),
+  );
+  if (duplicates.length) throw new DuplicateDownloadError(duplicates, tasks.length);
+  if (
+    tasks.some((task) => {
+      const code = downloadCode(task);
+      return (
+        (!code || !confirmed.has(normalizeCode(code))) &&
+        existing.some(
+          (item) =>
+            item.url === task.url && item.status !== "completed" && item.status !== "cancelled",
+        )
+      );
+    })
+  ) {
+    throw new Error("列表中已有相同链接的未完成任务，请继续或重试原任务。");
+  }
+  return tasks;
 }
 
 export function redactLog(line: string, task: Pick<DownloadTask, "url" | "headers">) {

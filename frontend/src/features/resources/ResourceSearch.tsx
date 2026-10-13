@@ -25,6 +25,7 @@ import {
 } from "../../services/streamResolution/resourceLinks";
 import type { ResourceLinkRow } from "../../services/streamResolution/resourceLinks";
 import { publicMessage } from "../../services/publicMessage";
+import { DownloadAdditionCancelledError } from "../../services/downloads/duplicates";
 
 interface LookupProps {
   service: ResourceSearchService;
@@ -183,7 +184,8 @@ export function ResourceSearchPanel({
         setFeedback("已加入下载队列。");
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "操作失败，请重试。");
+      if (!(reason instanceof DownloadAdditionCancelledError))
+        setError(reason instanceof Error ? reason.message : "操作失败，请重试。");
     } finally {
       acting.current = false;
       setBusy(null);

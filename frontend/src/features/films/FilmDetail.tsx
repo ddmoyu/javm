@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import {
   Anchor,
@@ -67,7 +67,9 @@ function FilmDetailContent({
     library,
     add,
     resourceSearch,
+    downloads,
   } = useWorkspace();
+  const downloadConfirmation = useSyncExternalStore(downloads.subscribe, downloads.getConfirmation);
   const [busy, setBusy] = useState(false);
   const [deletingVideo, setDeletingVideo] = useState<Film | null>(null);
   const [organizing, setOrganizing] = useState<{ id: string; path: string } | null>(null);
@@ -119,7 +121,13 @@ function FilmDetailContent({
     });
   };
   const overlay =
-    opened || editing || artwork !== null || !!deletingVideo || !!removingImages || !!organizing;
+    opened ||
+    editing ||
+    artwork !== null ||
+    !!deletingVideo ||
+    !!removingImages ||
+    !!organizing ||
+    !!downloadConfirmation;
   const copy = async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);

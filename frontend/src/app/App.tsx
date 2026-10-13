@@ -34,6 +34,7 @@ import type { DownloadService } from "../services/downloads/DownloadService";
 import { libraryError } from "../services/library/LibraryService";
 import type { LibraryService } from "../services/library/LibraryService";
 import { NewDownloadModal } from "../features/downloads/NewDownloadModal";
+import { DuplicateDownloadModal } from "../features/downloads/DuplicateDownloadModal";
 import { Downloads } from "../features/downloads/Downloads";
 import { Scraper } from "../features/resources/Scraper";
 import type { ScraperHandle } from "../features/resources/Scraper";
@@ -388,6 +389,7 @@ export function App({
         />
       )}
       <AddMediaDirectoryModal ref={directoryModalRef} runtime={runtime} />
+      <DuplicateDownloadModal />
       {runtime === "browser" && playbackState.opened && (
         <Suspense fallback={null}>
           <PlaybackWindow service={playback} snapshot={playbackState} notice={notice} />
