@@ -38,14 +38,26 @@ Owned<CFMutableDictionaryRef> query(const std::string& key) {
     return result;
 }
 void check(OSStatus status) {
-    if (status != errSecSuccess) throw std::runtime_error("无法访问 macOS 钥匙串，请先解锁登录钥匙串并允许 JAVM 访问后重试");
+    if (status != errSecSuccess) throw std::runtime_error("无法访问 macOS 钥匙串，请先解锁登录钥匙串并允许 JAVM 访问后重试（" + std::to_string(status) + "）");
 }
+// File-based keychains do not consistently honor kSecUseAuthenticationUIFail.
+// Scope the legacy UI switch as well so a locked keychain never holds the queue
+// on an invisible system prompt; restore the previous state on every exit.
+struct NonInteractive {
+    Boolean allowed = true;
+    NonInteractive() {
+        check(SecKeychainGetUserInteractionAllowed(&allowed));
+        check(SecKeychainSetUserInteractionAllowed(false));
+    }
+    ~NonInteractive() { SecKeychainSetUserInteractionAllowed(allowed); }
+};
 }
 struct Credentials::State {};
 Credentials::Credentials(): state_(std::make_unique<State>()) {}
 Credentials::~Credentials() = default;
 void Credentials::cancel() {}
 std::optional<std::string> Credentials::read(const std::string& key) {
+    NonInteractive interaction;
     auto match = query(key);
     CFDictionarySetValue(match, kSecReturnData, kCFBooleanTrue);
     CFTypeRef raw = nullptr;
@@ -59,6 +71,7 @@ std::optional<std::string> Credentials::read(const std::string& key) {
     return std::string(reinterpret_cast<const char*>(CFDataGetBytePtr(data)), static_cast<size_t>(CFDataGetLength(data)));
 }
 void Credentials::write(const std::string& key, const std::string& value) {
+    NonInteractive interaction;
     auto match = query(key);
     Owned<CFDataRef> data{CFDataCreate(kCFAllocatorDefault, reinterpret_cast<const UInt8*>(value.data()), static_cast<CFIndex>(value.size()))};
     Owned<CFMutableDictionaryRef> changes{CFDictionaryCreateMutable(kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks)};

@@ -27,7 +27,7 @@ jobs:
           cache: pnpm
       - uses: actions/setup-go@v6.1.0
         with:
-          go-version: '1.25.0'
+          go-version: "1.25.0"
           cache: false
       - run: pnpm install --frozen-lockfile
       - name: 核对发布标签来源
@@ -48,22 +48,25 @@ jobs:
         run: node scripts/third-party/posix/resolve.mjs --publish-missing
       - run: pnpm desktop:setup --verified-posix-host
       - name: 编译完整原生扩展
+        id: native
         run: pnpm native:build --release
       - name: 验证系统凭据存储
+        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
         run: node scripts/verify-system-credentials.mjs
       - name: 验证系统证书与代理传输
+        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
         run: node scripts/verify-posix-network.mjs
       - name: 验证 Linux 链接关联
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && steps.native.outcome == 'success' && runner.os == 'Linux' }}
         run: node scripts/verify-linux-protocol.mjs
       - name: 验证 macOS 系统链接事件
-        if: runner.os == 'macOS'
+        if: ${{ !cancelled() && steps.native.outcome == 'success' && runner.os == 'macOS' }}
         run: node scripts/verify-macos-protocol.mjs
       - name: 验证 Linux 安全桌面与媒体业务
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && steps.native.outcome == 'success' && runner.os == 'Linux' }}
         run: dbus-run-session -- xvfb-run -a node scripts/verify-posix-desktop.mjs
       - name: 验证 macOS 安全桌面与媒体业务
-        if: runner.os == 'macOS'
+        if: ${{ !cancelled() && steps.native.outcome == 'success' && runner.os == 'macOS' }}
         run: node scripts/verify-posix-desktop.mjs
       - name: 打包前端与原生宿主
         run: pnpm build && node scripts/build-desktop.mjs --no-archive

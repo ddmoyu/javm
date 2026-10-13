@@ -33,21 +33,25 @@ nlohmann::json protocol(const nlohmann::json& params) {
         throw std::runtime_error("请在完整的 JAVM 安装包或便携包中设置链接关联");
     App current{g_app_info_get_default_for_uri_scheme("javm")};
     const auto existing = command(current.value);
+    // GLib 2.80 checks argv[0] before expanding desktop-entry %% escapes and
+    // reports a quoted first word incorrectly via get_executable(). Keep env as
+    // the stable executable and compare the complete command we own instead.
+    std::string escaped;
+    for(char c : entry) { escaped += c; if(c == '%') escaped += '%'; }
+    auto* quoted = g_shell_quote(escaped.c_str());
+    const auto launchCommand = std::string("/usr/bin/env -- ") + quoted;
+    g_free(quoted);
     auto isCurrent = [&](GAppInfo* app) {
         const auto* executable = app ? g_app_info_get_executable(app) : nullptr;
-        return executable && entry == executable;
+        return (executable && entry == executable) || command(app) == launchCommand + " %u";
     };
     if(operation == "register") {
         if(current.value && !isCurrent(current.value) && params.value("expected", "") != existing)
             throw std::runtime_error("链接关联已变化，请刷新后重新确认");
         if(!isCurrent(current.value)) {
-            // GIO 生成当前用户的 desktop entry；%% 防止文件名被解释为字段代码。
-            std::string escaped;
-            for(char c : entry) { escaped += c; if(c == '%') escaped += '%'; }
-            auto* quoted = g_shell_quote(escaped.c_str());
             GError* error = nullptr;
-            App app{g_app_info_create_from_commandline(quoted, "JAVM", G_APP_INFO_CREATE_SUPPORTS_URIS, &error)};
-            g_free(quoted); check(app.value != nullptr, error);
+            App app{g_app_info_create_from_commandline(launchCommand.c_str(), "JAVM", G_APP_INFO_CREATE_SUPPORTS_URIS, &error)};
+            check(app.value != nullptr, error);
             error = nullptr;
             const bool saved = g_app_info_set_as_default_for_type(app.value, "x-scheme-handler/javm", &error);
             check(saved, error);

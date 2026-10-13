@@ -21,7 +21,7 @@ let oldDefault,
   oldSearch,
   created = false;
 const hosts = [];
-const security = (args) => run("security", args, directory, true);
+const security = (args) => run("security", args, directory, "both");
 async function host(environment = process.env) {
   const instance = new ExtensionFixture(
     binary,
@@ -34,10 +34,12 @@ async function host(environment = process.env) {
 }
 async function verify() {
   const first = await host();
+  console.log(`${process.platform}: 验证系统密钥库首次读写`);
   for (const key of ["javm-ai-settings-v1", "javm-metatube-settings-v1"]) {
     assert.equal(await first.request("platform.credentials.read", { key }), null);
     const value = JSON.stringify({ key: "SAFE-FICTIONAL-KEY", label: "安全 山林" });
     await first.request("platform.credentials.write", { key, value });
+    console.log(`${process.platform}: 验证系统密钥库回读和覆盖`);
     assert.equal(await first.request("platform.credentials.read", { key }), value);
     const changed = JSON.stringify({ key: "SAFE-UPDATED-KEY" });
     await first.request("platform.credentials.write", { key, value: changed });
@@ -45,6 +47,7 @@ async function verify() {
   }
   await first.close();
   const restarted = await host();
+  console.log(`${process.platform}: 验证系统密钥库跨进程持久化`);
   assert.equal(
     await restarted.request("platform.credentials.read", { key: "javm-ai-settings-v1" }),
     JSON.stringify({ key: "SAFE-UPDATED-KEY" }),
@@ -57,6 +60,7 @@ async function verify() {
       : process.env,
   );
   const before = Date.now();
+  console.log(`${process.platform}: 验证系统密钥库锁定或不可用`);
   const reply = await unavailable.reply("platform.credentials.read", {
     key: "javm-ai-settings-v1",
   });

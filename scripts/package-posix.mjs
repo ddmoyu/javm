@@ -26,6 +26,7 @@ import {
 } from "./third-party/posix/common.mjs";
 import { desktopHostFile } from "./desktop-host.mjs";
 import { binaryArchitecture } from "./third-party/posix/verify.mjs";
+import { applicationNotices } from "./posix-notices.mjs";
 
 if (!targets.includes(target)) throw new Error("此安装包需要在相应 POSIX 系统和架构上生成");
 const pkg = await json(path.join(root, "package.json"));
@@ -74,6 +75,10 @@ for (const relative of executables) {
 }
 const library = mac ? "libmediainfo.0.dylib" : "libmediainfo.so.0";
 const nativeBuild = path.join(root, "build/native", mac ? "macos-release" : "linux-release", "bin");
+await writeFile(
+  path.join(payload, "bin/licenses/THIRD_PARTY_NOTICES.txt"),
+  await applicationNotices(path.dirname(nativeBuild)),
+);
 for (const binary of ["javm_database", "javm_process", library])
   assert.equal(
     sha256(await readFile(path.join(payload, "bin", binary))),
