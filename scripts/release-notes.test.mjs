@@ -10,7 +10,7 @@ const options = {
   assets: Object.values(releaseAssetNames(version)),
 };
 
-test("更新说明只读取目标版本，不混入 Unreleased、旧版和重复版本标题", () => {
+await test("更新说明只读取目标版本，不混入 Unreleased、旧版和重复版本标题", () => {
   const changelog = [
     "# 更新日志",
     "## Unreleased",
@@ -24,13 +24,13 @@ test("更新说明只读取目标版本，不混入 Unreleased、旧版和重复
   assert.equal(changelogEntry(changelog, "Unreleased"), "- 未发布变化");
 });
 
-test("找不到版本或更新内容为空时停止发布", () => {
+await test("找不到版本或更新内容为空时停止发布", () => {
   assert.throws(() => changelogEntry("## 1.2.3-alpha.40\n- 其他版本", version));
   assert.throws(() => changelogEntry(`## ${version}\n\n## older\n- 旧版`, version));
   assert.throws(() => changelogEntry(`## ${version}`, version));
 });
 
-test("下载表格位于说明末尾，两个徽章指向本版本真实附件名称", () => {
+await test("下载表格位于说明末尾，两个徽章指向本版本真实附件名称", () => {
   const notes = renderReleaseNotes(options);
   for (const name of options.assets)
     assert.ok(
@@ -43,12 +43,12 @@ test("下载表格位于说明末尾，两个徽章指向本版本真实附件�
   assert.ok(notes.includes(options.changes));
 });
 
-test("缺少任一实际附件时拒绝生成下载表格", () => {
+await test("缺少任一实际附件时拒绝生成下载表格", () => {
   for (const asset of options.assets)
     assert.throws(() => renderReleaseNotes({ ...options, assets: [asset] }), /缺少对应附件/);
 });
 
-test("保留现有 ZIP 名称，阻止版本号注入文件路径", () => {
+await test("保留现有 ZIP 名称，阻止版本号注入文件路径", () => {
   assert.equal(releaseAssetNames("1.2.3").portable, "JAVM-1.2.3-windows-x64.zip");
   for (const invalid of ["../1.2.3", "1.2.3/evil", "1.2.3\n", "v1.2.3"])
     assert.throws(() => releaseAssetNames(invalid));

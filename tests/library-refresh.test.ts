@@ -24,11 +24,12 @@ function fixture() {
     resolve: (result: QueryPage<Item>) => void;
     reject: (error: Error) => void;
   }[] = [];
-  const fetch = vi.fn((query: { text: string }, request: PageRequest) => {
-    const pending = Promise.withResolvers<QueryPage<Item>>();
-    requests.push({ query, request, resolve: pending.resolve, reject: pending.reject });
-    return pending.promise;
-  });
+  const fetch = vi.fn(
+    (query: { text: string }, request: PageRequest) =>
+      new Promise<QueryPage<Item>>((resolve, reject) => {
+        requests.push({ query, request, resolve, reject });
+      }),
+  );
   return { view: new PagedQuery(fetch), requests };
 }
 
