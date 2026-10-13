@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   stat,
   symlink,
   writeFile,
@@ -49,15 +50,17 @@ const name = `JAVM-${pkg.version}-${target}`;
 const mac = process.platform === "darwin";
 const application = mac ? path.join(stage, "JAVM.app") : path.join(stage, "JAVM");
 const payload = mac ? path.join(application, "Contents/MacOS") : application;
+const resources = mac ? path.join(application, "Contents/Resources") : application;
 await mkdir(payload, { recursive: true });
+await mkdir(resources, { recursive: true });
 await copyFile(
   path.join(desktop, desktopHostFile().replace("neutralino", "javm")),
   path.join(payload, "JAVM-host"),
 );
 await copyFile(path.join(root, "bin/javm_launcher"), path.join(payload, "JAVM"));
 await cp(path.join(desktop, "bin"), path.join(payload, "bin"), { recursive: true });
-await copyFile(path.join(root, "resources/icon.png"), path.join(payload, "icon.png"));
-await copyFile(path.join(root, "LICENSE"), path.join(payload, "LICENSE"));
+await copyFile(path.join(root, "resources/icon.png"), path.join(resources, "icon.png"));
+await copyFile(path.join(root, "LICENSE"), path.join(resources, "LICENSE"));
 // 只校验并更改自己生成的包；真实数据始终位于用户的系统数据目录。
 const executables = [
   "JAVM",
@@ -101,8 +104,12 @@ async function asset(file, kind) {
   });
 }
 if (mac) {
-  const resources = path.join(application, "Contents/Resources");
-  await mkdir(resources, { recursive: true });
+  await rename(path.join(payload, "bin/licenses"), path.join(resources, "licenses"));
+  await mkdir(path.join(resources, "tools/metatube"), { recursive: true });
+  await rename(
+    path.join(payload, "bin/tools/metatube/installed.json"),
+    path.join(resources, "tools/metatube/installed.json"),
+  );
   const iconset = path.join(stage, "JAVM.iconset");
   await mkdir(iconset);
   for (const size of [16, 32, 128, 256, 512])
@@ -129,11 +136,11 @@ if (mac) {
 <key>CFBundlePackageType</key><string>APPL</string><key>CFBundleIconFile</key><string>JAVM.icns</string>
 <key>CFBundleShortVersionString</key><string>${pkg.version.split("-")[0]}</string><key>CFBundleVersion</key><string>${pkg.version.split(".").at(-1)}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/>
-<key>CFBundleURLTypes</key><array><dict><key>CFBundleURLName</key><string>JAVM links</string><key>CFBundleURLSchemes</key><array><string>javm</string></array></dict></array>
+<key>CFBundleURLTypes</key><array><dict><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLName</key><string>net.ddmoyu.javm.links</string><key>CFBundleURLSchemes</key><array><string>javm</string></array></dict></array>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
 </dict></plist>\n`,
   );
-  for (const relative of [...executables, `bin/${library}`]) {
+  for (const relative of [...executables.filter((file) => file !== "JAVM"), `bin/${library}`]) {
     const file = path.join(payload, relative);
     const links = await run("otool", ["-L", file], root, true);
     assert.ok(
@@ -145,7 +152,8 @@ if (mac) {
     await run("codesign", ["--force", "--sign", "-", file]);
   }
   // Apple Silicon 运行所需的 ad-hoc 校验，不使用开发者证书，不执行公证。
-  await run("codesign", ["--force", "--deep", "--sign", "-", application]);
+  // The main executable is signed with the outer APP after every nested binary.
+  await run("codesign", ["--force", "--sign", "-", application]);
   await run("codesign", ["--verify", "--deep", "--strict", application]);
   const zip = path.join(release, `${name}-portable.zip`);
   await run("ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", application, zip]);
@@ -197,7 +205,7 @@ if (mac) {
   );
   await writeFile(
     path.join(deb, "DEBIAN/control"),
-    `Package: javm\nVersion: ${pkg.version.replace("-alpha.", "~alpha.")}\nArchitecture: amd64\nMaintainer: JAVM <noreply@ddmoyu.net>\nSection: video\nPriority: optional\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, gstreamer1.0-libav, gstreamer1.0-plugins-good, libsecret-1-0, libicu74, ca-certificates, libayatana-appindicator3-1\nRecommends: gnome-keyring\nHomepage: https://github.com/ddmoyu/javm\nDescription: JAVM local media library\n`,
+    `Package: javm\nVersion: ${pkg.version.replace("-alpha.", "~alpha.")}\nArchitecture: amd64\nMaintainer: JAVM <noreply@ddmoyu.net>\nSection: video\nPriority: optional\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, libsecret-1-0, libicu74, ca-certificates, libayatana-appindicator3-1\nRecommends: gnome-keyring\nHomepage: https://github.com/ddmoyu/javm\nDescription: JAVM local media library\n`,
   );
   await run("desktop-file-validate", [
     path.join(deb, "usr/share/applications/net.ddmoyu.javm.desktop"),
@@ -240,7 +248,7 @@ const manifest = {
   components: Object.fromEntries(
     Object.entries(resolved.components).map(([key, { path: _path, ...value }]) => [key, value]),
   ),
-  files: await inventory(payload),
+  files: await inventory(application),
   assets,
 };
 await writeFile(

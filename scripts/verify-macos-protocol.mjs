@@ -23,7 +23,7 @@ await copyFile(
 );
 await writeFile(
   path.join(bundle, "Contents/Info.plist"),
-  `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>net.ddmoyu.javm</string><key>CFBundleName</key><string>JAVM Safe Fixture</string><key>CFBundleExecutable</key><string>JAVM</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string><key>CFBundleURLTypes</key><array><dict><key>CFBundleURLSchemes</key><array><string>javm</string></array><key>CFBundleURLName</key><string>JAVM Safe Links</string></dict></array></dict></plist>`,
+  `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>net.ddmoyu.javm</string><key>CFBundleName</key><string>JAVM Safe Fixture</string><key>CFBundleExecutable</key><string>JAVM</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleVersion</key><string>1</string><key>CFBundleURLTypes</key><array><dict><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLSchemes</key><array><string>javm</string></array><key>CFBundleURLName</key><string>JAVM Safe Links</string></dict></array></dict></plist>`,
 );
 await writeFile(
   path.join(payload, "neutralino.config.json"),

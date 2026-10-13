@@ -69,6 +69,10 @@ const write = (extra = {}) =>
     JSON.stringify({ results, errors, ...extra }, null, 2),
   );
 const port = new NativeLibraryPort();
+let extensionProcesses = new Set<string>();
+const processKey = (process: { id: number; pid: number }) => `${process.id}:${process.pid}`;
+const helpersStopped = async () =>
+  (await os.getSpawnedProcesses()).every((process) => extensionProcesses.has(processKey(process)));
 async function verifyMedia() {
   await until(() => !!document.getElementById("safe-action"), "React did not mount");
   const button = document.getElementById("safe-action") as HTMLButtonElement;
@@ -188,11 +192,15 @@ async function verifyMedia() {
       );
     },
   );
-  assert((await os.getSpawnedProcesses()).length === 0, "Owned helper process remains");
+  await until(helpersStopped, "Owned helper process remains", 3000);
   results.push("Hidden WebKit capture, isolated repeat and cancellation");
 }
 async function run() {
   await nativeWindow.show();
+  await port.request("capabilities");
+  // Official extensions are included in getSpawnedProcesses. Only the already
+  // connected database is expected to remain while checking tool cleanup.
+  extensionProcesses = new Set((await os.getSpawnedProcesses()).map(processKey));
   if (phase === "desktop") await verifyMedia();
   const background = new BackgroundSettingsService({
     read: async () => ({ runInBackground: true }),
@@ -206,7 +214,7 @@ async function run() {
       saveSettings: async () => {},
       remove: async () => {},
       close: async () => {
-        assert((await os.getSpawnedProcesses()).length === 0, "Shutdown left helpers");
+        await until(helpersStopped, "Shutdown left helpers", 3000);
         await port.request("close");
         await write({ done: true });
       },
@@ -243,7 +251,7 @@ async function run() {
 }
 void events.on("ready", () => {
   void run().catch(async (error: unknown) => {
-    await write({ fatal: String(error) });
+    await write({ fatal: String(error), cause: error instanceof Error ? error.cause : undefined });
     await app.exit(1);
   });
 });

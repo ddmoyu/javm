@@ -18,6 +18,12 @@ export function applicationToolPath(...parts: string[]) {
     throw new Error("无法定位应用工具目录。");
   return [root.replace(/\/+$/, ""), "bin", ...parts].join("/");
 }
+export function applicationResourcePath(...parts: string[]) {
+  const toolPath = applicationToolPath(...parts);
+  return toolPlatform() === "Darwin"
+    ? toolPath.replace(/\/Contents\/MacOS\/bin\//, "/Contents/Resources/")
+    : toolPath;
+}
 export async function executableExists(path: string, platform = toolPlatform()) {
   if (!path || path.includes("\0") || (platform !== "Windows" && !path.startsWith("/")))
     throw new Error("工具路径必须是有效的绝对路径。");

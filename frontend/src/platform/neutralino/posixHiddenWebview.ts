@@ -181,8 +181,12 @@ export const createPosixHiddenWebview =
         true,
       );
       void run.then(
-        () => {
+        (result) => {
           finished = true;
+          const error = new ResolutionError("unavailable");
+          error.message = `隐藏浏览器在取流完成前退出（${result.exitCode}），请检查系统运行依赖。`;
+          error.cause = { exitCode: result.exitCode, stderr: result.stdErr.slice(-3000) };
+          processError = error;
         },
         (error: unknown) => {
           finished = true;

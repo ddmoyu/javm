@@ -4,6 +4,7 @@ import { findOnPath } from "../frontend/src/platform/neutralino/process";
 import { nativeDownloadHost } from "../frontend/src/platform/neutralino/downloadHost";
 import {
   applicationToolPath,
+  applicationResourcePath,
   toolExecutableName,
 } from "../frontend/src/platform/neutralino/toolPaths";
 
@@ -25,6 +26,20 @@ beforeEach(() => {
   vi.mocked(os.getEnv).mockResolvedValue(":.:relative:/usr/local/bin:/usr/bin");
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it("macOS APP 从 Resources 读取版本记录，程序仍位于 MacOS", () => {
+  vi.stubGlobal("window", { NL_OS: "Darwin", NL_PATH: "/安全 ' 包/JAVM.app/Contents/MacOS" });
+  expect(applicationResourcePath("tools", "metatube", "installed.json")).toBe(
+    "/安全 ' 包/JAVM.app/Contents/Resources/tools/metatube/installed.json",
+  );
+  expect(applicationToolPath("tools", "metatube", "metatube-server")).toBe(
+    "/安全 ' 包/JAVM.app/Contents/MacOS/bin/tools/metatube/metatube-server",
+  );
+  vi.stubGlobal("window", { NL_OS: "Darwin", NL_PATH: "/安全 开发目录" });
+  expect(applicationResourcePath("tools", "metatube", "installed.json")).toBe(
+    "/安全 开发目录/bin/tools/metatube/installed.json",
+  );
+});
 
 it.each(["Linux", "Darwin"])("%s 使用无后缀工具并优先内置路径", async (platform) => {
   vi.stubGlobal("window", { NL_OS: platform, NL_PATH: "/safe/应用 空格" });

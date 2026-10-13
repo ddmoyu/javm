@@ -9,6 +9,7 @@ import { logEvent } from "../../services/logging/events";
 import { OutputLines } from "../../services/downloads/progress";
 import {
   applicationToolPath,
+  applicationResourcePath,
   executableExists,
   toolExecutableName,
   toolPlatform,
@@ -46,12 +47,11 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
         const stats = await filesystem.getStats(path);
         if (!stats.isFile) throw new Error("内置 MetaTube 程序无效，请重新获取 JAVM 运行包。");
         if (!(await executableExists(path))) return;
-        const manifest = await filesystem.getStats(`${base}/installed.json`);
+        const manifestPath = applicationResourcePath("tools", "metatube", "installed.json");
+        const manifest = await filesystem.getStats(manifestPath);
         if (!manifest.isFile || manifest.size > 4096)
           throw new Error("内置 MetaTube 版本记录无效，请重新获取 JAVM 运行包。");
-        const entry = record(
-          JSON.parse(await filesystem.readFile(`${base}/installed.json`)) as unknown,
-        );
+        const entry = record(JSON.parse(await filesystem.readFile(manifestPath)) as unknown);
         const version = text(entry.version, 80);
         if (!/^v\d+\.\d+\.\d+$/.test(version))
           throw new Error("内置 MetaTube 版本记录无效，请重新获取 JAVM 运行包。");
