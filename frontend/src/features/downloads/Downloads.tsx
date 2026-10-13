@@ -27,11 +27,18 @@ import { Icon } from "../../components/icons";
 import { CountTabs, Empty, Pill } from "../../components/ui";
 import { activeScrape, scrapeLabels, scrapePhaseLabels } from "../../contracts/scraping";
 import type { ScrapeTask } from "../../contracts/scraping";
+import { DownloadTimeline } from "./DownloadTimeline";
 import { EditDownloadModal } from "./EditDownloadModal";
 
 const ignoreDownloadUpdates = () => () => {};
 const pageSize = 50;
-const emptyScrapes = { tasks: [] as ScrapeTask[], ready: false, error: "" };
+const emptyScrapes = {
+  tasks: [] as ScrapeTask[],
+  ready: false,
+  available: false,
+  paused: false,
+  error: "",
+};
 
 export function Downloads() {
   const { downloads, scraping, add, notice, page, playSource, go, showScrapeQueue } =
@@ -73,6 +80,10 @@ export function Downloads() {
   const currentPage = Math.min(resultPage, totalPages);
   const visibleTasks = shown.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const detail = tasks.find((task) => task.id === detailId);
+  const detailScrape = detail
+    ? (byDownload.get(detail.id) ??
+      scrapeState.tasks.find((task) => task.id === detail.scrapeTaskId))
+    : undefined;
   const perform = async (id: string, action: () => Promise<void>) => {
     if (busy.has(id)) return;
     setBusy((previous) => new Set(previous).add(id));
@@ -130,7 +141,7 @@ export function Downloads() {
         leftSection={<Icon name="edit" />}
         onClick={() => setEditId(task.id)}
       >
-        修改名称／轨道
+        修改名称
       </Menu.Item>
       <Menu.Item leftSection={<Icon name="info" />} onClick={() => setDetailId(task.id)}>
         任务详情
@@ -501,12 +512,14 @@ export function Downloads() {
           <Stack>
             <Text fw={600}>{detail.name}</Text>
             <Group>
-              <Pill>{downloadLabels[detail.status]}</Pill>
+              <Pill>
+                {detail.status === "completed" ? "视频已保存" : downloadLabels[detail.status]}
+              </Pill>
               <Text size="xs" c="dimmed">
                 {detail.kind === "hls" ? "m3u8 / HLS" : "MP4 直链"}
               </Text>
             </Group>
-            <Progress value={detail.progress ?? 0} />
+            <DownloadTimeline task={detail} scrape={detailScrape} queue={scrapeState} />
             <Text size="sm">
               {detail.status === "completed" ? "文件大小" : "已下载 / 总大小"}：
               {formatDownloadSize(detail)}
@@ -514,23 +527,6 @@ export function Downloads() {
             <Text size="sm" style={{ overflowWrap: "anywhere" }}>
               {detail.output}
             </Text>
-            {detail.error && (
-              <Alert color="red" title={detail.phase === "merge" ? "合并未完成" : "任务未完成"}>
-                {detail.error}
-              </Alert>
-            )}
-            {detail.status === "completed" && needsScrape(detail) && (
-              <Alert color="yellow" title="视频已保存，刮削需要处理">
-                {byDownload.has(detail.id)
-                  ? byDownload.get(detail.id)!.error
-                  : detail.scrapeHandoffError}
-              </Alert>
-            )}
-            {detail.phase === "merge" && detail.status !== "completed" && (
-              <Text size="xs" c="dimmed">
-                已下载的媒体文件仍保留，继续时只重试合并。
-              </Text>
-            )}
             <Group>
               {primaryAction(detail)}
               <Button
