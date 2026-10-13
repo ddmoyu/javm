@@ -79,7 +79,10 @@ export class ExtensionFixture {
       });
     });
     await new Promise((resolve) => this.server.listen(0, "127.0.0.1", resolve));
-    this.child = spawn(this.binary, ["--database", this.database], { windowsHide: true });
+    this.child = spawn(this.binary, ["--database", this.database], {
+      windowsHide: true,
+      env: this.options.env ?? process.env,
+    });
     this.child.stdout.resume();
     this.child.stderr.on("data", (chunk) => {
       this.diagnostic = (this.diagnostic + chunk).slice(-16000);
@@ -127,7 +130,7 @@ export class ExtensionFixture {
       }),
     );
     try {
-      return await within(promise);
+      return await within(promise, this.options.requestTimeoutMs ?? 8000);
     } finally {
       this.pending.delete(requestId);
     }

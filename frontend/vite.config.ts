@@ -9,6 +9,8 @@ export default defineConfig({
   server: { host: "127.0.0.1", port: 5173, strictPort: true },
   preview: { host: "127.0.0.1", port: 4173, strictPort: true },
   build: {
+    target: ["safari16", "chrome105"],
+    cssTarget: ["safari16", "chrome105"],
     outDir: fileURLToPath(new URL("../dist/frontend", import.meta.url)),
     emptyOutDir: true,
   },

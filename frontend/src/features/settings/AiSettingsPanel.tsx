@@ -67,9 +67,7 @@ export function AiSettingsPanel() {
       }}
     >
       <Stack gap="lg">
-        {!current.available && (
-          <SettingNote>请在 Windows 桌面端保存配置和使用 AI 服务。</SettingNote>
-        )}
+        {!current.available && <SettingNote>请在桌面端保存配置和使用 AI 服务。</SettingNote>}
         <SettingCard title="辅助识别与翻译" icon="sparkles">
           <SettingRow
             title="启用 AI 辅助"

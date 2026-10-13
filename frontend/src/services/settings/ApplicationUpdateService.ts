@@ -4,12 +4,25 @@ export interface AvailableRelease {
   url: string;
 }
 export function newerVersion(a: string, b: string) {
-  const aa = a.split(".").map(Number),
-    bb = b.split(".").map(Number);
+  const aa = a.split("-")[0]!.split(".").map(Number),
+    bb = b.split("-")[0]!.split(".").map(Number);
   for (let i = 0; i < 3; i++) if (aa[i] !== bb[i]) return aa[i]! > bb[i]!;
-  return false;
+  return !a.includes("-") && b.includes("-");
 }
-export function compatibleRelease(raw: unknown, current: string): AvailableRelease | null {
+export type ReleasePlatform = "windows-x64" | "macos-x64" | "macos-arm64" | "linux-x64";
+export function releasePlatform(os: string, arch: string): ReleasePlatform | undefined {
+  if (os === "Windows" && arch === "x64") return "windows-x64";
+  if (os === "Linux" && arch === "x64") return "linux-x64";
+  if (os === "Darwin" && arch === "x64") return "macos-x64";
+  // Neutralino 的 NL_ARCH 将 Apple Silicon 表示为 arm。
+  if (os === "Darwin" && (arch === "arm" || arch === "arm64")) return "macos-arm64";
+  return undefined;
+}
+export function compatibleRelease(
+  raw: unknown,
+  current: string,
+  platform: ReleasePlatform = "windows-x64",
+): AvailableRelease | null {
   if (!raw || typeof raw !== "object") throw new Error("官方发布信息格式无效。");
   const release = raw as {
     tag_name?: unknown;
@@ -25,16 +38,25 @@ export function compatibleRelease(raw: unknown, current: string): AvailableRelea
     throw new Error("官方发布版本格式无效。");
   const version = release.tag_name.replace(/^v/, "");
   if (release.draft || release.prerelease || !newerVersion(version, current)) return null;
+  const prefix = `JAVM-${version}-${platform}`;
+  const suffixes =
+    platform === "windows-x64"
+      ? [".zip", "-portable.zip", "-setup.exe"]
+      : platform.startsWith("macos-")
+        ? [".dmg", "-portable.zip"]
+        : [".deb", ".AppImage", "-portable.tar.gz"];
   if (
     !Array.isArray(release.assets) ||
     !release.assets.some(
       (asset) =>
         typeof asset.name === "string" &&
-        asset.name.startsWith(`JAVM-${version}-windows-x64-offline-`) &&
-        asset.name.endsWith(".zip"),
+        (suffixes.some((suffix) => asset.name === prefix + suffix) ||
+          (platform === "windows-x64" &&
+            asset.name.startsWith(prefix + "-offline-") &&
+            asset.name.endsWith(".zip"))),
     )
   )
-    throw new Error("该发布尚未提供兼容当前架构的 Windows 离线包。");
+    throw new Error("该发布尚未提供兼容当前系统与架构的安装包或便携包。");
   if (typeof release.html_url !== "string") throw new Error("发布页面地址无效。");
   const url = new URL(release.html_url);
   if (
@@ -61,6 +83,7 @@ export class ApplicationUpdateService extends Observable<{
     readonly current: string,
     private fetchRelease: (signal: AbortSignal) => Promise<unknown>,
     available: boolean,
+    private platform: ReleasePlatform = "windows-x64",
   ) {
     super({ available, busy: false, checked: false, error: "", release: null });
   }
@@ -74,6 +97,7 @@ export class ApplicationUpdateService extends Observable<{
         const release = compatibleRelease(
           await this.fetchRelease(AbortSignal.any([controller.signal, AbortSignal.timeout(20000)])),
           this.current,
+          this.platform,
         );
         controller.signal.throwIfAborted();
         this.publish({ checked: true, release });

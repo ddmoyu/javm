@@ -80,7 +80,7 @@ export function PlaybackSettingsPanel() {
             <div className={classes.pathField}>
               <TextInput
                 label="外部播放器路径"
-                description="留空使用系统默认应用；指定程序时只填写 .exe 路径。"
+                description="留空使用系统默认应用；也可指定播放器程序，macOS 支持选择 APP。"
                 placeholder="选择或输入播放器路径"
                 value={draft.externalPlayerPath}
                 disabled={busy}

@@ -17,6 +17,7 @@ import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { createMetadataPipeline } from "./metadataPipeline";
 import { MovieMetadataResolver } from "../../services/metadata/MovieMetadataResolver";
 import { pathRelativeTo } from "../../services/paths";
+import { desktopServicesAvailable } from "./desktopCapabilities";
 
 // 应用级共享端口，批量添加不会重复注册 Extension 事件监听器。
 const port = new NativeLibraryPort();
@@ -29,8 +30,7 @@ export function createScrapeService(
   prepare: () => Promise<void>,
   ai?: AiService,
 ) {
-  const available =
-    runtime === "desktop" && (window as unknown as { NL_OS: string }).NL_OS === "Windows";
+  const available = desktopServicesAvailable(runtime);
   const adapter: ScrapePort = {
     async load(offset) {
       await prepare();

@@ -17,7 +17,7 @@ export function MetaTubeSettingsPanel() {
   return (
     <Stack gap="lg">
       {scraping?.pipeline && <MetadataPipelinePanel service={scraping.pipeline} />}
-      {!current.available && <SettingNote>请在 Windows 桌面端管理影片资料服务。</SettingNote>}
+      {!current.available && <SettingNote>请在桌面端管理影片资料服务。</SettingNote>}
       <SettingCard title="影片资料服务" icon="radar" extra={<Pill>{status}</Pill>}>
         <SettingRow title="内置版本" hint="随 JAVM 提供和更新，无需单独下载安装。">
           <Text size="sm">

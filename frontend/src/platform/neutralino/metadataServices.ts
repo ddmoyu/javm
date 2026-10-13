@@ -4,14 +4,14 @@ import type { NetworkSettingsService } from "../../services/network/NetworkSetti
 import type { Runtime } from "./bootstrap";
 import { createMetadataHttp, protectedSettingsStore } from "./metadataHttp";
 import { createMetaTubeHost } from "./metatubeHost";
+import { desktopServicesAvailable } from "./desktopCapabilities";
 
 export function createMetadataServices(
   runtime: Runtime,
   network: NetworkSettingsService,
   prepare?: () => Promise<void>,
 ) {
-  const available =
-    runtime === "desktop" && (window as unknown as { NL_OS: string }).NL_OS === "Windows";
+  const available = desktopServicesAvailable(runtime);
   const http = createMetadataHttp(network);
   const ai = new AiService(protectedSettingsStore("javm-ai-settings-v1"), http, available);
   const metatube = new MetaTubeService(

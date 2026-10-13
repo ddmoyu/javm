@@ -153,11 +153,18 @@ try {
       .join("\n") + "\n",
   );
 } catch (error) {
+  console.error(error);
   for (const release of releases.values()) {
     if (!reserved.has(release.id)) continue;
     const current = findRelease(gh, repository, release.tag_name);
-    if (current?.draft && current.id === release.id)
-      gh(["release", "delete", release.tag_name, "--repo", repository, "--yes", "--cleanup-tag"]);
+    if (current?.draft && current.id === release.id) {
+      // 草稿尚未创建 Git tag；删除不存在的 tag 会掩盖真正的构建错误。
+      try {
+        gh(["release", "delete", release.tag_name, "--repo", repository, "--yes"]);
+      } catch (cleanupError) {
+        console.error(`草稿清理失败: ${release.tag_name}`, cleanupError);
+      }
+    }
   }
   throw error;
 }
