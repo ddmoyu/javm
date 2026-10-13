@@ -4,6 +4,7 @@
 #include <cmath>
 #include <iomanip>
 #include <sstream>
+#include <locale>
 
 namespace media::nfo {
 std::string tag(Node node) { return lower(node.name()); }
@@ -23,9 +24,13 @@ std::string first(Node node, std::initializer_list<const char*> names) {
 }
 std::optional<double> number(const std::string& input) {
     const auto value = trim(input);
+    if (value.empty() || value.front() == '+') return {};
     double result = 0;
-    const auto parsed = std::from_chars(value.data(),value.data()+value.size(),result);
-    if (value.empty() || parsed.ec != std::errc{} || parsed.ptr != value.data()+value.size() || !std::isfinite(result)) return {};
+    // macOS 系统 libc++ 尚不提供浮点 from_chars；固定 locale 且必须消费完整文本。
+    std::istringstream stream(value);
+    stream.imbue(std::locale::classic());
+    stream >> std::noskipws >> result;
+    if (!stream || !stream.eof() || !std::isfinite(result)) return {};
     return result;
 }
 namespace {

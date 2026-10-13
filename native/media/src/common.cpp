@@ -90,7 +90,18 @@ bool validFilename(const fs::path& path) {
     return true;
 }
 std::string stamp(const fs::path& path) {
-    return std::to_string(fs::file_size(path)) + ":" + std::to_string(fs::last_write_time(path).time_since_epoch().count());
+    // libc++ 的文件时钟计数可能是 128 位；保留全部精度和 Windows 原有签名格式。
+    auto ticks = fs::last_write_time(path).time_since_epoch().count();
+    const bool negative = ticks < 0;
+    std::string text;
+    do {
+        const auto digit = ticks % 10;
+        text.push_back(static_cast<char>('0' + (digit < 0 ? -digit : digit)));
+        ticks /= 10;
+    } while (ticks);
+    if (negative) text.push_back('-');
+    std::reverse(text.begin(), text.end());
+    return std::to_string(fs::file_size(path)) + ":" + text;
 }
 std::string trim(std::string text) {
     const auto begin = text.find_first_not_of(" \t\r\n");

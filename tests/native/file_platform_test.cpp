@@ -35,6 +35,7 @@ int main() {
 #endif
 #endif
         createExclusiveFile(first, "first");
+        require(stamp(first).starts_with("5:") && stamp(first) == stamp(first), "stable full precision file stamp");
         const auto identity = media::fileIdentity(first);
         rejects([&] { createExclusiveFile(first, "must not overwrite"); });
         require(read(first) == "first", "exclusive creation preserves existing data");
@@ -84,6 +85,9 @@ int main() {
             removeFile(first);
         }
         Json info;
+        require(nfo::number("1.5") == 1.5 && nfo::number(" 1e2 ") == 100 && nfo::number("-2") == -2, "locale-independent NFO numbers");
+        for (const auto* invalid: {"+2", "1,5", "1.5extra", "1 2", "NaN", "inf", "1e9999", ""})
+            require(!nfo::number(invalid), "invalid NFO number rejected");
         rejects([&] { nfo::decode(std::string("\xff\xfe\0\xd8", 4), info); });
         rejects([&] { nfo::decode(std::string("\xff\xfe\0\0\0\0\x11\0", 8), info); });
         const Json source{{"workId", "safe-fixture"}};
