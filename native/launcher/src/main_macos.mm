@@ -30,7 +30,10 @@
             [strongSelf.children removeObject:completed];
             if(completed == strongSelf.primary) {
                 strongSelf.result = completed.terminationStatus;
-                [NSApp terminate:nil];
+                if(strongSelf.stopping) {
+                    for(NSTask* child in strongSelf.children) if(child.running) [child terminate];
+                    [NSApp replyToApplicationShouldTerminate:YES];
+                } else [NSApp terminate:nil];
             }
         });
     };
@@ -72,6 +75,15 @@
 }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication*)sender {
     (void)sender;
+    if(self.primary.running) {
+        if(self.stopping) return NSTerminateLater;
+        NSRunningApplication* host = [NSRunningApplication runningApplicationWithProcessIdentifier:self.primary.processIdentifier];
+        // Ask the host's AppKit delegate to finish the application's async
+        // shutdown. NSTask terminate sends SIGTERM and would bypass that work.
+        if(!host || ![host terminate]) return NSTerminateCancel;
+        self.stopping = YES;
+        return NSTerminateLater;
+    }
     self.stopping = YES;
     for(NSTask* child in self.children) if(child.running) [child terminate];
     return NSTerminateNow;

@@ -63,6 +63,7 @@ nlohmann::json protocol(const nlohmann::json& params) {
     }
     App final{g_app_info_get_default_for_uri_scheme("javm")};
     return {{"state", !final.value ? "missing" : isCurrent(final.value) ? "current" : "other"},
-        {"command", command(final.value)}, {"entry", entry}};
+        {"command", command(final.value)}, {"entry", entry},
+        {"canRemove", final.value && isCurrent(final.value) && g_app_info_can_delete(final.value)}};
 }
 }

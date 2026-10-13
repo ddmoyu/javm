@@ -14,7 +14,11 @@ assert.equal(process.env.GITHUB_ACTIONS, "true", "桌面验证仅在隔离的 CI
 assert.ok(["linux", "darwin"].includes(process.platform));
 await mkdir(path.join(root, ".tmp"), { recursive: true });
 const directory = await mkdtemp(path.join(root, ".tmp/safe-desktop-"));
-const application = path.join(directory, "安全 ' 空格");
+const bundle = path.join(directory, "安全 ' 空格", "JAVM.app");
+const application =
+  process.platform === "darwin"
+    ? path.join(bundle, "Contents/MacOS")
+    : path.join(directory, "安全 ' 空格");
 await mkdir(path.join(application, "bin/tools"), { recursive: true });
 await mkdir(path.join(application, "resources"));
 await cp(path.join(root, "tests/fixtures/posix-desktop/media"), path.join(application, "media"), {
@@ -30,6 +34,13 @@ for (const file of [
 ])
   await copyFile(path.join(root, "bin", file), path.join(application, "bin", file));
 await copyFile(path.join(root, "bin", desktopHostFile()), path.join(application, "JAVM-host"));
+if (process.platform === "darwin") {
+  await copyFile(path.join(root, "bin/javm_launcher"), path.join(application, "JAVM"));
+  await writeFile(
+    path.join(bundle, "Contents/Info.plist"),
+    '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>net.ddmoyu.javm.desktopfixture</string><key>CFBundleName</key><string>JAVM Safe Fixture</string><key>CFBundleExecutable</key><string>JAVM</string><key>CFBundlePackageType</key><string>APPL</string><key>LSMinimumSystemVersion</key><string>13.0</string></dict></plist>',
+  );
+}
 const directProbe = JSON.parse(
   await run(
     path.join(application, "bin/javm_database"),
@@ -200,7 +211,7 @@ try {
     const home = path.join(directory, "home");
     await mkdir(home, { recursive: true });
     const child = spawn(
-      path.join(application, "JAVM-host"),
+      path.join(application, process.platform === "darwin" ? "JAVM" : "JAVM-host"),
       ["--res-mode=directory", `--path=${application}`],
       {
         cwd: application,

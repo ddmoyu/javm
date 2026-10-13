@@ -128,7 +128,7 @@ async function verifyMedia() {
   try {
     const part = await transport.fetch(`${origin}/pattern.mp4`, AbortSignal.timeout(10000), {
       start: 0,
-      end: 31,
+      end: 32, // NativeMediaFetch follows the HLS/ArrayBuffer exclusive end contract.
     });
     assert(part.data.byteLength === 32, "Range response lost its boundaries");
   } finally {

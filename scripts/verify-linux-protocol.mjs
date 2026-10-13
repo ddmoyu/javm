@@ -43,6 +43,7 @@ try {
       assert.equal((await request("status")).state, "missing");
       const registered = await request("register");
       assert.equal(registered.state, "current");
+      assert.equal(registered.canRemove, true);
       assert.equal(registered.entry, imagePath || application);
       await rm(receipt, { force: true });
       await run("gio", ["open", "javm://safe-fixture/search?query=forest"], directory, true, env);

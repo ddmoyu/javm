@@ -52,15 +52,22 @@ export function SystemIntegrationPanel() {
           >
             注册到此版本
           </Button>
-          <Button
-            variant="subtle"
-            size="xs"
-            disabled={state.busy || state.result?.state !== "current"}
-            onClick={() => void service.run("remove")}
-          >
-            解除关联
-          </Button>
+          {state.result?.canRemove !== false && (
+            <Button
+              variant="subtle"
+              size="xs"
+              disabled={state.busy || state.result?.state !== "current"}
+              onClick={() => void service.run("remove")}
+            >
+              解除关联
+            </Button>
+          )}
         </Group>
+        {state.result?.state === "current" && state.result.canRemove === false && (
+          <Text size="xs" c="dimmed">
+            此关联由系统管理，可在系统默认应用设置中更改，或卸载此程序。
+          </Text>
+        )}
         {state.error && <Alert color="red">{state.error}</Alert>}
         <Modal
           opened={replace !== undefined}

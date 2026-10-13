@@ -2,6 +2,7 @@ export interface ProtocolState {
   state: "missing" | "current" | "other";
   command: string;
   entry: string;
+  canRemove?: boolean;
 }
 export type ProtocolOperation = "status" | "register" | "remove";
 const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;

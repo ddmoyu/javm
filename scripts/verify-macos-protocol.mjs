@@ -95,18 +95,23 @@ try {
   const old = await host.request("platform.protocol", { operation: "status", entry });
   assert.equal(
     (
-      await host.request("platform.protocol", {
-        operation: "register",
-        entry,
-        expected: old.command,
-      })
+      await host
+        .request("platform.protocol", {
+          operation: "register",
+          entry,
+          expected: old.command,
+        })
+        .catch(async (error) => {
+          const current = await host.request("platform.protocol", { operation: "status", entry });
+          console.error("安全 APP 关联检查", JSON.stringify({ bundle, old, current }));
+          throw error;
+        })
     ).state,
     "current",
   );
-  assert.equal(
-    (await host.request("platform.protocol", { operation: "status", entry })).state,
-    "current",
-  );
+  const registered = await host.request("platform.protocol", { operation: "status", entry });
+  assert.equal(registered.state, "current");
+  assert.equal(registered.canRemove, false);
   // Finder/LaunchServices sends Apple Events, rather than passing URL arguments.
   await run("open", ["-a", bundle, "javm://safe-fixture/cold"]);
   assert.equal((await receipt("cold.json")).link, "javm://safe-fixture/cold");

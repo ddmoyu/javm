@@ -30,16 +30,21 @@ nlohmann::json protocol(const nlohmann::json& params) {
         throw std::runtime_error("请将完整的 JAVM.app 放入 Applications 后设置链接关联");
     auto current = currentApplication();
     const auto expected = std::filesystem::canonical(bundle).string();
+    const auto isCurrent = [&] {
+        std::error_code error;
+        return !current.empty() && std::filesystem::equivalent(current, bundle, error) && !error;
+    };
     if(operation == "remove") throw std::runtime_error("macOS 管理 APP 的链接声明，请在其他应用中更改默认程序，或移除此 APP");
-    if(operation == "register" && current != expected) {
+    if(operation == "register" && !isCurrent()) {
         if(!current.empty() && params.value("expected", "") != current) throw std::runtime_error("链接关联已变化，请刷新后重新确认");
         Url url{CFURLCreateFromFileSystemRepresentation(nullptr, reinterpret_cast<const UInt8*>(expected.data()), expected.size(), true)};
         if(!url.value || LSRegisterURL(url.value, true) != noErr ||
             LSSetDefaultHandlerForURLScheme(CFSTR("javm"), CFSTR("net.ddmoyu.javm")) != noErr)
             throw std::runtime_error("无法设置 macOS 链接关联，请在 Finder 中打开此 APP 后重试");
         current = currentApplication();
-        if(current != expected) throw std::runtime_error("系统仍关联到另一份 APP，请在 Finder 中打开此 APP 后重试");
+        if(!isCurrent()) throw std::runtime_error("系统仍关联到另一份 APP，请在 Finder 中打开此 APP 后重试");
     }
-    return {{"state", current.empty() ? "missing" : current == expected ? "current" : "other"}, {"command", current}, {"entry", entry}};
+    return {{"state", current.empty() ? "missing" : isCurrent() ? "current" : "other"},
+        {"command", current}, {"entry", entry}, {"canRemove", false}};
 }
 }
