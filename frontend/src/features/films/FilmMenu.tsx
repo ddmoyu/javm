@@ -52,11 +52,11 @@ export function FilmMenuItems({ film, deleteVideo }: { film: Film; deleteVideo: 
       <Menu.Divider />
       <Menu.Item
         color="red"
-        disabled={!library.maintenance || !videos.some((file) => file.id && file.path)}
+        disabled={!library.maintenance}
         leftSection={<Icon name="trash" />}
         onClick={deleteVideo}
       >
-        删除视频
+        删除
       </Menu.Item>
     </>
   );

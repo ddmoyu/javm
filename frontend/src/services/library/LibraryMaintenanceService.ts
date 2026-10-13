@@ -7,6 +7,7 @@ import type {
   MaintenanceVideo,
   RemovalPlan,
   RemovalTarget,
+  WorkRemovalPreview,
 } from "../../contracts/maintenance";
 import type { LibraryPort } from "./LibraryService";
 import { normalizeKeywords } from "./maintenanceRules";
@@ -24,6 +25,7 @@ export interface MaintenanceSnapshot extends MaintenancePage {
   mode: MaintenanceMode;
   phase: "idle" | "reading" | "ready" | "cleaning";
   processed: number;
+  removalTotal: number;
   error: string;
   message: string;
   failures: string[];
@@ -48,6 +50,7 @@ export class LibraryMaintenanceService {
     mode: "duplicates",
     phase: "idle",
     processed: 0,
+    removalTotal: 0,
     error: "",
     message: "",
     failures: [],
@@ -267,19 +270,42 @@ export class LibraryMaintenanceService {
     return this.running;
   }
   /** 单资源入口仍经过与批量清理相同的逐文件身份复核。 */
-  async removeResource(video: RemovalTarget) {
-    if (this.running || this.snapshot.phase === "reading" || this.snapshot.phase === "cleaning")
+  removeResource(video: RemovalTarget) {
+    return this.removeItem("prepare", { ...video, metadataOnly: false });
+  }
+  previewWorkRemoval(id: string) {
+    if (this.stopped) return Promise.reject(new Error("媒体服务已停止。"));
+    return this.port.request<WorkRemovalPreview>("library.maintenance.previewWork", { id });
+  }
+  removeWork(preview: WorkRemovalPreview) {
+    return this.removeItem("prepareWork", { id: preview.id, expected: preview });
+  }
+  private async removeItem(method: "prepare" | "prepareWork", params: object) {
+    if (
+      this.stopped ||
+      this.running ||
+      this.snapshot.phase === "reading" ||
+      this.snapshot.phase === "cleaning"
+    )
       throw new Error("请等待当前媒体检查或清理结束。");
     const token = crypto.randomUUID();
     this.cancelled = false;
     const job = (async () => {
-      this.publish({ phase: "cleaning", error: "" });
+      this.publish({
+        phase: "cleaning",
+        error: "",
+        processed: 0,
+        removalTotal: 0,
+        cancelling: false,
+      });
       try {
-        const plan = await this.port.request<RemovalPlan>("library.maintenance.prepare", {
+        const plan = await this.port.request<RemovalPlan>(`library.maintenance.${method}`, {
           token,
-          ...video,
-          metadataOnly: false,
+          ...params,
         });
+        this.publish({ removalTotal: plan.files.length });
+        let processed = 0;
+        let published = performance.now();
         for (const file of plan.files) {
           if (this.cancelled || this.stopped)
             throw new Error("资源删除已停止，请重新扫描目录核对已完成的操作。");
@@ -287,15 +313,27 @@ export class LibraryMaintenanceService {
             "library.maintenance.checkFile",
             { token, path: file.path },
           );
+          if (this.cancelled || this.stopped)
+            throw new Error("删除已停止，部分文件可能已经删除，请重新核对清单。");
           if (checked.exists) await this.files.remove(file.path);
+          ++processed;
+          if (performance.now() - published >= 100 || processed === plan.files.length) {
+            this.publish({ processed });
+            published = performance.now();
+          }
         }
+        if (this.cancelled || this.stopped)
+          throw new Error("删除已停止，部分文件可能已经删除，请重新核对清单。");
         await this.port.request("library.maintenance.complete", { token });
       } finally {
         try {
           await this.port.request("library.maintenance.abort", { token });
         } finally {
-          await this.refreshLibrary();
-          this.publish({ phase: "idle" });
+          try {
+            await this.refreshLibrary();
+          } finally {
+            this.publish({ phase: "idle", cancelling: false });
+          }
         }
       }
     })();

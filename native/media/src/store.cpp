@@ -64,6 +64,18 @@ Json rows(sqlite3* db, const std::string& sql, Json::initializer_list_t args = {
     return result;
 }
 void run(sqlite3* db, const std::string& sql, Json::initializer_list_t args = {}) { Query(db, sql, Json::array(args)).next(); }
+// 读查询有硬时间预算，失败返回界面供重试；进度和扫描取消仍走内存快照。
+class QueryDeadline {
+    sqlite3* db_;
+    std::chrono::steady_clock::time_point until_ = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+public:
+    explicit QueryDeadline(sqlite3* db): db_(db) {
+        sqlite3_progress_handler(db_, 1000, [](void* context) {
+            return std::chrono::steady_clock::now() > static_cast<QueryDeadline*>(context)->until_ ? 1 : 0;
+        }, this);
+    }
+    ~QueryDeadline() { sqlite3_progress_handler(db_,0,nullptr,nullptr); }
+};
 class Transaction {
     sqlite3* db_; bool committed_ = false;
 public:
@@ -269,18 +281,6 @@ Json queryRows(sqlite3* db, const std::string& sql, const Json& args) {
     while (query.next()) result.push_back(query.row());
     return result;
 }
-// 读查询有硬时间预算，失败返回界面供重试；进度和扫描取消仍走内存快照。
-class QueryDeadline {
-    sqlite3* db_;
-    std::chrono::steady_clock::time_point until_ = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-public:
-    explicit QueryDeadline(sqlite3* db): db_(db) {
-        sqlite3_progress_handler(db_, 1000, [](void* context) {
-            return std::chrono::steady_clock::now() > static_cast<QueryDeadline*>(context)->until_ ? 1 : 0;
-        }, this);
-    }
-    ~QueryDeadline() { sqlite3_progress_handler(db_,0,nullptr,nullptr); }
-};
 }
 void Store::prepareCatalog() {
     catalogSeedPath_.clear();

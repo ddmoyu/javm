@@ -357,14 +357,10 @@ function FilmDetailContent({
                     <Menu.Divider />
                     <Menu.Item
                       color="red"
-                      disabled={
-                        busy ||
-                        !library.maintenance ||
-                        !film.files?.some((file) => file.kind === "video" && file.id && file.path)
-                      }
+                      disabled={busy || !library.maintenance}
                       onClick={() => setDeletingVideo(film)}
                     >
-                      删除视频
+                      删除
                     </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
@@ -457,7 +453,7 @@ function FilmDetailContent({
                             disabled={busy}
                             onClick={() => setDeletingVideo({ ...film, files: [file] })}
                           >
-                            删除视频
+                            删除
                           </Button>
                         )}
                         {file.kind === "video" &&

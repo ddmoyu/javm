@@ -58,3 +58,14 @@ export interface RemovalPlan {
   files: { path: string; stamp: string }[];
   preserved: number;
 }
+export interface WorkRemovalPreview {
+  id: string;
+  title: string;
+  files: {
+    path: string;
+    stamp: string;
+    kind: "video" | "nfo" | "image" | "backup";
+    exists: boolean;
+  }[];
+  preservedFiles: { path: string; reason: string }[];
+}

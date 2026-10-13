@@ -299,3 +299,74 @@ void Store::completeRemoval(const std::string& id,bool metadataOnly) {
     } else run(db_,"DELETE FROM media_files WHERE id=?",{id});
     transaction.commit();
 }
+
+Json Store::workRemovalInfo(const std::string& id) {
+    std::lock_guard lock(mutex_);
+    QueryDeadline deadline(db_);
+    const auto works=rows(db_,"SELECT title,poster,thumb,fanart FROM works WHERE id=?",{id});
+    if(works.empty()) throw std::runtime_error("影片已不存在，请刷新媒体库");
+    std::map<std::string,Json> candidates;
+    auto add=[&](const std::string& text,const char* kind,const std::string& signature=std::string{}) {
+        if(text.empty()) return;
+        const auto path=fs::path(wide(text)).lexically_normal();
+        candidates.try_emplace(pathKey(path),Json{{"path",pathText(path)},{"kind",kind},{"expectedStamp",signature}});
+        if(candidates.size()>1000) throw std::runtime_error("单部影片关联文件超过 1000 个，请先分批清理视频");
+    };
+    for(const auto& row:rows(db_,"SELECT path,file_stamp FROM media_files WHERE work_id=? ORDER BY id LIMIT 1001",{id}))
+        add(row["path"],"video",row["file_stamp"]);
+    for(const auto& row:rows(db_,"SELECT path,stamp FROM nfo_documents WHERE work_id=? ORDER BY path_key LIMIT 1001",{id})) {
+        add(row["path"],"nfo",row["stamp"]);
+        add(row["path"].get<std::string>()+".javm.bak","backup");
+    }
+    for(const auto* kind:{"poster","thumb","fanart"}) add(stringValue(works[0],kind),"image");
+    for(const auto& row:rows(db_,"SELECT path FROM work_artwork WHERE work_id=? ORDER BY id LIMIT 1001",{id})) add(row["path"],"image");
+
+    std::set<std::string> shared,parents;
+    for(const auto& [key,file]:candidates) parents.insert(pathKey(fs::path(wide(file.at("path"))).parent_path()));
+    auto protect=[&](const fs::path& path) {
+        const auto key=pathKey(path);
+        if(candidates.contains(key)) shared.insert(key);
+    };
+    // 流式核对其他作品的引用，不把整个媒体库装入内存。
+    Query references(db_,R"SQL(
+SELECT path,'video' AS kind FROM media_files WHERE work_id<>?
+UNION ALL SELECT path,'nfo' FROM nfo_documents WHERE work_id<>?
+UNION ALL SELECT path,'image' FROM work_artwork WHERE work_id<>?
+UNION ALL SELECT poster,'image' FROM works WHERE id<>? AND poster<>''
+UNION ALL SELECT thumb,'image' FROM works WHERE id<>? AND thumb<>''
+UNION ALL SELECT fanart,'image' FROM works WHERE id<>? AND fanart<>''
+)SQL",Json::array({id,id,id,id,id,id}));
+    while(references.next()) {
+        const auto row=references.row();
+        auto path=fs::path(wide(row["path"]));
+        protect(path);
+        if(row["kind"]=="nfo") protect(fs::path(path.wstring()+L".javm.bak"));
+        if(row["kind"]=="video" && parents.contains(pathKey(path.parent_path()))) {
+            // 同名视频和同目录通用侧车资料可能未建立第二份 NFO 关联，也须保留。
+            auto nfo=path; nfo.replace_extension(L".nfo");
+            protect(nfo); protect(fs::path(nfo.wstring()+L".javm.bak"));
+            protect(path.parent_path()/L"movie.nfo");
+            protect(path.parent_path()/L"movie.nfo.javm.bak");
+            for(const auto* kind:{"poster","thumb","fanart"}) for(const auto* extension:{".jpg",".jpeg",".png",".webp"}) {
+                protect(path.parent_path()/wide(pathText(path.stem())+"-"+kind+extension));
+                protect(path.parent_path()/wide(std::string(kind)+extension));
+            }
+        }
+    }
+    Json files=Json::array();
+    for(auto& [key,file]:candidates) {
+        const bool sharedBackup=file["kind"]=="backup" && shared.contains(key.substr(0,key.size()-std::string(".javm.bak").size()));
+        file["shared"]=shared.contains(key) || sharedBackup;
+        files.push_back(std::move(file));
+    }
+    return {{"id",id},{"title",works[0]["title"]},{"files",files}};
+}
+
+void Store::completeWorkRemoval(const std::string& id) {
+    std::lock_guard lock(mutex_);
+    Transaction transaction(db_);
+    // 外键级联清理视频、NFO、图片、来源、收藏所属作品及保存的资源关联。
+    run(db_,"DELETE FROM works WHERE id=?",{id});
+    if(sqlite3_changes(db_)==0) throw std::runtime_error("影片已不存在，请刷新媒体库");
+    transaction.commit();
+}

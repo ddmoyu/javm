@@ -37,6 +37,8 @@ public:
     Json fileIdentity(const std::string& id);
     Json removalInfo(const std::string& id);
     void completeRemoval(const std::string& id, bool metadataOnly);
+    Json workRemovalInfo(const std::string& id);
+    void completeWorkRemoval(const std::string& id);
     Json find(const fs::path& path);
     std::string save(const Json& file, const Json& nfo, const std::string* nfoSource = nullptr);
     Json prepareWork(const Json& params);

@@ -26,6 +26,28 @@ void checkRetainedCopy(const Json& retained) {
     if (stamp(path) != retained.at("stamp").get<std::string>())
         throw std::runtime_error("要保留的视频已变化，未继续删除，请重新扫描后核对");
 }
+Json workRemovalPlan(const Json& info) {
+    Json files=Json::array(),preserved=Json::array();
+    for(const auto& item:info.at("files")) {
+        const fs::path path(wide(item.at("path")));
+        const auto kind=item.at("kind").get<std::string>();
+        std::string reason;
+        if(item.at("shared").get<bool>()) reason="其他影片仍在使用";
+        else if((kind=="nfo" && ext(path)!=".nfo") || (kind=="image" && !images.contains(ext(path))))
+            reason="不支持的资料文件类型";
+        if(!reason.empty()) {
+            preserved.push_back({{"path",pathText(path)},{"reason",reason}});
+            continue;
+        }
+        const bool exists=checkedFile(path);
+        const auto signature=exists?stamp(path):std::string{};
+        const auto expected=item.at("expectedStamp").get<std::string>();
+        if(exists && !expected.empty() && signature!=expected)
+            throw std::runtime_error("关联文件已变化，请重新扫描后核对："+pathText(path));
+        files.push_back({{"path",pathText(path)},{"kind",kind},{"exists",exists},{"stamp",signature}});
+    }
+    return {{"id",info.at("id")},{"title",info.at("title")},{"files",files},{"preservedFiles",preserved}};
+}
 }
 
 Json LibraryService::maintenance(const std::string& method, const Json& params) {
@@ -72,8 +94,28 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
         }
         return {{"revision",revision},{"items",items}};
     }
+    if(method=="library.maintenance.previewWork") {
+        if(!removal_.is_null()) throw std::runtime_error("正在清理影片，请稍候");
+        return workRemovalPlan(store_.workRemovalInfo(params.at("id")));
+    }
     const auto token = params.at("token").get<std::string>();
     if (token.empty() || token.size() > 100) throw std::runtime_error("清理请求标识无效");
+    if(method=="library.maintenance.prepareWork") {
+        if(cancelledRemoval_==token) throw std::runtime_error("清理已取消");
+        if(!removal_.is_null()) {
+            if(removal_["token"]==token) return removal_;
+            throw std::runtime_error("正在清理另一部影片，请稍候");
+        }
+        auto plan=workRemovalPlan(store_.workRemovalInfo(params.at("id")));
+        if(!params.contains("expected") || plan!=params.at("expected"))
+            throw std::runtime_error("删除清单已变化，请重新读取清单并确认");
+        plan["token"]=token;
+        plan["wholeWork"]=true;
+        plan["retained"]=nullptr;
+        plan["preserved"]=plan.at("preservedFiles").size();
+        removal_=std::move(plan);
+        return removal_;
+    }
     if (method == "library.maintenance.prepare") {
         if (cancelledRemoval_ == token) throw std::runtime_error("清理已取消");
         if (!removal_.is_null()) {
@@ -154,6 +196,8 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
             checkRetainedCopy(removal_.at("retained"));
             const fs::path path(wide(file["path"]));
             if (!checkedFile(path)) return {{"exists",false}};
+            if(removal_.value("wholeWork",false) && !file.at("exists").get<bool>())
+                throw std::runtime_error("原本缺失的文件已恢复，请重新读取删除清单");
             if (stamp(path) != file["stamp"].get<std::string>()) throw std::runtime_error("关联文件已变化，已停止清理："+pathText(path));
             return {{"exists",true}};
         }
@@ -162,10 +206,12 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
     if (method == "library.maintenance.complete") {
         for (const auto& file: removal_["files"]) if (checkedFile(fs::path(wide(file["path"]))))
             throw std::runtime_error("文件尚未删除，已保留数据库记录");
-        if (!removal_.at("metadataOnly").get<bool>() && checkedFile(fs::path(wide(removal_.at("path")))))
+        const bool wholeWork=removal_.value("wholeWork",false);
+        if (!wholeWork && !removal_.at("metadataOnly").get<bool>() && checkedFile(fs::path(wide(removal_.at("path")))))
             throw std::runtime_error("视频文件仍存在或已恢复，已保留数据库记录，请重新检查");
         const auto id = removal_.at("id").get<std::string>();
-        store_.completeRemoval(id,removal_.at("metadataOnly"));
+        if(wholeWork) store_.completeWorkRemoval(id);
+        else store_.completeRemoval(id,removal_.at("metadataOnly"));
         removal_ = nullptr;
         refreshDirectories();
         std::lock_guard progressLock(progressMutex_); ++revision_;
