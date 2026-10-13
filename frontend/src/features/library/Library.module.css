@@ -1,0 +1,61 @@
+.toolbarRow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.scope :global(.mantine-Tabs-tab) {
+  padding-inline: 12px;
+}
+
+.tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+
+.tools > :global(.mantine-Button-root) {
+  flex-shrink: 0;
+}
+
+.search {
+  flex: 0 1 220px;
+  min-width: 160px;
+  margin-right: 6px;
+}
+
+.search input {
+  height: 32px;
+  min-height: 32px;
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--mantine-radius-md);
+}
+
+.search input:hover {
+  border-color: var(--velvet-line);
+}
+
+.search input:focus {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--velvet-surface);
+}
+
+@container (max-width: 640px) {
+  .toolbarRow {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tools {
+    width: 100%;
+  }
+
+  .search {
+    flex: 1;
+  }
+}

@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState 
 import { ActionIcon, Badge, Group, Skeleton, Table, Text, UnstyledButton } from "@mantine/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Film } from "../../contracts/media";
+import type { FilmLayout } from "../../contracts/library";
 import { Poster } from "../../components/Cover";
 import { Icon } from "../../components/icons";
 import { IconButton, Pill } from "../../components/ui";
@@ -9,8 +10,6 @@ import { FilmMenuItems } from "../films/FilmMenu";
 import { FilmDeleteDialog } from "../films/FilmDeleteDialog";
 import { ObjectMenu, ObjectMenuButton, objectMenuKey } from "../../components/ObjectMenu";
 import { useWorkspace } from "../../app/state";
-
-export type FilmLayout = "poster" | "landscape" | "list";
 
 interface CollectionProps {
   items: ReadonlyMap<number, Film>;

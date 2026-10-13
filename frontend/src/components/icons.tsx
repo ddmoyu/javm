@@ -12,6 +12,7 @@ import { CaretLeftIcon } from "@phosphor-icons/react/dist/csr/CaretLeft";
 import { CaretRightIcon } from "@phosphor-icons/react/dist/csr/CaretRight";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
+import { ColumnsIcon } from "@phosphor-icons/react/dist/csr/Columns";
 import { CompassIcon } from "@phosphor-icons/react/dist/csr/Compass";
 import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import { CopySimpleIcon } from "@phosphor-icons/react/dist/csr/CopySimple";
@@ -46,6 +47,7 @@ import { PauseIcon } from "@phosphor-icons/react/dist/csr/Pause";
 import { PencilSimpleIcon } from "@phosphor-icons/react/dist/csr/PencilSimple";
 import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
+import { RowsIcon } from "@phosphor-icons/react/dist/csr/Rows";
 import { PushPinIcon } from "@phosphor-icons/react/dist/csr/PushPin";
 import { BroadcastIcon } from "@phosphor-icons/react/dist/csr/Broadcast";
 import { ScanIcon } from "@phosphor-icons/react/dist/csr/Scan";
@@ -85,6 +87,8 @@ const icons = {
   heart: HeartIcon,
   star: StarIcon,
   grid: SquaresFourIcon,
+  viewPoster: ColumnsIcon,
+  viewLandscape: RowsIcon,
   list: ListBulletsIcon,
   filter: FunnelIcon,
   plus: PlusIcon,

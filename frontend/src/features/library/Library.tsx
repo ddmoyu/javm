@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import type { RefObject } from "react";
 import {
@@ -7,33 +7,39 @@ import {
   Anchor,
   Button,
   Group,
-  Kbd,
   Loader,
   Pill as MantinePill,
-  Select,
   Text,
   TextInput,
 } from "@mantine/core";
 import { FilmCollection } from "./FilmCollection";
-import type { FilmLayout } from "./FilmCollection";
+import { LibrarySortMenu } from "./LibrarySortMenu";
+import { LibraryViewMenu } from "./LibraryViewMenu";
 import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
-import { CountTabs, Empty, IconButton } from "../../components/ui";
+import { CountTabs, Empty } from "../../components/ui";
 import { LibraryFilterButton, libraryFilterLabels } from "./LibraryFilters";
-import { emptyLibraryFilters, librarySortOptions } from "./libraryQuery";
+import { emptyLibraryFilters } from "./libraryQuery";
 import type { LibraryScope, LibrarySort, SortDirection } from "./libraryQuery";
 import type { LibraryQuery } from "../../contracts/library";
 import { usePagedQuery } from "../../services/library/usePagedQuery";
+import { createLibraryLayoutSettings } from "../../platform/neutralino/libraryLayout";
+import classes from "./Library.module.css";
 
 export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement | null> }) {
-  const { page, toggleFavorite, libraryState, library, openFilm, play, add } = useWorkspace();
+  const { page, toggleFavorite, libraryState, library, openFilm, play, add, runtime } =
+    useWorkspace();
   const rootRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [search] = useDebouncedValue(query.trim(), 180);
   const [scope, setScope] = useState<LibraryScope>("all");
   const [availability, setAvailability] =
     useState<NonNullable<LibraryQuery["availability"]>>("all");
-  const [layout, setLayout] = useState<FilmLayout>("poster");
+  const layoutSettings = createLibraryLayoutSettings(runtime);
+  const { layout, error: layoutError } = useSyncExternalStore(
+    layoutSettings.subscribe,
+    layoutSettings.getSnapshot,
+  );
   const [sort, setSort] = useState<LibrarySort>("added");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [filters, setFilters] = useState(emptyLibraryFilters);
@@ -133,6 +139,14 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
 
   return (
     <div ref={rootRef} className="library-content">
+      {layoutError && (
+        <Alert color="red" title="显示方式设置" mb="md" role="alert">
+          {layoutError}
+          <Button variant="subtle" size="xs" onClick={() => void layoutSettings.setLayout(layout)}>
+            保存当前选择
+          </Button>
+        </Alert>
+      )}
       {libraryState.error && (
         <Alert color="red" title="媒体库暂时无法读取" mb="md" role="alert">
           {libraryState.error}
@@ -142,49 +156,30 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
         </Alert>
       )}
       <div className="page-toolbar">
-        <Group justify="space-between" wrap="nowrap" gap="md" align="flex-end">
-          <CountTabs
-            label="媒体库筛选"
-            value={scope}
-            onChange={changeScope}
-            items={[
-              ["all", "全部影片", libraryState.total],
-              ["favorites", "我的收藏", libraryState.favorites],
-            ]}
-          />
-          <TextInput
-            ref={searchRef}
-            className="toolbar-search"
-            aria-label="搜索媒体库"
-            aria-keyshortcuts="Control+K Meta+K"
-            placeholder="片名、番号、演员"
-            leftSection={<Icon name="search" size={16} />}
-            rightSection={<Kbd size="xs">Ctrl K</Kbd>}
-            rightSectionWidth={58}
-            value={query}
-            onChange={(event) => setQuery(event.currentTarget.value)}
-          />
-          <Group gap={6} wrap="nowrap" pb={8}>
-            <Select
-              aria-label="排序方式"
-              value={sort}
-              data={librarySortOptions}
-              allowDeselect={false}
-              w={112}
-              size="xs"
-              variant="unstyled"
-              onChange={(value) => {
-                const option = librarySortOptions.find((item) => item.value === value);
-                if (option) {
-                  setSort(option.value);
-                  setDirection(option.direction);
-                }
-              }}
+        <div className={classes.toolbarRow}>
+          <div className={classes.scope}>
+            <CountTabs
+              label="媒体库筛选"
+              value={scope}
+              onChange={changeScope}
+              items={[
+                ["all", "全部", libraryState.total],
+                ["favorites", "收藏", libraryState.favorites],
+              ]}
             />
-            <IconButton
-              icon={direction === "desc" ? "sortDesc" : "sortAsc"}
-              label={direction === "desc" ? "当前降序，切换为升序" : "当前升序，切换为降序"}
-              onClick={() => setDirection(direction === "desc" ? "asc" : "desc")}
+          </div>
+          <div className={classes.tools}>
+            <TextInput
+              ref={searchRef}
+              className={classes.search}
+              aria-label="搜索媒体库"
+              aria-keyshortcuts="Control+K Meta+K"
+              title="搜索媒体库 (Ctrl+K)"
+              placeholder="搜索影片…"
+              size="sm"
+              leftSection={<Icon name="search" size={16} />}
+              value={query}
+              onChange={(event) => setQuery(event.currentTarget.value)}
             />
             <LibraryFilterButton
               filters={filters}
@@ -193,28 +188,18 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
               availability={availability}
               onAvailabilityChange={setAvailability}
             />
-            <Group gap={2} className="toolbar-divider">
-              <IconButton
-                icon="grid"
-                label="竖版海报视图"
-                active={layout === "poster"}
-                onClick={() => setLayout("poster")}
-              />
-              <IconButton
-                icon="image"
-                label="横版封面视图"
-                active={layout === "landscape"}
-                onClick={() => setLayout("landscape")}
-              />
-              <IconButton
-                icon="list"
-                label="列表视图"
-                active={layout === "list"}
-                onClick={() => setLayout("list")}
-              />
-            </Group>
-          </Group>
-        </Group>
+            <LibrarySortMenu
+              sort={sort}
+              direction={direction}
+              onSortChange={setSort}
+              onDirectionChange={setDirection}
+            />
+            <LibraryViewMenu
+              layout={layout}
+              onLayoutChange={(value) => void layoutSettings.setLayout(value)}
+            />
+          </div>
+        </div>
         {(chips.length > 0 || query.trim()) && (
           <Group gap={6} py={8} aria-label="已选筛选条件">
             <Text size="xs" c="dimmed" mr={4} aria-live="polite">

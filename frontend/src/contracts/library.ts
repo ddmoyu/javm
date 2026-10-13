@@ -1,3 +1,5 @@
+export type FilmLayout = "poster" | "landscape" | "list";
+
 export type ScanState =
   | "idle"
   | "scanning"
