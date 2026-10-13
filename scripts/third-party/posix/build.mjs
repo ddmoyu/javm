@@ -110,12 +110,23 @@ export async function buildComponent(component) {
   } else if (component === "ffmpeg") {
     const sourceRoot = await unpack(source, path.join(work, "source"));
     const reference = await download(spec.inputs.sources.ffmpegReference);
-    const list = await run("unzip", ["-Z1", reference], work, true);
-    const entry = list
-      .split("\n")
-      .find((name) => /(?:^|\/)build-info\/video-decoders\.txt$/.test(name));
-    if (!entry) throw new Error("缺少锁定的视频解码器集合");
-    const decoders = await run("unzip", ["-p", reference, entry], work, true);
+    // This pinned Windows ZIP stores backslashes in its entry names. Read the
+    // exact member with zipfile: unzip interprets backslashes as glob escapes.
+    const decoders = await run(
+      "python3",
+      [
+        "-c",
+        `import sys,zipfile
+with zipfile.ZipFile(sys.argv[1]) as archive:
+ names=[name for name in archive.namelist() if name.replace(chr(92),'/').endswith('/build-info/video-decoders.txt')]
+ assert len(names)==1, 'Locked decoder list is missing or ambiguous'
+ sys.stdout.write(archive.read(names[0]).decode('ascii'))
+`,
+        reference,
+      ],
+      work,
+      true,
+    );
     if (!/^[a-z0-9_\r\n]+$/.test(decoders)) throw new Error("视频解码器列表无效");
     const decoderFile = path.join(work, "video-decoders.txt");
     await writeFile(decoderFile, decoders + "\n");
@@ -146,7 +157,7 @@ export async function buildComponent(component) {
     );
     await writeFile(
       path.join(output, "licenses/modifications.txt"),
-      `Official Neutralino ${source.version}, source ${source.commit}.\nJAVM POSIX build: JSON-escape injected global strings and retain upstream source identity. Official APIs and Extension protocol are unchanged.\n`,
+      `Official Neutralino ${source.version}, source ${source.commit}.\nJAVM POSIX build: JSON-escape injected global strings, retain upstream source identity, and add an opt-in hidden ephemeral WebKit session for the resolver. Official APIs and Extension protocol are unchanged.\n`,
     );
   } else {
     await run(process.execPath, [

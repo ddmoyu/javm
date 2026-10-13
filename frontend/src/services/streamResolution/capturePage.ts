@@ -99,7 +99,10 @@ export const installCapture = String.raw`(()=>{
   }catch{}
   const visible=element=>{
     const box=element.getBoundingClientRect();
-    return box.width>0&&box.height>0&&element.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
+    if(!box.width||!box.height)return false;
+    if(element.checkVisibility)return element.checkVisibility({checkOpacity:true,checkVisibilityCSS:true});
+    const style=getComputedStyle(element);
+    return style.visibility!=='hidden'&&style.display!=='none'&&Number(style.opacity)!==0;
   };
   globalThis.__javmStreamCapture={read(rule,challenged){
     if(challenged)return {};
