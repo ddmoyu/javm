@@ -89,6 +89,10 @@ export const AI_PROVIDER_OPTIONS = [
     { label: 'OpenAI', value: 'openai' },
     { label: 'DeepSeek', value: 'deepseek' },
     { label: 'Claude', value: 'claude' },
+    { label: 'MiniMax', value: 'minimax' },
+    { label: 'MiniMax CN', value: 'minimax-cn' },
+    { label: 'MiniMax Anthropic', value: 'minimax-anthropic' },
+    { label: 'MiniMax CN Anthropic', value: 'minimax-cn-anthropic' },
     { label: '自定义', value: 'custom' },
 ]
 

@@ -1,5 +1,6 @@
 use crate::resource_scrape::types::{ScrapeMetadata, SearchResult};
 use crate::settings::{self, AIProvider as SettingsAIProvider};
+use crate::utils::ai_provider::{resolve_base_url, resolve_provider_defaults, AIProviderProtocol};
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
@@ -415,24 +416,21 @@ fn shared_translation_client() -> Result<wreq::Client, String> {
 async fn call_provider(provider: &SettingsAIProvider, system_prompt: &str, user_prompt: &str) -> Result<String, String> {
 	let client = shared_translation_client()?;
 
-	let default_endpoint = match provider.provider.as_str() {
-		"openai" => Some("https://api.openai.com/v1".to_string()),
-		"deepseek" => Some("https://api.deepseek.com/v1".to_string()),
-		"claude" => Some("https://api.anthropic.com/v1".to_string()),
-		"custom" => None, // custom 类型必须由用户提供 endpoint
+	let defaults = match resolve_provider_defaults(&provider.provider) {
+		Some(defaults) => defaults,
 		_ => return Err(format!("不支持的 AI 提供商: {}", provider.provider)),
 	};
 
-	let base_url = match (provider.endpoint.as_deref(), default_endpoint.as_deref()) {
-		(Some(ep), _) if !ep.is_empty() => ep,
-		(_, Some(def)) => def,
-		_ => return Err("自定义 AI 提供商未配置 endpoint".to_string()),
-	};
+	let base_url = resolve_base_url(provider.endpoint.as_deref(), defaults)
+		.ok_or_else(|| "自定义 AI 提供商未配置 endpoint".to_string())?;
 
-	if provider.provider == "claude" {
-		call_claude_api(&client, base_url, &provider.api_key, &provider.model, system_prompt, user_prompt).await
-	} else {
-		call_openai_compatible_api(&client, base_url, &provider.api_key, &provider.model, system_prompt, user_prompt).await
+	match defaults.protocol {
+		AIProviderProtocol::AnthropicCompatible => {
+			call_claude_api(&client, base_url, &provider.api_key, &provider.model, system_prompt, user_prompt).await
+		}
+		AIProviderProtocol::OpenAICompatible => {
+			call_openai_compatible_api(&client, base_url, &provider.api_key, &provider.model, system_prompt, user_prompt).await
+		}
 	}
 }
 
