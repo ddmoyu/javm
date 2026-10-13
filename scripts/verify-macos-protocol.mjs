@@ -21,7 +21,9 @@ await copyFile(path.join(root, "bin/javm_launcher"), path.join(payload, "JAVM"))
 await copyFile(path.join(root, "bin", desktopHostFile()), path.join(payload, "JAVM-host"));
 await copyFile(
   path.join(root, "node_modules/@neutralinojs/lib/dist/neutralino.js"),
-  path.join(payload, "neutralino.js"),
+  // /neutralino.js is an upstream special route that injects globals again.
+  // This fixture uses injectGlobals, so serve the client under an ordinary name.
+  path.join(payload, "client.js"),
 );
 await writeFile(
   path.join(bundle, "Contents/Info.plist"),
@@ -58,7 +60,7 @@ await writeFile(
 );
 await writeFile(
   path.join(payload, "index.html"),
-  `<!doctype html><title>Safe links</title><script src="/neutralino.js"></script><script>
+  `<!doctype html><title>Safe links</title><script src="/client.js"></script><script>
 Neutralino.events.on('ready',async()=>{
  const diagnostic=async(value)=>Neutralino.filesystem.writeFile(${JSON.stringify(receipts)}+'/diagnostic-'+NL_PID+'.json',JSON.stringify(value));
  await diagnostic({args:NL_ARGS,ready:true});
