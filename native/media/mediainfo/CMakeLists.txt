@@ -17,6 +17,20 @@ FetchContent_Declare(mediainfo_source
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 FetchContent_MakeAvailable(mediainfo_source)
 
+if(UNIX)
+    # 26.10 上游对 zlib 的别名目标添加编译参数，POSIX shared 配置会失败。
+    # 仅修正已锁定源码的 CMake 构建行，不改变解析器或 Windows 配方行为。
+    set(JAVM_MEDIAINFO_UPSTREAM_CMAKE "${mediainfo_source_SOURCE_DIR}/MediaInfoLib/Project/CMake/CMakeLists.txt")
+    file(READ "${JAVM_MEDIAINFO_UPSTREAM_CMAKE}" JAVM_MEDIAINFO_UPSTREAM_TEXT)
+    string(REPLACE "target_compile_options(ZLIB::ZLIBSTATIC PRIVATE -fPIC)"
+        "target_compile_options(zlibstatic PRIVATE -fPIC)"
+        JAVM_MEDIAINFO_PATCHED_TEXT "${JAVM_MEDIAINFO_UPSTREAM_TEXT}")
+    if(NOT JAVM_MEDIAINFO_PATCHED_TEXT STREQUAL JAVM_MEDIAINFO_UPSTREAM_TEXT)
+        file(WRITE "${JAVM_MEDIAINFO_UPSTREAM_CMAKE}" "${JAVM_MEDIAINFO_PATCHED_TEXT}")
+    endif()
+    set(ZLIB_LIBRARIES ZLIB::ZLIBSTATIC)
+endif()
+
 set(BUILD_SHARED_LIBS ON)
 set(BUILD_ZENLIB ON)
 set(BUILD_ZLIB ON)
