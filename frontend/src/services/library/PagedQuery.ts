@@ -29,7 +29,8 @@ export class PagedQuery<T, Q> {
   private generation = 0;
   private active = false;
   private running = false;
-  private countKnown = false;
+  private counts?: { total: number; available: number };
+  private retainingResults = false;
   private wanted = [0];
   constructor(
     private fetch: (query: Q, page: PageRequest) => Promise<QueryPage<T>>,
@@ -61,16 +62,15 @@ export class PagedQuery<T, Q> {
     this.active = active;
     if (active) void this.pump();
   }
-  private reset(preserveCount: boolean) {
+  private reset(preserveResults: boolean) {
     ++this.generation;
     this.pages.clear();
-    this.countKnown = false;
+    this.counts = undefined;
+    this.retainingResults = preserveResults && this.snapshot.ready;
     this.publish({
-      items: new Map(),
-      ready: false,
       error: "",
       loading: this.active,
-      ...(preserveCount ? {} : { total: 0, available: 0 }),
+      ...(preserveResults ? {} : { items: new Map(), ready: false, total: 0, available: 0 }),
     });
   }
   invalidate = () => {
@@ -98,6 +98,14 @@ export class PagedQuery<T, Q> {
     }
     void this.pump();
   };
+  private publishPages() {
+    if (!this.counts) return;
+    this.retainingResults = false;
+    const items = new Map<number, T>();
+    for (const [index, values] of this.pages)
+      values.forEach((item, offset) => items.set(index * LIBRARY_PAGE_SIZE + offset, item));
+    this.publish({ items, ...this.counts, ready: true, error: "" });
+  }
   private async pump() {
     if (this.running || !this.active || this.query === undefined || this.snapshot.error) return;
     this.running = true;
@@ -106,26 +114,33 @@ export class PagedQuery<T, Q> {
         const page = this.wanted.find(
           (index) =>
             !this.pages.has(index) &&
-            (!this.countKnown || index * LIBRARY_PAGE_SIZE < this.snapshot.total),
+            (!this.counts || index * LIBRARY_PAGE_SIZE < this.counts.total),
         );
-        if (page === undefined) break;
+        if (page === undefined) {
+          // 滚动回已经刷新的页时，迟到的其他页会被丢弃，仍需交付当前结果。
+          if (this.retainingResults) this.publishPages();
+          break;
+        }
         const generation = this.generation;
         this.publish({ loading: true });
         try {
           const result = await this.fetch(this.query, {
             offset: page * LIBRARY_PAGE_SIZE,
             limit: LIBRARY_PAGE_SIZE,
-            includeTotal: !this.countKnown,
+            includeTotal: !this.counts,
           });
           if (generation !== this.generation) continue;
           // 快速滚动时迟到且已离开可见范围的页不再写回，避免挤掉当前页。
           if (!this.wanted.includes(page)) continue;
           if (result.items.length > LIBRARY_PAGE_SIZE || result.offset !== page * LIBRARY_PAGE_SIZE)
             throw new Error("片库分页响应无效，请重试。");
-          const total = result.total ?? this.snapshot.total;
-          if (!this.countKnown && result.total === undefined)
-            throw new Error("片库计数响应无效，请重试。");
-          this.countKnown = true;
+          const total = result.total ?? this.counts?.total;
+          if (total === undefined) throw new Error("片库计数响应无效，请重试。");
+          this.counts = {
+            total,
+            available:
+              result.available ?? (result.total !== undefined ? total : this.counts!.available),
+          };
           this.pages.set(page, result.items);
           while (this.pages.size > this.cachePages) {
             const oldest =
@@ -133,19 +148,16 @@ export class PagedQuery<T, Q> {
               this.pages.keys().next().value!;
             this.pages.delete(oldest);
           }
-          const items = new Map<number, T>();
-          for (const [index, values] of this.pages)
-            values.forEach((item, offset) => items.set(index * LIBRARY_PAGE_SIZE + offset, item));
-          this.publish({
-            items,
-            total,
-            available:
-              result.available ?? (result.total !== undefined ? total : this.snapshot.available),
-            ready: true,
-            error: "",
-          });
           if (this.wanted[0]! * LIBRARY_PAGE_SIZE >= total)
             this.wanted = [Math.max(0, Math.ceil(total / LIBRARY_PAGE_SIZE) - 1)];
+          // 同条件后台刷新保留卡片，等可见范围的所有页就绪后一起替换，
+          // 避免骨架闪烁、封面重新挂载，以及跨页排序变化时混入新旧记录。
+          if (
+            this.retainingResults &&
+            this.wanted.some((index) => index * LIBRARY_PAGE_SIZE < total && !this.pages.has(index))
+          )
+            continue;
+          this.publishPages();
         } catch (error) {
           if (generation === this.generation && this.wanted.includes(page))
             this.publish({
