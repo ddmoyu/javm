@@ -1,4 +1,5 @@
-import { filesystem, os, resources } from "@neutralinojs/lib";
+import { filesystem, resources } from "@neutralinojs/lib";
+import { applicationDataPath } from "./applicationPaths";
 import seedUrl from "../../../../data/catalogs/javbus/catalog.sqlite3?url";
 import manifest from "../../../../data/catalogs/javbus/catalog.sqlite3.json";
 import type { JavbusCatalogEntry } from "../../services/catalog/javbusCatalog";
@@ -8,8 +9,7 @@ export function createCatalogSeedPort(native: LibraryPort) {
   let extracted: Promise<string> | undefined;
   const extract = () =>
     (extracted ??= (async () => {
-      const directory = `${await os.getEnv("LOCALAPPDATA")}/JAVM/catalogs/javbus`;
-      if (!/^[A-Z]:[\\/]/i.test(directory)) throw new Error("无法定位内置目录路径。");
+      const directory = await applicationDataPath("catalogs", "javbus");
       try {
         await filesystem.createDirectory(directory);
       } catch (error) {

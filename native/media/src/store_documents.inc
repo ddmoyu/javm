@@ -1,6 +1,6 @@
 Json Store::documents(const std::string& method,const Json& params) {
     if(method=="library.documents.importStream") {
-        const fs::path path=fs::path(wide(stringValue(params,"path"))).lexically_normal();
+        const fs::path path=fs::path(pathFromText(stringValue(params,"path"))).lexically_normal();
         const auto content=stringValue(params,"content"), url=stringValue(params,"url");
         if(!path.is_absolute() || lower(pathText(path.extension()))!=".strm" || content.size()>8192 || url.size()>8192 ||
            !std::regex_match(url,std::regex(R"(^https?://[^/@\s]+[^\s]*$)",std::regex::icase))) throw std::runtime_error("STRM 路径或网络地址无效");
@@ -17,7 +17,7 @@ Json Store::documents(const std::string& method,const Json& params) {
             {"file_stamp",signature},{"fast_hash",fastHash(path)},{"codec","STRM"},{"stream_url",url}};
         Json metadata=Json::object(); std::string original;
         const auto code=stringValue(params,"code"); if(code.size()>80) throw std::runtime_error("番号过长"); if(!code.empty()) metadata["num"]=code;
-        auto nfo=path; nfo.replace_extension(L".nfo");
+        auto nfo=path; nfo.replace_extension(".nfo");
         if(fs::exists(nfo)) {
             if(reparse(nfo)) throw std::runtime_error("不导入符号链接 NFO");
             const auto before=stamp(nfo); metadata=readNfo(nfo,&original);

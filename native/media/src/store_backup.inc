@@ -14,8 +14,8 @@ struct Connection {
 void cancelled(const std::atomic_bool& value) { if(value) throw std::runtime_error("操作已取消，原片库保留。"); }
 fs::path safePath(const std::string& text, bool directory) {
     if(text.empty() || text.size()>32768 || text.find('\0')!=std::string::npos) throw std::runtime_error("请选择有效路径。");
-    fs::path path(wide(text));
-    if(!path.is_absolute() || pathText(path.relative_path()).find(':')!=std::string::npos) throw std::runtime_error("请选择绝对路径，不支持附加数据流。");
+    fs::path path(pathFromText(text));
+    if(!path.is_absolute() || hasAlternateStream(path)) throw std::runtime_error("请选择绝对路径，不支持附加数据流。");
     path=path.lexically_normal();
     for(auto part=path;!part.empty();part=part.parent_path()) {
         if(fs::exists(part) && reparse(part)) throw std::runtime_error("备份恢复不支持符号链接或目录联接。");
@@ -38,7 +38,7 @@ Json validate(sqlite3* db,const std::atomic_bool& cancel) {
         throw std::runtime_error("请选择 JAVM 1.0 片库备份，旧版数据库请使用迁移入口。");
     if(!rows(db,"SELECT name FROM sqlite_master WHERE type IN ('trigger','view') LIMIT 1").empty())
         throw std::runtime_error("备份包含非标准数据库对象，已拒绝恢复。");
-    Connection expected(fs::path(L":memory:"),SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE);
+    Connection expected(fs::path(":memory:"),SQLITE_OPEN_READWRITE|SQLITE_OPEN_CREATE);
     exec(expected.value,
 #include "library_schema.inc"
     );
@@ -79,12 +79,9 @@ void copy(sqlite3* from,sqlite3* to,const std::atomic_bool& cancel,const legacy:
     if(code!=SQLITE_DONE || result!=SQLITE_OK) throw std::runtime_error("数据库复制失败，请检查磁盘空间和访问权限。原片库保留。");
 }
 Json snapshot(sqlite3* from,const fs::path& target,const std::atomic_bool& cancel,const legacy::Progress& progress,const std::string& phase) {
-    auto partial=fs::path(target.wstring()+L".partial");
+    auto partial=withSuffix(target,".partial");
     if(fs::exists(target) || fs::exists(partial)) throw std::runtime_error("备份目标已存在，请重新选择位置。");
-    // CREATE_NEW prevents overwriting an existing file, including one appearing after the check.
-    HANDLE reserved=CreateFileW(partial.c_str(),GENERIC_WRITE,0,nullptr,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,nullptr);
-    if(reserved==INVALID_HANDLE_VALUE) throw std::runtime_error("无法创建备份，请检查目录权限和磁盘空间。");
-    CloseHandle(reserved);
+    createExclusiveFile(partial);
     try {
         Json info;
         {
@@ -95,10 +92,11 @@ Json snapshot(sqlite3* from,const fs::path& target,const std::atomic_bool& cance
             exec(output.value,"PRAGMA journal_mode=DELETE;");
         }
         cancelled(cancel);
-        if(!MoveFileExW(partial.c_str(),target.c_str(),MOVEFILE_WRITE_THROUGH)) throw std::runtime_error("无法完成备份文件写入。");
+        syncFile(partial);
+        moveFile(partial,target);
         info["path"]=pathText(target);
         return info;
-    } catch(...) {std::error_code ec;fs::remove(partial,ec);fs::remove(fs::path(partial.wstring()+L"-journal"),ec);throw;}
+    } catch(...) {std::error_code ec;fs::remove(partial,ec);fs::remove(withSuffix(partial,"-journal"),ec);throw;}
 }
 }
 
@@ -109,7 +107,7 @@ Json Store::backup(const std::string& operation,const Json& params,const std::at
     if(operation=="create") {
         if(!db_) throw std::runtime_error("损坏片库无法创建有效备份。请先选择独立备份恢复，原始损坏文件会自动留存。");
         const auto directory=safePath(params.at("directory"),true);
-        return snapshot(db_,directory/wide("javm-library-"+uuid()+".sqlite3"),cancelled,progress,"backingUp");
+        return snapshot(db_,directory/pathFromText("javm-library-"+uuid()+".sqlite3"),cancelled,progress,"backingUp");
     }
     const auto source=safePath(params.at("path"),false);
     if(fs::exists(path_) && fs::equivalent(source,path_)) throw std::runtime_error("不能选择正在使用的片库，请选择独立备份。");
@@ -121,7 +119,7 @@ Json Store::backup(const std::string& operation,const Json& params,const std::at
         return info;
     }
     if(operation!="restore") throw std::runtime_error("未知备份操作。");
-    const auto directory=path_.parent_path()/"backups"/wide("recovery-"+uuid());
+    const auto directory=path_.parent_path()/"backups"/pathFromText("recovery-"+uuid());
     fs::create_directories(directory);
     safePath(pathText(directory),true);
     // Take an immutable SQLite snapshot, then validate it again. Inspection is not authorization to trust a changed file.
@@ -132,42 +130,32 @@ Json Store::backup(const std::string& operation,const Json& params,const std::at
         // renames from silently creating an empty library on the next launch.
         struct Original {
             fs::path path,saved;
-            HANDLE handle=INVALID_HANDLE_VALUE;
-            ~Original() {if(handle!=INVALID_HANDLE_VALUE) CloseHandle(handle);}
+            std::unique_ptr<ArchiveFileLock> lock;
         };
         std::vector<std::unique_ptr<Original>> originals;
-        for(const auto* suffix:{L"",L"-wal",L"-shm",L"-journal"}) {
-            auto file=std::make_unique<Original>();file->path=fs::path(path_.wstring()+suffix);
+        for(const auto* suffix:{"","-wal","-shm","-journal"}) {
+            auto file=std::make_unique<Original>();file->path=withSuffix(path_,suffix);
             if(!fs::exists(file->path)) continue;
             safePath(pathText(file->path),false);
             file->saved=directory/file->path.filename();
-            file->handle=CreateFileW(file->path.c_str(),GENERIC_READ|DELETE,FILE_SHARE_DELETE,nullptr,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
-            if(file->handle==INVALID_HANDLE_VALUE) throw std::runtime_error("损坏片库仍被其他程序占用，请关闭占用程序后重试。");
+            file->lock=std::make_unique<ArchiveFileLock>(file->path);
             originals.push_back(std::move(file));
         }
         {
             Connection clean(staged,SQLITE_OPEN_READWRITE);
             exec(clean.value,"DELETE FROM app_launches; UPDATE directories SET state='interrupted',error='备份恢复后请重新扫描目录' WHERE state='scanning';");
         }
-        const auto marker=fs::path(path_.wstring()+L".restore-pending");
+        const auto marker=withSuffix(path_,".restore-pending");
         if(fs::exists(marker)) {safePath(pathText(marker),false);fs::copy_file(marker,directory/"previous-recovery.txt");}
         library_backup::cancelled(cancelled);
         {
-            const auto record=pathText(directory);
-            HANDLE journal=CreateFileW(marker.c_str(),GENERIC_WRITE,0,nullptr,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL|FILE_FLAG_WRITE_THROUGH,nullptr);
-            if(journal==INVALID_HANDLE_VALUE) throw std::runtime_error("无法保存恢复记录，原片库未修改。");
-            DWORD written=0;
-            const bool saved=WriteFile(journal,record.data(),static_cast<DWORD>(record.size()),&written,nullptr) && written==record.size() && FlushFileBuffers(journal);
-            CloseHandle(journal);
-            if(!saved) throw std::runtime_error("无法持久保存恢复记录，原片库未修改。");
+            durableWrite(marker,pathText(directory));
         }
         // The short rename phase is not cancellable; no original files are deleted.
         progress("restoring",0,0);
-        for(const auto& file:originals)
-            if(!MoveFileExW(file->path.c_str(),file->saved.c_str(),MOVEFILE_WRITE_THROUGH))
-                throw std::runtime_error("未能归档损坏片库。原文件和恢复记录已保留，请重新选择备份继续恢复。");
-        if(!MoveFileExW(staged.c_str(),path_.c_str(),MOVEFILE_WRITE_THROUGH))
-            throw std::runtime_error("备份未能放入片库位置。原文件已保留在 backups 中，请重新选择备份恢复。");
+        for(const auto& file:originals) moveFile(file->path,file->saved);
+        syncFile(staged);
+        moveFile(staged,path_);
         originals.clear();
         const std::atomic_bool cancelled_ignored{false};
         Json info;

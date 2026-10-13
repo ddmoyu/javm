@@ -3,7 +3,7 @@
 #include <set>
 #include <vector>
 #include <sstream>
-#include <windows.h>
+#include "file_platform.hpp"
 
 namespace media {
 Json readNfo(const fs::path& path, std::string* original) {
@@ -44,19 +44,16 @@ Json readNfo(const fs::path& path, std::string* original) {
 }
 namespace {
 void atomicWrite(const fs::path& path, const std::string& content, const std::string& expected) {
-    const auto temporary=fs::path(path.wstring()+L".javm-"+wide(uuid())+L".tmp");
+    const auto temporary=withSuffix(path,".javm-"+uuid()+".tmp");
+    createExclusiveFile(temporary,content);
     try {
-        std::ofstream output(temporary,std::ios::binary|std::ios::trunc);
-        if (!output || !output.write(content.data(),static_cast<std::streamsize>(content.size())) || !output.flush())
-            throw std::runtime_error("无法写入资料文件，请检查目录权限和磁盘空间");
-        output.close();
         if (fs::exists(path)) {
             if (expected.empty() || reparse(path) || stamp(path)!=expected) throw std::runtime_error("资料文件已被其他程序修改，请重试");
-            const auto backup=fs::path(path.wstring()+L".javm.bak");
-            if (!fs::exists(backup)) fs::copy_file(path,backup,fs::copy_options::none);
+            const auto backup=withSuffix(path,".javm.bak");
+            if (!fs::exists(backup)) { fs::copy_file(path,backup,fs::copy_options::none); syncFile(backup); }
         } else if (!expected.empty()) throw std::runtime_error("资料文件已被移除，请重试");
-        if (!MoveFileExW(temporary.c_str(),path.c_str(),MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH))
-            throw std::runtime_error("无法替换资料文件，原文件和备份保留");
+        // 新建时不能覆盖检查后出现的同名文件；已有文件保留乐观冲突检查。
+        moveFile(temporary,path,!expected.empty());
     } catch (...) { std::error_code ec; fs::remove(temporary,ec); throw; }
 }
 }
@@ -73,7 +70,7 @@ fs::path saveScrapedArtwork(const fs::path& source, const fs::path& video) {
     else if (content.starts_with(std::string("\x89PNG\r\n\x1a\n",8))) suffix=".png";
     else if (content.size()>12 && content.starts_with("RIFF") && content.substr(8,4)=="WEBP") suffix=".webp";
     else throw std::runtime_error("封面响应不是支持的图片格式");
-    auto target=video.parent_path()/wide(pathText(video.stem())+"-poster"+suffix);
+    auto target=video.parent_path()/pathFromText(pathText(video.stem())+"-poster"+suffix);
     if (fs::exists(target)) {
         if (reparse(target) || !fs::is_regular_file(target)) throw std::runtime_error("封面路径已被占用");
         return target;

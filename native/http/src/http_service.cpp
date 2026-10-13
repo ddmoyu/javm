@@ -1,6 +1,6 @@
 #include "http_service.hpp"
+#include "../../common/utf8.hpp"
 #include <curl/curl.h>
-#include <windows.h>
 #include <algorithm>
 #include <chrono>
 #include <cctype>
@@ -91,7 +91,7 @@ struct Transfer {
             value.erase(0, value.find_first_not_of(" \t"));
             value.erase(value.find_last_not_of(" \t\r\n") + 1);
             // JSON 事件只能携带 UTF-8；拒绝畸形响应头，不能让序列化异常终止扩展线程。
-            if (!value.empty() && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0)) {
+            if (!isValidUtf8(value)) {
                 self.invalidHeaders = true;
                 return 0;
             }

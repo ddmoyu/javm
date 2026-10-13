@@ -29,7 +29,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   listeners.clear();
   session.clear();
-  vi.stubGlobal("window", { NL_PID: "123" });
+  vi.stubGlobal("window", { NL_PID: "123", NL_OS: "Windows" });
   vi.stubGlobal("sessionStorage", {
     getItem: (key: string) => session.get(key) ?? null,
     setItem: (key: string, value: string) => session.set(key, value),

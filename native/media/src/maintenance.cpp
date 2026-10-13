@@ -20,7 +20,7 @@ std::string ext(const fs::path& path) { return lower(pathText(path.extension()))
 const std::set<std::string> images{".jpg",".jpeg",".png",".webp"};
 void checkRetainedCopy(const Json& retained) {
     if (retained.is_null()) return;
-    const fs::path path(wide(retained.at("path")));
+    const fs::path path(pathFromText(retained.at("path")));
     if (!checkedFile(path) || fs::file_size(path) == 0)
         throw std::runtime_error("要保留的视频已丢失或不可用，未继续删除，请重新扫描并选择保留文件");
     if (stamp(path) != retained.at("stamp").get<std::string>())
@@ -29,7 +29,7 @@ void checkRetainedCopy(const Json& retained) {
 Json workRemovalPlan(const Json& info) {
     Json files=Json::array(),preserved=Json::array();
     for(const auto& item:info.at("files")) {
-        const fs::path path(wide(item.at("path")));
+        const fs::path path(pathFromText(item.at("path")));
         const auto kind=item.at("kind").get<std::string>();
         std::string reason;
         if(item.at("shared").get<bool>()) reason="其他影片仍在使用";
@@ -67,7 +67,7 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
         auto items=store_.maintenanceRows(params.value("after",std::string{}),health);
         if(health) for(auto& item:items) {
             Json issues=Json::array();
-            const fs::path path(wide(item.at("path")));
+            const fs::path path(pathFromText(item.at("path")));
             try {
                 if(!checkedFile(path)) { issues.push_back("视频文件缺失"); item["missing"]=true; }
                 else {
@@ -82,11 +82,11 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
             } catch(const std::exception&) { issues.push_back("目录离线、不可访问或包含链接"); item["missing"]=true; }
             if(item.at("code")=="" || item.at("scan_status").get<int>()<2) issues.push_back("作品资料未补全");
             if(item.at("nfo").is_null()) issues.push_back("缺少规范 NFO");
-            else { std::error_code ec; if(!fs::is_regular_file(fs::path(wide(item.at("nfo"))),ec) || ec) issues.push_back("NFO 不可访问"); }
+            else { std::error_code ec; if(!fs::is_regular_file(fs::path(pathFromText(item.at("nfo"))),ec) || ec) issues.push_back("NFO 不可访问"); }
             bool artwork=false;
             for(const auto* kind:{"poster","thumb","fanart"}) {
                 const auto value=item.at(kind).get<std::string>();
-                if(!value.empty()) { std::error_code ec; artwork=artwork || (fs::is_regular_file(fs::path(wide(value)),ec) && !ec); }
+                if(!value.empty()) { std::error_code ec; artwork=artwork || (fs::is_regular_file(fs::path(pathFromText(value)),ec) && !ec); }
                 item.erase(kind);
             }
             if(!artwork) issues.push_back("缺少可访问的封面");
@@ -123,8 +123,8 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
             throw std::runtime_error("正在清理另一部影片，请稍候");
         }
         const auto info = store_.removalInfo(params.at("id"));
-        const auto path = fs::path(wide(info.at("video_path"))).lexically_normal();
-        if (pathKey(path) != pathKey(fs::path(wide(params.at("path"))))) throw std::runtime_error("视频路径已变化，请重新检查");
+        const auto path = fs::path(pathFromText(info.at("video_path"))).lexically_normal();
+        if (pathKey(path) != pathKey(fs::path(pathFromText(params.at("path"))))) throw std::runtime_error("视频路径已变化，请重新检查");
         const bool exists = checkedFile(path), metadataOnly = params.at("metadataOnly");
         if (exists && !info.at("file_stamp").get<std::string>().empty() && stamp(path) != info.at("file_stamp").get<std::string>())
             throw std::runtime_error("视频文件已变化，请重新扫描后核对");
@@ -134,9 +134,9 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
                 throw std::runtime_error("重复清理需要保留一个可用视频，请取消勾选要保留的文件");
             const auto& requested = params.at("retained");
             const auto copy = store_.fileIdentity(requested.at("id"));
-            const fs::path copyPath(wide(copy.at("path")));
+            const fs::path copyPath(pathFromText(copy.at("path")));
             if (copy.at("id") == info.at("id") || pathKey(copyPath) == pathKey(path) ||
-                pathKey(copyPath) != pathKey(fs::path(wide(requested.at("path")))))
+                pathKey(copyPath) != pathKey(fs::path(pathFromText(requested.at("path")))))
                 throw std::runtime_error("保留视频的路径或身份已变化，请重新检查");
             if (!checkedFile(copyPath) || fs::file_size(copyPath) == 0)
                 throw std::runtime_error("要保留的视频已丢失或不可用，未删除任何文件，请重新扫描");
@@ -146,7 +146,7 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
             retained = {{"id",copy.at("id")},{"path",pathText(copyPath)},{"stamp",signature}};
         }
         std::set<std::string> shared, added;
-        for (const auto& value: info["shared"]) shared.insert(pathKey(fs::path(wide(value))));
+        for (const auto& value: info["shared"]) shared.insert(pathKey(fs::path(pathFromText(value))));
         Json files = Json::array();
         unsigned preserved = 0;
         const auto stem = lower(pathText(path.stem()));
@@ -170,16 +170,16 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
         // 普通视频删除保留作品资料；只有显式的资料清理才处理 NFO 和封面。
         if(metadataOnly) {
         if(!info["shared"].empty()) {
-            for(const auto& value:info["assets"]) if(shared.contains(pathKey(fs::path(wide(value)))))
+            for(const auto& value:info["assets"]) if(shared.contains(pathKey(fs::path(pathFromText(value)))))
                 throw std::runtime_error("作品资料仍被其他视频使用，不能单独清除");
         }
         for (const auto& value: info["assets"]) {
-            const fs::path asset(wide(value));
+            const fs::path asset(pathFromText(value));
             if (ext(asset) == ".nfo" || images.contains(ext(asset))) add(asset); else ++preserved;
         }
         auto nfo = path; nfo.replace_extension(".nfo"); add(nfo);
         for (const auto* kind: {"poster","thumb","fanart"}) for (const auto& extension: images)
-            add(path.parent_path()/wide(pathText(path.stem())+"-"+kind+extension));
+            add(path.parent_path()/pathFromText(pathText(path.stem())+"-"+kind+extension));
         }
         if (!metadataOnly) {
             add(path);
@@ -194,7 +194,7 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
     if (method == "library.maintenance.checkFile") {
         for (const auto& file: removal_["files"]) if (file["path"] == params.at("path")) {
             checkRetainedCopy(removal_.at("retained"));
-            const fs::path path(wide(file["path"]));
+            const fs::path path(pathFromText(file["path"]));
             if (!checkedFile(path)) return {{"exists",false}};
             if(removal_.value("wholeWork",false) && !file.at("exists").get<bool>())
                 throw std::runtime_error("原本缺失的文件已恢复，请重新读取删除清单");
@@ -204,10 +204,10 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
         throw std::runtime_error("文件不属于本次清理任务");
     }
     if (method == "library.maintenance.complete") {
-        for (const auto& file: removal_["files"]) if (checkedFile(fs::path(wide(file["path"]))))
+        for (const auto& file: removal_["files"]) if (checkedFile(fs::path(pathFromText(file["path"]))))
             throw std::runtime_error("文件尚未删除，已保留数据库记录");
         const bool wholeWork=removal_.value("wholeWork",false);
-        if (!wholeWork && !removal_.at("metadataOnly").get<bool>() && checkedFile(fs::path(wide(removal_.at("path")))))
+        if (!wholeWork && !removal_.at("metadataOnly").get<bool>() && checkedFile(fs::path(pathFromText(removal_.at("path")))))
             throw std::runtime_error("视频文件仍存在或已恢复，已保留数据库记录，请重新检查");
         const auto id = removal_.at("id").get<std::string>();
         if(wholeWork) store_.completeWorkRemoval(id);

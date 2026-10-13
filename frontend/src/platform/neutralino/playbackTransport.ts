@@ -1,5 +1,6 @@
 import { filesystem, os, server } from "@neutralinojs/lib";
 import { findOnPath, runNativeProcess } from "./process";
+import { toolExecutableName } from "./toolPaths";
 import { mediaResourceUrl, readPlaybackCache } from "./playbackResources";
 import type { MediaResponse, NativeMediaFetch } from "../../services/playback/PlaybackService";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
@@ -18,7 +19,7 @@ export class NativeMediaTransport {
 
   private initialize() {
     this.setup ??= (async () => {
-      const curl = await findOnPath("curl.exe");
+      const curl = await findOnPath(toolExecutableName("curl"));
       if (!curl) throw new Error("找不到系统 curl，无法加载需要原生请求的视频源。");
       const id = crypto.randomUUID();
       const directory = `${await os.getPath("temp")}/javm-playback-${id}`;

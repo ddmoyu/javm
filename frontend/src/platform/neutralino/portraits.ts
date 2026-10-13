@@ -1,4 +1,5 @@
-import { filesystem, os, server } from "@neutralinojs/lib";
+import { filesystem, server } from "@neutralinojs/lib";
+import { applicationCachePath } from "./applicationPaths";
 import type { PortraitPort } from "../../services/catalog/PortraitService";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { gfriendsIndexSources, validPortraitUrl } from "../../services/catalog/portraitUrls";
@@ -40,9 +41,7 @@ export function createPortraitPort(
   }
   async function initialize() {
     assertRelease();
-    directory = `${await os.getEnv("LOCALAPPDATA")}/JAVM/cache/portraits`;
-    if (!directory.startsWith("/") && !/^[A-Z]:[\\/]/i.test(directory))
-      throw new Error("无法定位本地头像缓存目录。");
+    directory = await applicationCachePath("portraits");
     try {
       await filesystem.createDirectory(directory);
     } catch (error) {

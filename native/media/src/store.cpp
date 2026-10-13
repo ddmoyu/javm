@@ -1,5 +1,4 @@
 #include "store.hpp"
-#include <windows.h>
 #include <chrono>
 #include <charconv>
 #include <cmath>
@@ -115,7 +114,7 @@ bool mergeRelations(sqlite3* db,const std::string& id,const std::string& kind,co
 
 Store::Store(fs::path path):path_(std::move(path)) {
     fs::create_directories(path_.parent_path());
-    if(fs::exists(fs::path(path_.wstring()+L".restore-pending"))) {
+    if(fs::exists(withSuffix(path_,".restore-pending"))) {
         setRecoveryError("上次损坏片库恢复未完成。请在设置中重新选择备份恢复；原文件保留在片库旁的 backups 目录。");
         return;
     }
@@ -150,7 +149,7 @@ void Store::open() {
         db_=nullptr;ready_=false;throw;
     }
 }
-Store::~Store() { if(db_) sqlite3_close(db_); if(mainInstance_) CloseHandle(mainInstance_); }
+Store::~Store() { if(db_) sqlite3_close(db_); }
 void Store::migrate() {
     const auto version=rows(db_,"PRAGMA user_version")[0]["user_version"];
     const auto application=rows(db_,"PRAGMA application_id")[0]["application_id"];
@@ -220,11 +219,7 @@ std::string sqlText(sqlite3_value* value) {
 int naturalCompare(void*, int aSize, const void* a, int bSize, const void* b) noexcept {
     const std::string_view left(static_cast<const char*>(a), aSize), right(static_cast<const char*>(b), bSize);
     try {
-        const auto wa = wide(std::string(left)), wb = wide(std::string(right));
-        if (wa.empty() || wb.empty()) return wa.empty() == wb.empty() ? 0 : wa.empty() ? -1 : 1;
-        const auto result = CompareStringEx(L"zh-CN", NORM_IGNORECASE | NORM_IGNORENONSPACE | SORT_DIGITSASNUMBERS,
-            wa.data(), static_cast<int>(wa.size()), wb.data(), static_cast<int>(wb.size()), nullptr, nullptr, 0);
-        if (result) return result - CSTR_EQUAL;
+        return compareNatural(std::string(left),std::string(right));
     } catch (...) { /* 无效旧文本仍有稳定的字节顺序。 */ }
     return left.compare(right);
 }
@@ -288,13 +283,7 @@ void Store::prepareCatalog() {
     check(db_,sqlite3_create_function_v2(db_,"javm_lower",1,SQLITE_UTF8 | SQLITE_DETERMINISTIC,nullptr,
         [](sqlite3_context* context,int,sqlite3_value** values) {
             try {
-                const auto source = wide(sqlText(values[0]));
-                if (source.empty()) { sqlite3_result_text(context,"",0,SQLITE_STATIC); return; }
-                const auto size = LCMapStringEx(LOCALE_NAME_INVARIANT,LCMAP_LOWERCASE,source.data(),static_cast<int>(source.size()),nullptr,0,nullptr,nullptr,0);
-                if (!size) throw std::runtime_error("无法转换查询文本");
-                std::wstring mapped(size,L'\0');
-                LCMapStringEx(LOCALE_NAME_INVARIANT,LCMAP_LOWERCASE,source.data(),static_cast<int>(source.size()),mapped.data(),size,nullptr,nullptr,0);
-                const auto result = utf8(mapped);
+                const auto result = unicodeLower(sqlText(values[0]));
                 sqlite3_result_text(context,result.data(),static_cast<int>(result.size()),SQLITE_TRANSIENT);
             } catch (const std::exception& error) { sqlite3_result_error(context,error.what(),-1); }
         },nullptr,nullptr,nullptr));

@@ -1,5 +1,8 @@
 #include "legacy_import.hpp"
+#include "file_platform.hpp"
+#ifdef _WIN32
 #include <windows.h>
+#endif
 #include <algorithm>
 #include <chrono>
 #include <map>
@@ -74,6 +77,7 @@ public:
     Connection(const Connection&)=delete;
 };
 struct SourceGuard {
+#ifdef _WIN32
     HANDLE value=INVALID_HANDLE_VALUE;
     explicit SourceGuard(const fs::path& path) {
         if(reparse(path) || reparse(path.parent_path())) throw std::runtime_error("旧数据库路径不能是符号链接或目录联接");
@@ -91,12 +95,19 @@ struct SourceGuard {
         CloseHandle(current);
         return same;
     }
+#else
+    explicit SourceGuard(const fs::path& path) {
+        if (reparse(path) || reparse(path.parent_path())) throw std::runtime_error("旧数据库路径不能是符号链接");
+    }
+    // POSIX 没有 Win32 共享写入禁止语义。通过 SQLite 备份获得一致快照，保留源库和侧车。
+    bool stillAt(const fs::path&) const { return false; }
+#endif
 };
 struct TemporaryDatabase {
     fs::path path;
     ~TemporaryDatabase() {
         std::error_code error;
-        for(const auto* suffix:{L"",L"-wal",L"-shm",L"-journal"}) fs::remove(fs::path(path.wstring()+suffix),error);
+        for(const auto* suffix:{"","-wal","-shm","-journal"}) fs::remove(withSuffix(path,suffix),error);
     }
 };
 void stopIfCancelled(const std::atomic_bool& cancelled) { if(cancelled) throw std::runtime_error("导入已取消，原数据库已保留"); }
@@ -108,7 +119,7 @@ struct Interruptible {
     ~Interruptible() { sqlite3_progress_handler(db,0,nullptr,nullptr); }
 };
 void copy(sqlite3* source,const fs::path& destination,const std::atomic_bool& cancelled,const Progress& progress) {
-    const auto partial=fs::path(destination.wstring()+L".partial");
+    const auto partial=withSuffix(destination,".partial");
     TemporaryDatabase cleanup{partial};
     {
     Connection out(partial,SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE);
@@ -127,7 +138,8 @@ void copy(sqlite3* source,const fs::path& destination,const std::atomic_bool& ca
     if(code!=SQLITE_DONE || finished!=SQLITE_OK) throw std::runtime_error("数据库备份失败，请退出旧程序并检查可用磁盘空间后重试");
     if(one(out.value,"PRAGMA quick_check")["quick_check"]!="ok") throw std::runtime_error("数据库备份完整性检查失败");
     }
-    fs::rename(partial,destination);
+    syncFile(partial);
+    moveFile(partial,destination);
 }
 }
 fs::path sourcePath(const fs::path& target) { return target.parent_path().parent_path()/"com.ddmoyu.javm"/"javm.db"; }
@@ -186,8 +198,8 @@ Json importDatabase(sqlite3* db,const fs::path& target,const std::atomic_bool& c
         std::string warning;
         std::error_code ec;
         // 先移除主文件，再清理其配套文件；不触碰图片、配置或整个旧目录。
-        if(!guard.stillAt(source) || !fs::remove(source,ec) || ec) warning="旧数据已导入，但旧数据库未能移除。完成记录已保存，下次启动不会重复提醒。";
-        else for(const auto* suffix:{L"-wal",L"-shm",L"-journal"}) { fs::remove(fs::path(source.wstring()+suffix),ec); if(ec) warning="旧数据库已移除，部分配套文件未能清理；不会重复导入。"; }
+        if(!guard.stillAt(source) || !fs::remove(source,ec) || ec) warning="旧数据已导入，原数据库及配套文件已保留。完成记录已保存，下次启动不会重复提醒。";
+        else for(const auto* suffix:{"-wal","-shm","-journal"}) { fs::remove(withSuffix(source,suffix),ec); if(ec) warning="旧数据库已移除，部分配套文件未能清理；不会重复导入。"; }
         return {{"state","completed"},{"sourcePath",pathText(source)},{"backupPath",pathText(backup)},
                 {"targetBackupPath",pathText(before)},{"importedRows",count},{"warning",warning}};
     } catch(...) {

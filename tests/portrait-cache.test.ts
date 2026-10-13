@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import type { NetworkSettingsService } from "../frontend/src/services/network/NetworkSettingsService";
 
 const fixture = vi.hoisted(() => ({
@@ -58,7 +58,9 @@ vi.mock("../frontend/src/platform/neutralino/playbackResources", () => ({
 }));
 import { createPortraitPort } from "../frontend/src/platform/neutralino/portraits";
 
+beforeEach(() => vi.stubGlobal("window", { NL_OS: "Windows" }));
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   fixture.files.clear();
   fixture.requests.length = 0;

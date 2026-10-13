@@ -13,6 +13,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  portability:
+    # 非标签的手动运行检查跨平台源码；标签发布继续走现有发布任务。
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/portability-checks.yml
   build:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-2025

@@ -1,10 +1,12 @@
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { desktopHostFile, installDesktopHost } from "./desktop-host.mjs";
 
 // neu update removes cwd/.tmp. Only expose a fresh, owned staging directory.
+const host = desktopHostFile();
 const root = fileURLToPath(new URL("../", import.meta.url));
 const buildRoot = path.join(root, "build");
 await mkdir(buildRoot, { recursive: true });
@@ -25,9 +27,8 @@ try {
   );
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error("Neutralino host setup failed: " + result.status);
-  await mkdir(path.join(root, "bin"), { recursive: true });
-  for (const filename of ["neutralino-win_x64.exe"])
-    await copyFile(path.join(stage, "bin", filename), path.join(root, "bin", filename));
+  await installDesktopHost(path.join(stage, "bin"), path.join(root, "bin"));
+  console.log(`Neutralino 桌面宿主已准备：${host}`);
 } finally {
   const resolved = path.resolve(stage);
   if (

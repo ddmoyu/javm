@@ -1,5 +1,10 @@
 #include "nfo_compat.hpp"
+#include "../../common/unicode.hpp"
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <iconv.h>
+#endif
 #include <algorithm>
 #include <cstdint>
 
@@ -28,11 +33,34 @@ std::string declaredEncoding(const std::string& bytes) {
     return close == std::string::npos || close > end ? "" : head.substr(quote+1,close-quote-1);
 }
 std::string fromCodePage(const std::string& bytes, unsigned codepage) {
+    if (bytes.empty()) return {};
+#ifdef _WIN32
     const auto length = MultiByteToWideChar(codepage,MB_ERR_INVALID_CHARS,bytes.data(),static_cast<int>(bytes.size()),nullptr,0);
     if (!length) throw std::runtime_error("NFO 文本编码无效，原文件已保留");
     std::wstring buffer(length,L'\0');
     MultiByteToWideChar(codepage,MB_ERR_INVALID_CHARS,bytes.data(),static_cast<int>(bytes.size()),buffer.data(),length);
     return utf8(buffer);
+#else
+    if (codepage == 65001) {
+        if (!javm::isValidUtf8(bytes)) throw std::runtime_error("NFO 文本编码无效，原文件已保留");
+        return bytes;
+    }
+    const char* source = codepage == 54936 ? "GB18030" : codepage == 950 ? "CP950" : "CP932";
+    const auto converter = ::iconv_open("UTF-8", source);
+    if (converter == reinterpret_cast<iconv_t>(-1)) throw std::runtime_error("系统不支持该 NFO 文本编码");
+    struct Close { iconv_t value; ~Close() { ::iconv_close(value); } } close{converter};
+    // NFO 输入已限制 2 MiB；保守预留每字节最多四个 UTF-8 字节。
+    std::string output(bytes.size() * 4 + 32, '\0');
+    char* input = const_cast<char*>(bytes.data());
+    char* next = output.data();
+    size_t remaining = bytes.size(), available = output.size();
+    const auto converted = ::iconv(converter, &input, &remaining, &next, &available);
+    if (converted != 0 || remaining || ::iconv(converter, nullptr, nullptr, &next, &available) != 0)
+        throw std::runtime_error("NFO 文本编码无效，原文件已保留");
+    output.resize(output.size() - available);
+    if (!javm::isValidUtf8(output)) throw std::runtime_error("NFO 转换结果不是 UTF-8");
+    return output;
+#endif
 }
 }
 std::string decode(const std::string& bytes, Json& result) {
@@ -42,16 +70,15 @@ std::string decode(const std::string& bytes, Json& result) {
         bool big32 = bytes.compare(0,4,"\0\0\xfe\xff",4) == 0 || (byte(0) == 0 && byte(1) == 0 && byte(2) == 0 && byte(3) == '<');
         if (little32 || big32) {
             if (bytes.size()%4) throw std::runtime_error("NFO UTF-32 数据不完整");
-            std::wstring buffer;
+            std::u32string buffer;
             for (size_t i = 0; i < bytes.size(); i += 4) {
                 uint32_t value = little32 ? byte(i)|(byte(i+1)<<8)|(byte(i+2)<<16)|(byte(i+3)<<24) : (byte(i)<<24)|(byte(i+1)<<16)|(byte(i+2)<<8)|byte(i+3);
                 if (i == 0 && value == 0xfeff) continue;
                 if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) throw std::runtime_error("NFO UTF-32 字符无效");
-                if (value < 0x10000) buffer.push_back(static_cast<wchar_t>(value));
-                else { value -= 0x10000; buffer.push_back(static_cast<wchar_t>(0xd800+(value>>10))); buffer.push_back(static_cast<wchar_t>(0xdc00+(value&1023))); }
+                buffer.push_back(static_cast<char32_t>(value));
             }
             result["_encoding"] = little32 ? "UTF-32LE" : "UTF-32BE";
-            return utf8(buffer);
+            return javm::toUtf8<char32_t>(buffer);
         }
     }
     if (bytes.size() >= 2) {
@@ -59,19 +86,20 @@ std::string decode(const std::string& bytes, Json& result) {
         const bool big = bytes.starts_with("\xfe\xff") || (byte(0) == 0 && byte(1) == '<');
         if (little || big) {
             if (bytes.size()%2) throw std::runtime_error("NFO UTF-16 数据不完整");
-            std::wstring buffer;
+            std::u16string buffer;
             for (size_t i = 0; i < bytes.size(); i += 2) {
                 const auto value = little ? byte(i)|(byte(i+1)<<8) : (byte(i)<<8)|byte(i+1);
                 if (i == 0 && value == 0xfeff) continue;
-                buffer.push_back(static_cast<wchar_t>(value));
+                buffer.push_back(static_cast<char16_t>(value));
             }
             result["_encoding"] = little ? "UTF-16LE" : "UTF-16BE";
-            return utf8(buffer);
+            return javm::toUtf8<char16_t>(buffer);
         }
     }
-    if (bytes.starts_with("\xef\xbb\xbf")) { result["_encoding"] = "UTF-8 BOM"; return fromCodePage(bytes.substr(3),CP_UTF8); }
+    constexpr unsigned utf8CodePage = 65001;
+    if (bytes.starts_with("\xef\xbb\xbf")) { result["_encoding"] = "UTF-8 BOM"; return fromCodePage(bytes.substr(3),utf8CodePage); }
     const auto encoding = declaredEncoding(bytes);
-    unsigned codepage = CP_UTF8;
+    unsigned codepage = utf8CodePage;
     if (encoding == "gbk" || encoding == "gb2312" || encoding == "gb18030") codepage = 54936;
     else if (encoding == "big5" || encoding == "big-5") codepage = 950;
     else if (encoding == "shift_jis" || encoding == "shift-jis" || encoding == "windows-31j") codepage = 932;
@@ -80,7 +108,7 @@ std::string decode(const std::string& bytes, Json& result) {
     try {
         auto decoded = fromCodePage(bytes,codepage);
         result["_encoding"] = encoding.empty() ? "UTF-8" : encoding;
-        if (codepage != CP_UTF8) warn(result,"已按声明的旧文本编码读取，原始字节已保留");
+        if (codepage != utf8CodePage) warn(result,"已按声明的旧文本编码读取，原始字节已保留");
         return decoded;
     } catch (const std::exception&) {
         if (!encoding.empty()) throw;

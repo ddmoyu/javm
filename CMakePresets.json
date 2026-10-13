@@ -24,6 +24,32 @@
       }
     },
     {
+      "name": "windows-core",
+      "displayName": "Windows isolated database / HTTP core",
+      "inherits": "windows-msvc",
+      "cacheVariables": { "JAVM_CORE_ONLY": true }
+    },
+    {
+      "name": "windows-core-curl",
+      "displayName": "Windows isolated core / portable WebSocket",
+      "inherits": "windows-core",
+      "cacheVariables": { "JAVM_EXTENSION_TRANSPORT": "curl" }
+    },
+    {
+      "name": "linux-core",
+      "displayName": "Linux isolated database / HTTP core",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+      "cacheVariables": { "JAVM_CORE_ONLY": true }
+    },
+    {
+      "name": "macos-core",
+      "displayName": "macOS isolated database / HTTP core",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": { "JAVM_CORE_ONLY": true }
+    },
+    {
       "name": "windows-release",
       "displayName": "Windows x64 / Release portable",
       "inherits": "windows-msvc",
@@ -37,6 +63,10 @@
   "buildPresets": [
     { "name": "native", "configurePreset": "native" },
     { "name": "windows-msvc", "configurePreset": "windows-msvc" },
+    { "name": "windows-core", "configurePreset": "windows-core" },
+    { "name": "windows-core-curl", "configurePreset": "windows-core-curl" },
+    { "name": "linux-core", "configurePreset": "linux-core" },
+    { "name": "macos-core", "configurePreset": "macos-core" },
     { "name": "windows-release", "configurePreset": "windows-release" }
   ]
 }

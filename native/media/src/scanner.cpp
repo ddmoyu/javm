@@ -40,7 +40,7 @@ Json formats(const Json& input) {
 }
 fs::path validateRoot(const std::string& text) {
     if (text.empty() || text.size() > 32768 || text.find('\0') != std::string::npos) throw std::runtime_error("请选择有效目录");
-    auto path = fs::path(wide(text));
+    auto path = fs::path(pathFromText(text));
     if (!path.is_absolute() || !fs::is_directory(path)) throw std::runtime_error("目录不存在、磁盘离线或无法访问");
     if (reparse(path)) throw std::runtime_error("请选择实际目录，不支持符号链接或目录联接");
     path = fs::canonical(path);
@@ -49,16 +49,20 @@ fs::path validateRoot(const std::string& text) {
     return path;
 }
 int64_t modifiedSeconds(const fs::path& path) {
+#ifdef _WIN32
     return std::chrono::duration_cast<std::chrono::seconds>(std::chrono::clock_cast<std::chrono::system_clock>(fs::last_write_time(path)).time_since_epoch()).count();
+#else
+    return std::chrono::duration_cast<std::chrono::seconds>(fs::file_time_type::clock::to_sys(fs::last_write_time(path)).time_since_epoch()).count();
+#endif
 }
 fs::path localArtwork(const std::string& reference, const fs::path& nfoPath, const fs::path& root) {
     if (reference.empty() || reference.size() > 32768 || reference.find('\0') != std::string::npos || reference.find("://") != std::string::npos) return {};
-    auto path = fs::path(wide(reference));
+    auto path = fs::path(pathFromText(reference));
     if (!path.is_absolute()) path = nfoPath.parent_path()/path;
     path = path.lexically_normal();
     if (!within(path,root)) return {};
     const auto relative = path.lexically_relative(root);
-    if (pathText(relative).find(':') != std::string::npos) return {}; // 排除 NTFS 附加数据流。
+    if (hasAlternateStream(relative)) return {}; // Windows 排除 NTFS 附加数据流。
     auto part = root;
     for (const auto& name: relative) {
         part /= name;
@@ -169,7 +173,7 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
         // 只读内存快照；进度和取消不等待 SQLite 写锁、磁盘或网络共享。
         std::lock_guard lock(progressMutex_);
         return {{"directories",directories_},{"assetRoots",assetRoots_},{"scan",progress_},{"revision",revision_},{"databasePath",pathText(store_.path())},
-            {"metadataDirectory",pathText(store_.path().parent_path()/L"metadata")},{"logicalProcessors",logicalProcessorCount},{"defaultConcurrency",automaticScanConcurrency},{"maxConcurrency",maxScanConcurrency}};
+            {"metadataDirectory",pathText(store_.path().parent_path()/"metadata")},{"logicalProcessors",logicalProcessorCount},{"defaultConcurrency",automaticScanConcurrency},{"maxConcurrency",maxScanConcurrency}};
     }
     if (method == "library.cancel") { cancelled_ = true; return Json::object(); }
     if (method == "library.shutdown") { shutdown(); return Json::object(); }
@@ -298,7 +302,7 @@ Json LibraryService::prepareScrape(const Json& params) {
     const auto inputPath=params.value("path",std::string{});
     std::string fileStamp;
     if(!inputPath.empty()) {
-        auto path=fs::path(wide(inputPath)).lexically_normal();
+        auto path=fs::path(pathFromText(inputPath)).lexically_normal();
         if(!path.is_absolute() || !fs::is_regular_file(path) || !builtins.contains(extension(path)) || fs::file_size(path)==0)
             throw std::runtime_error("视频不存在、磁盘离线或格式不支持");
         for(auto part=path;!part.empty();part=part.parent_path()) {
@@ -316,13 +320,13 @@ Json LibraryService::prepareScrape(const Json& params) {
             {"width",metadata["width"]},{"height",metadata["height"]},{"duration_ms",metadata["durationMs"]},{"codec",metadata["codec"]},{"fast_hash",fastHash(path)}};
         if(!workId.empty()) file["work_id"]=workId;
         auto nfoPath=path; nfoPath.replace_extension(".nfo");
-        if(!fs::exists(nfoPath) && fs::exists(path.parent_path()/L"movie.nfo")) {
+        if(!fs::exists(nfoPath) && fs::exists(path.parent_path()/"movie.nfo")) {
             size_t entries=0,videos=0;
             for(const auto& item:fs::directory_iterator(path.parent_path())) {
                 if(++entries>10000) throw std::runtime_error("目录过大，请先执行目录扫描");
                 if(item.is_regular_file() && builtins.contains(extension(item.path()))) ++videos;
             }
-            if(videos==1) nfoPath=path.parent_path()/L"movie.nfo";
+            if(videos==1) nfoPath=path.parent_path()/"movie.nfo";
         }
         Json nfo=Json::object(); std::string original;
         if(fs::exists(nfoPath)) {
@@ -342,7 +346,7 @@ Json LibraryService::prepareScrape(const Json& params) {
     auto request=params;
     if(!workId.empty()) request["workId"]=workId;
     auto work=store_.prepareWork(request);
-    const auto nfoPath=fs::path(wide(work["nfo_path"]));
+    const auto nfoPath=fs::path(pathFromText(work["nfo_path"]));
     std::string nfoStamp;
     if(fs::exists(nfoPath)) {
         nfoStamp=stamp(nfoPath); std::string original; const auto nfo=readNfo(nfoPath,&original);
@@ -356,13 +360,13 @@ Json LibraryService::prepareScrape(const Json& params) {
         // 自动截帧的封面不算正式封面，刮削仍会下载来源封面替换它。
         if(std::string(kind)=="poster" && work.value("poster_auto",false)) continue;
         const auto text=work.value(kind,std::string{}); std::error_code ec;
-        artwork=artwork || (!text.empty() && fs::is_regular_file(fs::path(wide(text)),ec));
+        artwork=artwork || (!text.empty() && fs::is_regular_file(fs::path(pathFromText(text)),ec));
     }
     return {{"id",work["id"]},{"path",inputPath},{"fileStamp",fileStamp},{"nfoStamp",nfoStamp},{"nfoPath",pathText(nfoPath)},
         {"code",work["code"]},{"title",work["title"]},{"hasArtwork",artwork}};
 }
 void LibraryService::scan(Json directory, unsigned concurrency) {
-    const auto root = fs::path(wide(directory["path"]));
+    const auto root = fs::path(pathFromText(directory["path"]));
     auto allowed = builtins;
     if (!directory["formats"].empty()) { allowed.clear(); for (const auto& value: directory["formats"]) allowed.insert(value.get<std::string>()); }
     std::vector<std::pair<fs::path,int>> pending{{root,0}};
@@ -474,7 +478,7 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                         file["nfo_path"] = pathText(nfoPath);
                         file["nfo_stamp"] = old.value("nfo_stamp",std::string{});
                         file["nfo_parser"] = old.value("nfo_parser",0);
-                        if (signature != old.value("nfo_stamp",std::string{}) || old.value("nfo_parser",0) != nfoParserVersion || pathKey(nfoPath) != pathKey(fs::path(wide(old.value("nfo_path",std::string{}))))) {
+                        if (signature != old.value("nfo_stamp",std::string{}) || old.value("nfo_parser",0) != nfoParserVersion || pathKey(nfoPath) != pathKey(fs::path(pathFromText(old.value("nfo_path",std::string{}))))) {
                             try {
                                 nfo = readNfo(nfoPath,&nfoSource);
                                 if (stamp(nfoPath) != signature) throw std::runtime_error("NFO 正在变化，将在下次扫描重试");

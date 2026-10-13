@@ -2,6 +2,13 @@ import { events, filesystem, os } from "@neutralinojs/lib";
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { keepTextTail } from "../../services/downloads/text";
 import { logEvent } from "../../services/logging/events";
+import {
+  applicationToolPath,
+  executableExists,
+  findPosixToolOnPath,
+  toolPlatform,
+} from "./toolPaths";
+import { preparePosixProcess } from "./posixProcess";
 
 export interface ProcessResult {
   exitCode: number;
@@ -89,10 +96,11 @@ function remember(process: OwnedProcess, add: boolean) {
 // A frontend reload must stop this session's old workers before restoring rows.
 // Runtime ids + pids exclude the database extension and unrelated processes.
 export async function recoverNativeProcesses() {
+  const posix = toolPlatform() !== "Windows";
   const live = await os.getSpawnedProcesses();
   for (const process of rememberedProcesses()) {
     if (!live.some((item) => item.id === process.id && item.pid === process.pid)) continue;
-    if (process.cooperativeCancel) {
+    if (posix || process.cooperativeCancel) {
       // 重载后的旧监听器已不存在，通过宿主进程清单确认监督器已回收子进程。
       await os.updateSpawnedProcess(process.id, "stdInEnd").catch(() => {});
       const deadline = performance.now() + 5000;
@@ -125,6 +133,8 @@ interface ProcessEvent {
   action: "stdOut" | "stdErr" | "exit";
   data: string | number;
 }
+// 无等待队列；异常停止尚未确认的监督器继续占用名额，重试确认后才释放。
+const posixReservations = new Set<symbol>();
 export const runNativeProcess: ProcessRunner = async (
   file,
   args,
@@ -134,6 +144,13 @@ export const runNativeProcess: ProcessRunner = async (
   envs,
 ) => {
   signal.throwIfAborted();
+  const posix = toolPlatform() !== "Windows";
+  const reservation = Symbol();
+  if (posix) {
+    if (posixReservations.size >= 16) throw new Error("媒体工具并发已达上限，请等待已有任务停止。");
+    posixReservations.add(reservation);
+    cooperativeCancel = true;
+  }
   let process: { id: number; pid: number } | undefined;
   let completed = false;
   let stdOut = "";
@@ -163,15 +180,25 @@ export const runNativeProcess: ProcessRunner = async (
     }
   };
   const listener = (event: CustomEvent<ProcessEvent>) => accept(event.detail);
-  await events.on("spawnedProcess", listener);
   let terminating = false;
   let payloadPath: string | undefined;
+  let cleanupPosix: (() => Promise<void>) | undefined;
+  const stopped = () => {
+    completed = true;
+    posixReservations.delete(reservation);
+    if (process) remember(process, false);
+    resolve({ exitCode: -1, stdOut, stdErr });
+  };
   const confirmStop = async () => {
     if (!process || completed) return;
     const owned = process;
     try {
       const live = await os.getSpawnedProcesses();
-      if (completed || !live.some((item) => item.id === owned.id && item.pid === owned.pid)) return;
+      if (completed) return;
+      if (!live.some((item) => item.id === owned.id && item.pid === owned.pid)) {
+        stopped();
+        return;
+      }
       if (cooperativeCancel) {
         await os.updateSpawnedProcess(owned.id, "stdInEnd").catch(() => {});
         const deadline = performance.now() + 5000;
@@ -182,8 +209,7 @@ export const runNativeProcess: ProcessRunner = async (
               (item) => item.id === owned.id && item.pid === owned.pid,
             )
           ) {
-            completed = true;
-            resolve({ exitCode: -1, stdOut, stdErr });
+            stopped();
             return;
           }
           await new Promise((done) => setTimeout(done, 100));
@@ -208,14 +234,22 @@ export const runNativeProcess: ProcessRunner = async (
   };
   signal.addEventListener("abort", abort, { once: true });
   try {
+    await events.on("spawnedProcess", listener);
     // Avoid cmd.exe's command length limit for long signed URLs and Cookies.
     // PowerShell reads JSON as data and removes the private argument file itself.
-    payloadPath = `${await os.getPath("temp")}/javm-download-${crypto.randomUUID()}.json`;
-    const command = processCommand(file, args, ownerPid(), payloadPath, cooperativeCancel);
-    await filesystem.writeFile(
-      payloadPath,
-      JSON.stringify({ file, arguments: args.map(quoteWindowsArgument).join(" "), envs }),
-    );
+    let command: string;
+    if (posix) {
+      const prepared = await preparePosixProcess(file, args, ownerPid(), signal, envs);
+      command = prepared.command;
+      cleanupPosix = prepared.cleanup;
+    } else {
+      payloadPath = `${await os.getPath("temp")}/javm-download-${crypto.randomUUID()}.json`;
+      command = processCommand(file, args, ownerPid(), payloadPath, cooperativeCancel);
+      await filesystem.writeFile(
+        payloadPath,
+        JSON.stringify({ file, arguments: args.map(quoteWindowsArgument).join(" "), envs }),
+      );
+    }
     signal.throwIfAborted();
     // 官方 envs 会替换整个环境；仅在实际子进程上覆盖指定项，保留 PATH/SystemRoot。
     process = await os.spawnProcess(command);
@@ -237,6 +271,8 @@ export const runNativeProcess: ProcessRunner = async (
     );
     return finished;
   } catch (error) {
+    if (posix && process && !completed && !(error instanceof StopUnconfirmedError))
+      await confirmStop();
     logEvent(
       signal.aborted && !(error instanceof StopUnconfirmedError) ? "info" : "error",
       "process",
@@ -247,7 +283,9 @@ export const runNativeProcess: ProcessRunner = async (
     throw error;
   } finally {
     if (payloadPath) await filesystem.remove(payloadPath).catch(() => {});
+    await cleanupPosix?.();
     if (process && completed) remember(process, false);
+    if (!process || completed) posixReservations.delete(reservation);
     signal.removeEventListener("abort", abort);
     await events.off("spawnedProcess", listener);
   }
@@ -256,13 +294,9 @@ export const runNativeProcess: ProcessRunner = async (
 export async function findOnPath(name: string) {
   // 离线包优先使用随包工具；开发环境仍可使用 PATH 中的工具。
   if (!/^[a-z0-9_.-]+$/i.test(name)) throw new Error("工具名称无效。");
-  const root = (window as unknown as { NL_PATH: string }).NL_PATH;
-  const bundled = `${root}/bin/tools/${name}`;
-  try {
-    if ((await filesystem.getStats(bundled)).isFile) return bundled;
-  } catch (error) {
-    if ((error as { code?: string }).code !== "NE_FS_NOPATHE") throw error;
-  }
+  const bundled = applicationToolPath("tools", name);
+  if (await executableExists(bundled)) return bundled;
+  if (toolPlatform() !== "Windows") return findPosixToolOnPath(name);
   const command = encodedPowerShell(
     `$p=Get-Command -Name ${psLiteral(name)} -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false); [Console]::Write($p.Source) } else { exit 1 }`,
   );

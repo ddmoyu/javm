@@ -11,12 +11,12 @@ ORDER BY w.id LIMIT ?)SQL",{params.value("after",std::string{}),limit});
     }
     const auto id=stringValue(params,"id");
     if(!std::regex_match(id,std::regex("[A-Za-z0-9_-]{1,128}"))) throw std::runtime_error("作品标识无效");
-    const auto root=(path_.parent_path()/L"metadata"/wide(id)/L"images").lexically_normal();
+    const auto root=(path_.parent_path()/"metadata"/pathFromText(id)/"images").lexically_normal();
     const auto checked=[&](const fs::path& file) {
         if(!within(file,root) || pathKey(file.parent_path())!=pathKey(root)) throw std::runtime_error("图片不属于作品管理目录");
         for(auto part=file;!part.empty();part=part.parent_path()) { if(fs::exists(part) && reparse(part)) throw std::runtime_error("图片目录包含链接，已停止操作"); if(part==part.root_path()) break; }
     };
-    checked(root/L"check");
+    checked(root/"check");
     std::lock_guard lock(mutex_);
     auto works=rows(db_,"SELECT code,title,provenance,poster FROM works WHERE id=?",{id});
     if(works.empty()) throw std::runtime_error("作品已不存在");
@@ -42,7 +42,7 @@ ORDER BY w.id LIMIT ?)SQL",{params.value("after",std::string{}),limit});
         Transaction transaction(db_);
         for(const auto& row:rows(db_,"SELECT id,path FROM work_artwork WHERE work_id=? AND kind<>'poster'",{id})) {
             if(!params.value("clear",false) && std::find(selected.begin(),selected.end(),row["id"])==selected.end()) continue;
-            const fs::path file(wide(row["path"])); checked(file);
+            const fs::path file(pathFromText(row["path"])); checked(file);
             if(fs::exists(file) && !fs::is_regular_file(file)) throw std::runtime_error("图片路径已变化，请重新检查");
             removed.push_back(row["path"]);
             run(db_,"DELETE FROM work_artwork WHERE id=?",{row["id"]});
@@ -67,11 +67,11 @@ ORDER BY w.id LIMIT ?)SQL",{params.value("after",std::string{}),limit});
     if(params.contains("video")) {
         const auto video=params.at("video");
         const auto found=rows(db_,"SELECT path,file_stamp FROM media_files WHERE id=? AND work_id=?",{video.at("id"),id});
-        if(found.empty() || found[0]["file_stamp"]!=video.at("file_stamp") || stamp(fs::path(wide(found[0]["path"])))!=video.at("file_stamp").get<std::string>()) throw std::runtime_error("视频文件已变化，请重新扫描后截图");
+        if(found.empty() || found[0]["file_stamp"]!=video.at("file_stamp") || stamp(fs::path(pathFromText(found[0]["path"])))!=video.at("file_stamp").get<std::string>()) throw std::runtime_error("视频文件已变化，请重新扫描后截图");
     }
     Transaction transaction(db_);
     for(const auto& item:images) {
-        const auto kind=item.value("kind",std::string{}); const fs::path file=fs::path(wide(item.at("path"))).lexically_normal(); checked(file);
+        const auto kind=item.value("kind",std::string{}); const fs::path file=fs::path(pathFromText(item.at("path"))).lexically_normal(); checked(file);
         if(!std::regex_match(pathText(file.filename()),std::regex("[a-f0-9-]{36}\\.jpg",std::regex::icase))) throw std::runtime_error("图片文件名无效");
         if(kind!="poster" && kind!="screenshot" && kind!="sheet") throw std::runtime_error("图片用途无效");
         if(!fs::is_regular_file(file) || fs::file_size(file)>20*1024*1024) throw std::runtime_error("图片无效或超过 20 MiB");
@@ -91,8 +91,8 @@ ORDER BY w.id LIMIT ?)SQL",{params.value("after",std::string{}),limit});
     transaction.commit();
     Json retired=Json::array();
     for(const auto& old:previous) {
-        const fs::path file(wide(old["path"]));
-        if(std::any_of(images.begin(),images.end(),[&](const Json& image){ return pathKey(fs::path(wide(image.at("path"))))==pathKey(file); })) continue;
+        const fs::path file(pathFromText(old["path"]));
+        if(std::any_of(images.begin(),images.end(),[&](const Json& image){ return pathKey(fs::path(pathFromText(image.at("path"))))==pathKey(file); })) continue;
         try { checked(file); retired.push_back(old["path"]); } catch(...) { /* Preserve files outside our managed directory. */ }
     }
     return {{"retired",retired}};

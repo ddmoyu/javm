@@ -39,9 +39,9 @@ std::string Store::saveWork(const Json& file,const Json& nfo,const std::string* 
     const auto path=metadataOnly?std::string{}:file.at("path").get<std::string>();
     const auto nfoPath=file.value("nfo_path",std::string{}), requested=file.value("work_id",std::string{});
     Json found=Json::array();
-    if(!path.empty()) found=rows(db_,"SELECT work_id FROM media_files WHERE path_key=?",{pathKey(fs::path(wide(path)))});
+    if(!path.empty()) found=rows(db_,"SELECT work_id FROM media_files WHERE path_key=?",{pathKey(fs::path(pathFromText(path)))});
     if(!nfoPath.empty()) {
-        const auto document=rows(db_,"SELECT work_id FROM nfo_documents WHERE path_key=?",{pathKey(fs::path(wide(nfoPath)))});
+        const auto document=rows(db_,"SELECT work_id FROM nfo_documents WHERE path_key=?",{pathKey(fs::path(pathFromText(nfoPath)))});
         if(!found.empty() && !document.empty() && found[0]["work_id"]!=document[0]["work_id"]) throw std::runtime_error("视频与 NFO 属于不同作品，未自动合并");
         if(found.empty()) found=document;
     }
@@ -67,7 +67,7 @@ std::string Store::saveWork(const Json& file,const Json& nfo,const std::string* 
     auto old=fresh?Json::object():oldRows[0];
     auto provenance=fresh?Json::object():Json::parse(old["provenance"].get<std::string>());
     const auto previous=provenance, manual=provenance.value("_manual",Json::object());
-    const bool sameSource=!nfoPath.empty() && pathKey(fs::path(wide(nfoPath)))==pathKey(fs::path(wide(stringValue(old,"nfo_path"))));
+    const bool sameSource=!nfoPath.empty() && pathKey(fs::path(pathFromText(nfoPath)))==pathKey(fs::path(pathFromText(stringValue(old,"nfo_path"))));
     if(fresh || sameSource || stringValue(old,"nfo_path").empty()) provenance.update(nfo);
     auto merged=old;
     if(fresh) merged["title"]=file.value("name",std::string("未命名作品"));
@@ -112,20 +112,20 @@ provenance=excluded.provenance,scan_status=MAX(works.scan_status,excluded.scan_s
     if(!path.empty()) run(db_,R"SQL(INSERT INTO media_files(id,work_id,path_key,path,dir_path,file_size,file_mtime,fast_hash,file_stamp,width,height,duration_ms,codec)
 VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(path_key) DO UPDATE SET path=excluded.path,dir_path=excluded.dir_path,file_size=excluded.file_size,file_mtime=excluded.file_mtime,
 fast_hash=excluded.fast_hash,file_stamp=excluded.file_stamp,width=excluded.width,height=excluded.height,duration_ms=excluded.duration_ms,codec=excluded.codec,missing=0)SQL",
-        {uuid(),id,pathKey(fs::path(wide(path))),path,file.at("parent"),file.value("size",Json()),file.value("mtime",Json()),file.value("fast_hash",std::string{}),file.value("file_stamp",std::string{}),file.value("width",0),file.value("height",0),file.value("duration_ms",int64_t{0}),file.value("codec",std::string{})});
+        {uuid(),id,pathKey(fs::path(pathFromText(path))),path,file.at("parent"),file.value("size",Json()),file.value("mtime",Json()),file.value("fast_hash",std::string{}),file.value("file_stamp",std::string{}),file.value("width",0),file.value("height",0),file.value("duration_ms",int64_t{0}),file.value("codec",std::string{})});
     if(!nfoPath.empty()) {
         const bool canonical=rows(db_,"SELECT path_key FROM nfo_documents WHERE work_id=? AND canonical=1",{id}).empty();
         run(db_,R"SQL(INSERT INTO nfo_documents(path_key,work_id,path,stamp,canonical,encoding,parser_version) VALUES(?,?,?,?,?,?,?)
 ON CONFLICT(path_key) DO UPDATE SET stamp=excluded.stamp,encoding=excluded.encoding,parser_version=excluded.parser_version)SQL",
-            {pathKey(fs::path(wide(nfoPath))),id,nfoPath,file.value("nfo_stamp",std::string{}),canonical,nfo.value("_encoding",std::string{}),file.value("nfo_parser",0)});
-        if(source) { Query saved(db_,"UPDATE nfo_documents SET content=?2 WHERE path_key=?1",Json::array({pathKey(fs::path(wide(nfoPath)))})); saved.blob(2,*source); saved.next(); }
+            {pathKey(fs::path(pathFromText(nfoPath))),id,nfoPath,file.value("nfo_stamp",std::string{}),canonical,nfo.value("_encoding",std::string{}),file.value("nfo_parser",0)});
+        if(source) { Query saved(db_,"UPDATE nfo_documents SET content=?2 WHERE path_key=?1",Json::array({pathKey(fs::path(pathFromText(nfoPath)))})); saved.blob(2,*source); saved.next(); }
     }
-    if(file.contains("stream_url")) run(db_,"INSERT INTO stream_targets(media_id,url) SELECT id,? FROM media_files WHERE path_key=? ON CONFLICT(media_id) DO UPDATE SET url=excluded.url",{file.at("stream_url"),pathKey(fs::path(wide(path)))});
+    if(file.contains("stream_url")) run(db_,"INSERT INTO stream_targets(media_id,url) SELECT id,? FROM media_files WHERE path_key=? ON CONFLICT(media_id) DO UPDATE SET url=excluded.url",{file.at("stream_url"),pathKey(fs::path(pathFromText(path)))});
     if(!path.empty()) {
-        const auto name=pathText(fs::path(wide(path)).stem());std::smatch part;
+        const auto name=pathText(fs::path(pathFromText(path)).stem());std::smatch part;
         static const std::regex pattern(R"((?:^|[ ._-])(?:CD|DISC|DISK|PART)[ ._-]*([0-9]{1,2})(?:$|[ ._-]))",std::regex::icase);
         if(std::regex_search(name,part,pattern) && std::stoi(part[1])>0)
-            run(db_,"INSERT OR IGNORE INTO media_parts(media_id,part_number) SELECT id,? FROM media_files WHERE path_key=?",{std::stoi(part[1]),pathKey(fs::path(wide(path)))});
+            run(db_,"INSERT OR IGNORE INTO media_parts(media_id,part_number) SELECT id,? FROM media_files WHERE path_key=?",{std::stoi(part[1]),pathKey(fs::path(pathFromText(path)))});
     }
     for(const auto& item:nfo.value("uniqueids",Json::array())) if(!oldEditedCode && item.value("type",std::string{})=="metatube") {
         const auto value=item.value("value",std::string{}); const auto at=value.find(':'); if(at==std::string::npos) continue;
@@ -134,8 +134,8 @@ ON CONFLICT(path_key) DO UPDATE SET stamp=excluded.stamp,encoding=excluded.encod
         if(!existing.empty() && existing[0]["work_id"]!=id) throw std::runtime_error("来源身份已属于其他作品，导入已回滚");
         run(db_,"INSERT OR IGNORE INTO work_sources VALUES(?,?,?)",{provider,sourceId,id});
     }
-    if(!path.empty()) rememberAssetRoot(fs::path(wide(path)).parent_path());
-    if(!nfoPath.empty()) rememberAssetRoot(fs::path(wide(nfoPath)).parent_path());
+    if(!path.empty()) rememberAssetRoot(fs::path(pathFromText(path)).parent_path());
+    if(!nfoPath.empty()) rememberAssetRoot(fs::path(pathFromText(nfoPath)).parent_path());
     return id;
 }
 
@@ -182,8 +182,8 @@ Json Store::prepareWork(const Json& params) {
     {
         std::lock_guard lock(mutex_);
         if(rows(db_,"SELECT path_key FROM nfo_documents WHERE work_id=? AND canonical=1",{id}).empty()) {
-            const auto folder=path_.parent_path()/L"metadata"/wide(id);
-            fs::create_directories(folder); const auto path=folder/L"movie.nfo";
+            const auto folder=path_.parent_path()/"metadata"/pathFromText(id);
+            fs::create_directories(folder); const auto path=folder/"movie.nfo";
             run(db_,"INSERT INTO nfo_documents(path_key,work_id,path,canonical) VALUES(?,?,?,1)",{pathKey(path),id,pathText(path)});
         }
     }
@@ -220,7 +220,7 @@ Json Store::addDirectory(const fs::path& path,bool recursive,const Json& formats
     std::lock_guard lock(mutex_);
     std::string id;
     for(const auto& row:rows(db_,"SELECT id,path FROM directories")) {
-        const auto other=fs::path(wide(row["path"]));
+        const auto other=fs::path(pathFromText(row["path"]));
         if(pathKey(other)==pathKey(path)) id=row["id"];
         else if(within(path,other)||within(other,path)) throw std::runtime_error("所选目录与已有目录重叠，请扫描已有目录");
     }
@@ -237,14 +237,14 @@ Json Store::removeDirectory(const std::string& id) {
     return {{"removedVideos",0}};
 }
 void Store::finish(const Json& directory,const std::string& state,const std::string& error,bool reconcile,const std::atomic_bool* cancelled) {
-    const auto prefix=pathKey(fs::path(wide(directory["path"])))+"/";
+    const auto prefix=pathKey(fs::path(pathFromText(directory["path"])))+"/";
     if(reconcile) for(std::string after;;) {
         if(cancelled && *cancelled) break;
         Json files;
         { std::lock_guard lock(mutex_); files=rows(db_,"SELECT id,path,missing FROM media_files WHERE id>? AND instr(path_key,?)=1 ORDER BY id LIMIT 128",{after,prefix}); }
         for(const auto& file:files) {
             if(cancelled && *cancelled) break;
-            after=file["id"]; std::error_code ec; const bool exists=fs::is_regular_file(fs::path(wide(file["path"])),ec);
+            after=file["id"]; std::error_code ec; const bool exists=fs::is_regular_file(fs::path(pathFromText(file["path"])),ec);
             if(!ec || ec==std::errc::no_such_file_or_directory || ec==std::errc::not_a_directory) { std::lock_guard lock(mutex_); run(db_,"UPDATE media_files SET missing=? WHERE id=?",{!exists,file["id"]}); }
         }
         if(files.size()<128) break;
@@ -276,9 +276,9 @@ Json Store::removalInfo(const std::string& id) {
     Json assets=Json::array(),shared=Json::array(),stems=Json::array();
     for(const auto& row:rows(db_,"SELECT path FROM nfo_documents WHERE work_id=?",{workId})) assets.push_back(row["path"]);
     for(const auto* kind:{"poster","thumb","fanart"}) if(!stringValue(result,kind).empty()) assets.push_back(result[kind]);
-    const auto parent=pathKey(fs::path(wide(result["video_path"])).parent_path());
+    const auto parent=pathKey(fs::path(pathFromText(result["video_path"])).parent_path());
     for(const auto& row:rows(db_,"SELECT id,path,work_id FROM media_files WHERE id<>?",{id})) {
-        const auto path=fs::path(wide(row["path"]));
+        const auto path=fs::path(pathFromText(row["path"]));
         if(pathKey(path.parent_path())==parent) stems.push_back(lower(pathText(path.stem())));
         if(row["work_id"]==workId) for(const auto& asset:assets) shared.push_back(asset);
     }
@@ -308,7 +308,7 @@ Json Store::workRemovalInfo(const std::string& id) {
     std::map<std::string,Json> candidates;
     auto add=[&](const std::string& text,const char* kind,const std::string& signature=std::string{}) {
         if(text.empty()) return;
-        const auto path=fs::path(wide(text)).lexically_normal();
+        const auto path=fs::path(pathFromText(text)).lexically_normal();
         candidates.try_emplace(pathKey(path),Json{{"path",pathText(path)},{"kind",kind},{"expectedStamp",signature}});
         if(candidates.size()>1000) throw std::runtime_error("单部影片关联文件超过 1000 个，请先分批清理视频");
     };
@@ -322,7 +322,7 @@ Json Store::workRemovalInfo(const std::string& id) {
     for(const auto& row:rows(db_,"SELECT path FROM work_artwork WHERE work_id=? ORDER BY id LIMIT 1001",{id})) add(row["path"],"image");
 
     std::set<std::string> shared,parents;
-    for(const auto& [key,file]:candidates) parents.insert(pathKey(fs::path(wide(file.at("path"))).parent_path()));
+    for(const auto& [key,file]:candidates) parents.insert(pathKey(fs::path(pathFromText(file.at("path"))).parent_path()));
     auto protect=[&](const fs::path& path) {
         const auto key=pathKey(path);
         if(candidates.contains(key)) shared.insert(key);
@@ -338,18 +338,18 @@ UNION ALL SELECT fanart,'image' FROM works WHERE id<>? AND fanart<>''
 )SQL",Json::array({id,id,id,id,id,id}));
     while(references.next()) {
         const auto row=references.row();
-        auto path=fs::path(wide(row["path"]));
+        auto path=fs::path(pathFromText(row["path"]));
         protect(path);
-        if(row["kind"]=="nfo") protect(fs::path(path.wstring()+L".javm.bak"));
+        if(row["kind"]=="nfo") protect(withSuffix(path,".javm.bak"));
         if(row["kind"]=="video" && parents.contains(pathKey(path.parent_path()))) {
             // 同名视频和同目录通用侧车资料可能未建立第二份 NFO 关联，也须保留。
-            auto nfo=path; nfo.replace_extension(L".nfo");
-            protect(nfo); protect(fs::path(nfo.wstring()+L".javm.bak"));
-            protect(path.parent_path()/L"movie.nfo");
-            protect(path.parent_path()/L"movie.nfo.javm.bak");
+            auto nfo=path; nfo.replace_extension(".nfo");
+            protect(nfo); protect(withSuffix(nfo,".javm.bak"));
+            protect(path.parent_path()/"movie.nfo");
+            protect(path.parent_path()/"movie.nfo.javm.bak");
             for(const auto* kind:{"poster","thumb","fanart"}) for(const auto* extension:{".jpg",".jpeg",".png",".webp"}) {
-                protect(path.parent_path()/wide(pathText(path.stem())+"-"+kind+extension));
-                protect(path.parent_path()/wide(std::string(kind)+extension));
+                protect(path.parent_path()/pathFromText(pathText(path.stem())+"-"+kind+extension));
+                protect(path.parent_path()/pathFromText(std::string(kind)+extension));
             }
         }
     }

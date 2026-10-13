@@ -1,0 +1,18 @@
+# 工具监督器只负责原生进程生命周期；输出仍经 Neutralino 官方进程事件传递。
+if(UNIX)
+    add_executable(javm_process src/main_posix.cpp)
+    target_link_libraries(javm_process PRIVATE nlohmann_json::nlohmann_json)
+    target_compile_options(javm_process PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    set_target_properties(javm_process PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+endif()
+
+if(JAVM_CORE_ONLY)
+    add_executable(javm_process_spec_test ../../tests/native/process_spec_test.cpp)
+    target_link_libraries(javm_process_spec_test PRIVATE nlohmann_json::nlohmann_json)
+    if(MSVC)
+        target_compile_options(javm_process_spec_test PRIVATE /W4 /WX /permissive- /utf-8)
+    else()
+        target_compile_options(javm_process_spec_test PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+    add_test(NAME javm_process_spec COMMAND javm_process_spec_test)
+endif()

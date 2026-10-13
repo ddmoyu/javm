@@ -1,6 +1,7 @@
 #pragma once
 #include "common.hpp"
 #include "legacy_import.hpp"
+#include "file_platform.hpp"
 #include <sqlite3.h>
 #include <memory>
 #include <mutex>
@@ -11,7 +12,7 @@ class Store {
     fs::path path_;
     fs::path catalogSeedPath_;
     std::mutex mutex_;
-    void* mainInstance_ = nullptr;
+    std::unique_ptr<MainInstanceLock> mainInstance_;
     std::atomic_bool ready_{false};
     mutable std::mutex recoveryMutex_;
     std::string recoveryError_;

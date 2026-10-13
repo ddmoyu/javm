@@ -45,7 +45,7 @@ int64_t Store::importLegacyRows(sqlite3* source,const std::atomic_bool& cancelle
             if(std::string(table)=="actors"||std::string(table)=="genres"||std::string(table)=="tags") nfo[key]=values;
             else if(!nfo.contains(key)&&!values.empty()) nfo[key]=values[0];
         }
-        const auto path=fs::path(wide(stringValue(old,"video_path")));
+        const auto path=fs::path(pathFromText(stringValue(old,"video_path")));
         file["name"]=stringValue(old,"title").empty()?pathText(path.stem()):stringValue(old,"title");
         file["pending"]=numeric(old,"scan_status")<2;
         // 旧扫描器以文件名补标题；不能把它变成正式资料，阻止以后刮削补全。
@@ -105,8 +105,8 @@ int64_t Store::importLegacyRows(sqlite3* source,const std::atomic_bool& cancelle
     }
     if(exists("directories")) {
         Query dirs(source,"SELECT * FROM directories");
-        while(dirs.next()) { stop(); const auto old=dirs.row(); const auto path=fs::path(wide(stringValue(old,"path"))); if(!path.is_absolute()) continue;
-            bool overlap=false; for(const auto& current:rows(db_,"SELECT path FROM directories")) { const auto other=fs::path(wide(current["path"])); if(within(path,other)||within(other,path)) overlap=true; }
+        while(dirs.next()) { stop(); const auto old=dirs.row(); const auto path=fs::path(pathFromText(stringValue(old,"path"))); if(!path.is_absolute()) continue;
+            bool overlap=false; for(const auto& current:rows(db_,"SELECT path FROM directories")) { const auto other=fs::path(pathFromText(current["path"])); if(within(path,other)||within(other,path)) overlap=true; }
             if(!overlap) run(db_,"INSERT INTO directories(id,path,path_key,recursive,formats) VALUES(?,?,?,1,'[]')",{uuid(),pathText(path),pathKey(path)});
         }
     }

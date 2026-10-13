@@ -1,6 +1,6 @@
 {
   "name": "javm",
-  "version": "1.0.5-alpha.8",
+  "version": "1.0.5-alpha.9",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -33,7 +33,7 @@
     "test:offline": "node scripts/test-offline.mjs",
     "test:player-window": "node scripts/test-playback.mjs --window",
     "test:lifecycle": "node scripts/test-lifecycle.mjs",
-    "native:build": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/build-native.ps1"
+    "native:build": "node scripts/build-native.mjs"
   },
   "dependencies": {
     "@fancyapps/ui": "6.1.14",

@@ -6,6 +6,12 @@ import { runNativeProcess } from "./process";
 import { runPowerShell } from "./metadataHttp";
 import { logEvent } from "../../services/logging/events";
 import { OutputLines } from "../../services/downloads/progress";
+import {
+  applicationToolPath,
+  executableExists,
+  toolExecutableName,
+  toolPlatform,
+} from "./toolPaths";
 
 /**
  * MetaTube 每次查询会输出一行各资料来源的耗时与结果（如 `FANZA(9s):<invalid id>`），
@@ -32,11 +38,12 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
   return {
     async bundled() {
       // The executable belongs to the application package; user data holds only its database.
-      const base = `${(window as unknown as { NL_PATH: string }).NL_PATH}/bin/tools/metatube`;
-      const path = `${base}/metatube-server.exe`;
+      const base = applicationToolPath("tools", "metatube");
+      const path = `${base}/${toolExecutableName("metatube-server")}`;
       try {
         const stats = await filesystem.getStats(path);
         if (!stats.isFile) throw new Error("内置 MetaTube 程序无效，请重新获取 JAVM 运行包。");
+        if (!(await executableExists(path))) return;
         const manifest = await filesystem.getStats(`${base}/installed.json`);
         if (!manifest.isFile || manifest.size > 4096)
           throw new Error("内置 MetaTube 版本记录无效，请重新获取 JAVM 运行包。");
@@ -53,6 +60,8 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
       }
     },
     async start(path, signal) {
+      // 路径已适配；端口分配、凭据和组件分发尚未完成，不能误调用 PowerShell。
+      if (toolPlatform() !== "Windows") throw new Error("当前平台的 MetaTube 启动尚未开放。");
       if (!(await filesystem.getStats(path)).isFile)
         throw new Error("内置 MetaTube 组件缺失，请完整解压或重新获取 JAVM 运行包。");
       const base = await directory();

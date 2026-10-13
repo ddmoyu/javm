@@ -76,9 +76,11 @@ const image = (name: string) => `https://images.example.invalid/${name}`;
 const signal = () => new AbortController().signal;
 const parts = () => [...fixture.files.keys()].filter((file) => file.endsWith(".part"));
 beforeEach(() => {
+  vi.stubGlobal("window", { NL_OS: "Windows" });
   vi.stubEnv("DEV", false);
 });
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
   fixture.files.clear();

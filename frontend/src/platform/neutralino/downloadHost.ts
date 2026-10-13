@@ -4,6 +4,7 @@ import { joinPath } from "../../services/downloads/input";
 import { findOnPath, runNativeProcess } from "./process";
 import { NativeLibraryPort } from "./library";
 import { createMediaProbe } from "../../services/downloads/probe";
+import { executableExists, toolExecutableName } from "./toolPaths";
 
 const mediaPort = new NativeLibraryPort();
 
@@ -58,14 +59,10 @@ export const nativeDownloadHost: DownloadHost = {
   run: runNativeProcess,
   probe: createMediaProbe(mediaPort.request.bind(mediaPort)),
   async tool(name, configured) {
-    const candidates = configured.trim()
-      ? [configured.trim()]
-      : [joinPath(nativeRoot(), "bin", "tools", `${name}.exe`)];
-    for (const path of candidates) {
-      if ((await stat(path))?.isFile) return path;
-    }
-    if (!configured.trim()) {
-      const path = await findOnPath(`${name}.exe`);
+    if (configured.trim()) {
+      if (await executableExists(configured.trim())) return configured.trim();
+    } else {
+      const path = await findOnPath(toolExecutableName(name));
       if (path) return path;
     }
     throw new Error(`下载组件 ${name} 缺失，请检查软件包是否完整。`);

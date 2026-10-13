@@ -1,6 +1,6 @@
 // 内置快照只读附加，不导入用户片库，也不经 JS 重复导入整个名单。
 Json Store::catalogSeed(const Json& params) {
-    const auto path=fs::path(wide(requestText(params,"path")));
+    const auto path=fs::path(pathFromText(requestText(params,"path")));
     if(!path.is_absolute() || !fs::is_regular_file(path) || fs::file_size(path)>16*1024*1024)
         throw std::runtime_error("内置目录文件无效，请重新安装。");
     std::lock_guard lock(mutex_);

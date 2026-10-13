@@ -37,7 +37,7 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
     };
     const auto filePath=params.value("path",std::string{});
     if (!filePath.empty()) {
-        const auto path=fs::path(wide(filePath));
+        const auto path=fs::path(pathFromText(filePath));
         for(auto part=path;!part.empty();part=part.parent_path()) {
             if(reparse(part)) throw std::runtime_error("视频路径变为链接，请重新关联");
             if(part==part.root_path()) break;
@@ -84,7 +84,7 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
         }
         merged[key]=value;
     }
-    const auto nfoPath=fs::path(wide(stringValue(current,"nfo_path")));
+    const auto nfoPath=fs::path(pathFromText(stringValue(current,"nfo_path")));
     if(!nfoPath.is_absolute()) throw std::runtime_error("作品没有资料保存位置，请重新准备刮削");
     for(auto part=nfoPath;!part.empty();part=part.parent_path()) {
         if(fs::exists(part) && reparse(part)) throw std::runtime_error("资料路径变为链接，已停止写入");
@@ -96,7 +96,7 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
     std::string warning, poster=stringValue(current,"poster");
     const auto image=params.value("image",std::string{});
     if (!image.empty()) {
-        try { poster=pathText(saveScrapedArtwork(fs::path(wide(image)),nfoPath)); }
+        try { poster=pathText(saveScrapedArtwork(fs::path(pathFromText(image)),nfoPath)); }
         catch (const std::exception& error) { warning=std::string("封面未保存：")+error.what(); }
     }
     Json metadata={{"title",merged["title"]},{"originaltitle",merged["original_title"]},{"num",merged["code"]},
@@ -107,8 +107,8 @@ Json Store::applyScrape(const Json& params, const std::atomic_bool& cancelled) {
     const bool automaticPoster=!poster.empty() && poster==autoPoster;
     // 自动截帧的封面只在片库内显示，不写入 NFO。
     if (!poster.empty() && !automaticPoster) {
-        const auto relative=fs::path(wide(poster)).lexically_relative(nfoPath.parent_path());
-        metadata["poster"]=relative.empty() ? poster : utf8(relative.generic_wstring());
+        const auto relative=fs::path(pathFromText(poster)).lexically_relative(nfoPath.parent_path());
+        metadata["poster"]=relative.empty() ? poster : genericPathText(relative);
     }
     Json source={{"workId",id},{"hasVideo",!current["media_files"].empty()},{"provider",provider},{"id",providerId},{"homepage",details.value("homepage",std::string{})}};
     source["sources"]=sources;
@@ -203,7 +203,7 @@ void Store::updateMetadata(const Json& params) {
         else if (arrays.contains(key)) oldValue = current[key];
         else oldValue = stringValue(current,columns.contains(key) ? columns.at(key).c_str() : key.c_str());
         // 未命名的本地视频在前端显示文件名作为标题。
-        if (key == "title" && oldValue == "") oldValue = pathText(fs::path(wide(current["video_path"])).filename());
+        if (key == "title" && oldValue == "") oldValue = pathText(fs::path(pathFromText(current["video_path"])).filename());
         if (oldValue != expected[key]) throw std::runtime_error("资料已被其他操作更新，请重新打开影片后再保存");
     }
     if (patch.contains("code") && !patch["code"].get<std::string>().empty() && !rows(db_,"SELECT id FROM works WHERE id<>? AND code_key=? LIMIT 1",{id,codeKey(patch["code"])}).empty()) throw std::runtime_error("该番号已存在");

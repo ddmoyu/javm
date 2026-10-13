@@ -1,6 +1,18 @@
 #include "common.hpp"
+#include "file_platform.hpp"
+#include "probe.hpp"
+#include "../../common/unicode.hpp"
+#ifdef _WIN32
 #include <windows.h>
 #include <objbase.h>
+#else
+#include <unistd.h>
+#ifdef __APPLE__
+#include <stdlib.h>
+#else
+#include <sys/random.h>
+#endif
+#endif
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
@@ -8,41 +20,74 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <regex>
+#include <cerrno>
 
 namespace media {
 std::wstring wide(const std::string& text) {
-    const auto count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0);
-    if (!count && !text.empty()) throw std::runtime_error("路径不是有效的 UTF-8");
-    std::wstring result(count, L'\0');
-    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), count);
-    return result;
+    return javm::fromUtf8(text);
 }
 std::string utf8(const std::wstring& text) {
-    const auto count = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr);
-    if (!count && !text.empty()) throw std::runtime_error("路径包含无效字符");
-    std::string result(count, '\0');
-    WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text.data(), static_cast<int>(text.size()), result.data(), count, nullptr, nullptr);
-    return result;
+    return javm::toUtf8<wchar_t>(text);
 }
-std::string pathText(const fs::path& path) { return utf8(path.wstring()); }
+fs::path pathFromText(const std::string& text) { return javm::probe::pathFromUtf8(text); }
+fs::path withSuffix(fs::path path, const std::string& suffix) { return path += pathFromText(suffix); }
+std::string pathText(const fs::path& path) { return javm::probe::pathToUtf8(path); }
+std::string genericPathText(const fs::path& path) {
+    const auto text = path.generic_u8string();
+    return std::string(reinterpret_cast<const char*>(text.data()), text.size());
+}
 std::string pathKey(const fs::path& path) {
-    auto text = path.lexically_normal().generic_wstring();
-    while (text.size() > 1 && text.back() == L'/') text.pop_back();
+    auto text = genericPathText(path.lexically_normal());
+    while (text.size() > 1 && text.back() == '/') text.pop_back();
     if (text.empty()) return {};
-    const int count = LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, text.data(), static_cast<int>(text.size()), nullptr, 0, nullptr, nullptr, 0);
-    if (!count) throw std::runtime_error("无法规范化路径");
-    std::wstring key(count, L'\0');
-    LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, text.data(), static_cast<int>(text.size()), key.data(), count, nullptr, nullptr, 0);
-    return utf8(key);
+#ifdef _WIN32
+    return unicodeLower(text);
+#elif defined(__APPLE__)
+    // APFS 可以区分大小写；只在卷明确不区分时折叠，不按操作系统猜测。
+    auto existing = path.is_absolute() ? path : fs::absolute(path);
+    std::error_code error;
+    while (!fs::exists(existing, error) && existing != existing.parent_path()) {
+        if (error) throw std::runtime_error("无法读取路径所属文件系统");
+        existing = existing.parent_path();
+    }
+    const auto sensitive = ::pathconf(existing.c_str(), _PC_CASE_SENSITIVE);
+    if (sensitive < 0) throw std::runtime_error("无法确认文件系统的大小写规则");
+    return sensitive == 0 ? unicodeLower(text) : text;
+#else
+    return text;
+#endif
 }
 bool within(const fs::path& path, const fs::path& root) {
     const auto a = pathKey(path), b = pathKey(root);
-    return a == b || a.starts_with(b + "/");
+    return !b.empty() && (a == b || a.starts_with(b.back() == '/' ? b : b + "/"));
 }
 bool reparse(const fs::path& path) {
+#ifdef _WIN32
     const auto flags = GetFileAttributesW(path.c_str());
     if (flags == INVALID_FILE_ATTRIBUTES) throw std::runtime_error("无法读取文件属性：" + pathText(path));
     return (flags & FILE_ATTRIBUTE_REPARSE_POINT) != 0;
+#else
+    return fs::is_symlink(fs::symlink_status(path));
+#endif
+}
+bool hasAlternateStream(const fs::path& path) {
+#ifdef _WIN32
+    return pathText(path.relative_path()).find(':') != std::string::npos;
+#else
+    (void)path;
+    return false;
+#endif
+}
+bool validFilename(const fs::path& path) {
+    const auto name = pathText(path.filename());
+    if (name.empty() || name == "." || name == ".." || name.find('\0') != std::string::npos) return false;
+#ifdef _WIN32
+    if (name.back() == '.' || name.back() == ' ' || name.find_first_of("<>:\"|?*") != std::string::npos ||
+        std::any_of(name.begin(), name.end(), [](unsigned char c) { return c < 32; }) ||
+        std::regex_match(name, std::regex("(?:CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(?:\\..*)?", std::regex::icase))) return false;
+#endif
+    return true;
 }
 std::string stamp(const fs::path& path) {
     return std::to_string(fs::file_size(path)) + ":" + std::to_string(fs::last_write_time(path).time_since_epoch().count());
@@ -87,11 +132,35 @@ std::string lower(std::string text) {
     return text;
 }
 std::string uuid() {
+#ifdef _WIN32
     GUID guid{};
     if (CoCreateGuid(&guid) != S_OK) throw std::runtime_error("无法生成记录 ID");
     wchar_t buffer[40]{};
     StringFromGUID2(guid, buffer, 40);
     return utf8(std::wstring(buffer + 1, 36));
+#else
+    std::array<unsigned char, 16> bytes{};
+#ifdef __APPLE__
+    ::arc4random_buf(bytes.data(), bytes.size());
+#else
+    size_t done = 0;
+    while (done < bytes.size()) {
+        const auto count = ::getrandom(bytes.data() + done, bytes.size() - done, 0);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) throw std::runtime_error("无法生成记录 ID");
+        done += static_cast<size_t>(count);
+    }
+#endif
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    std::ostringstream text;
+    text << std::hex << std::setfill('0');
+    for (size_t i = 0; i < bytes.size(); ++i) {
+        if (i == 4 || i == 6 || i == 8 || i == 10) text << '-';
+        text << std::setw(2) << static_cast<unsigned>(bytes[i]);
+    }
+    return text.str();
+#endif
 }
 std::string codeKey(const std::string& text) {
     auto value=wide(text);
@@ -102,10 +171,6 @@ std::string codeKey(const std::string& text) {
     return result;
 }
 fs::path executable() {
-    std::wstring buffer(32768, L'\0');
-    const auto size = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
-    if (!size || size == buffer.size()) throw std::runtime_error("无法定位原生扩展");
-    buffer.resize(size);
-    return fs::path(buffer);
+    return javm::probe::executablePath();
 }
 }

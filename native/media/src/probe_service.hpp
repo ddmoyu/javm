@@ -1,6 +1,7 @@
 #pragma once
 #include "common.hpp"
 #include "work_queue.hpp"
+#include "../../probe/src/probe.hpp"
 #include <algorithm>
 #include <map>
 #include <memory>
@@ -19,7 +20,7 @@ public:
         if (id.empty() || id.size() > 100) throw std::runtime_error("媒体探测任务无效");
         if (text.empty() || text.size() > 32768 || text.find('\0') != std::string::npos)
             throw std::runtime_error("媒体路径无效");
-        const fs::path path(wide(text));
+        const fs::path path = javm::probe::pathFromUtf8(text);
         if (!path.is_absolute()) throw std::runtime_error("媒体路径必须为绝对路径");
         const auto cancelled = std::make_shared<std::atomic_bool>(false);
         std::lock_guard lock(mutex_);

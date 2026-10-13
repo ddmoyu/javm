@@ -1,4 +1,5 @@
-import { filesystem, os, storage } from "@neutralinojs/lib";
+import { filesystem, storage } from "@neutralinojs/lib";
+import { applicationDataPath } from "./applicationPaths";
 import { javbusKinds } from "../../services/catalog/javbusCatalog";
 import type { JavbusCatalogDimension } from "../../services/catalog/javbusCatalog";
 import { DiscoveryCatalogService } from "../../services/catalog/DiscoveryCatalogService";
@@ -22,8 +23,7 @@ export function createDiscoveryCatalogService(
   let csvReady: Promise<string> | undefined;
   const csvDirectory = () =>
     (csvReady ??= (async () => {
-      const directory = `${await os.getEnv("LOCALAPPDATA")}/JAVM/catalogs/javbus`;
-      if (!/^[A-Z]:[\\/]/i.test(directory)) throw new Error("无法定位目录 CSV 路径。");
+      const directory = await applicationDataPath("catalogs", "javbus");
       try {
         await filesystem.createDirectory(directory);
       } catch (error) {

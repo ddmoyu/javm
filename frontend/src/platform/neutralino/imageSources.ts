@@ -1,4 +1,5 @@
-import { filesystem, os, server } from "@neutralinojs/lib";
+import { filesystem, server } from "@neutralinojs/lib";
+import { applicationCachePath } from "./applicationPaths";
 import { ImageSourceService } from "../../services/images/ImageSourceService";
 import type { ImageSourcePort } from "../../services/images/ImageSourceService";
 import type { Runtime } from "./bootstrap";
@@ -90,8 +91,7 @@ export function createImageSourcePort(
   }
   async function initialize() {
     if (import.meta.env.DEV) throw new Error("开发模式只使用安全图片夹具。");
-    directory = `${await os.getEnv("LOCALAPPDATA")}/JAVM/cache/image-previews-v1`;
-    if (!/^[a-z]:[\\/]/i.test(directory)) throw new Error("无法定位图片缓存目录。");
+    directory = await applicationCachePath("image-previews-v1");
     try {
       await filesystem.createDirectory(directory);
     } catch (error) {

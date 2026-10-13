@@ -76,6 +76,7 @@ const image = (name: string) => `https://safe.example.invalid/images/${name}.jpg
 const signal = () => new AbortController().signal;
 const cleanups: (() => Promise<void>)[] = [];
 beforeEach(() => {
+  vi.stubGlobal("window", { NL_OS: "Windows" });
   vi.stubEnv("DEV", false);
   vi.stubGlobal(
     "Worker",

@@ -80,7 +80,7 @@ pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部�
 
 适用于 Windows 10/11 x64；满足上述系统前提后，本地片库、扫描和播放可离线使用。网络下载、MetaTube 在线资料和 AI 服务仍需要网络，AI 需要自行配置接口。个人数据仍保存在当前 Windows 用户的数据目录，不随软件包分发。
 
-后续 Alpha 发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS、Linux 与其他架构尚未完成适配，具体缺口见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md)。
+Alpha 发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS、Linux 与其他架构尚未完成适配，具体缺口与实施安排见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md) 和 [适配计划](docs/CROSS_PLATFORM_PLAN.md)。
 
 FFmpeg 采用参考老版 `ddmoyu/ffmepg` 裁剪配置的 **8.0.1 精简构建**，保留 JPEG 抽帧、MP4 无损合并与进度输出，关闭网络、硬件加速与视频转码。媒体轨道和时长检查复用内置 MediaInfo，不再构建或分发 ffprobe。打包会校验构建凭据、二进制哈希、体积和实际能力，拒绝混入完整版。来源与复现方式见 [精简 FFmpeg](docs/decisions/0013-lightweight-ffmpeg.md)。
 

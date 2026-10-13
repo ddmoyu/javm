@@ -6,26 +6,13 @@
 #include <stdexcept>
 #include <string>
 #include <chrono>
-#ifdef _WIN32
-#include <windows.h>
-#endif
+#include "owner_lock.hpp"
 
 using Json = nlohmann::json;
 namespace fs = std::filesystem;
 
 class Database {
-#ifdef _WIN32
-    struct OwnerLock {
-        HANDLE handle = INVALID_HANDLE_VALUE;
-        ~OwnerLock() { if (handle != INVALID_HANDLE_VALUE) CloseHandle(handle); }
-        void acquire(const fs::path& path) {
-            handle = CreateFileW((path.wstring() + L".owner.lock").c_str(), GENERIC_READ | GENERIC_WRITE,
-                0, nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE, nullptr);
-            if (handle == INVALID_HANDLE_VALUE)
-                throw std::runtime_error("下载数据库已被另一 JAVM 实例占用，或当前目录不可写。请使用已打开的窗口。");
-        }
-    } owner_;
-#endif
+    DatabaseOwnerLock owner_;
     sqlite3* connection_ = nullptr;
     using Statement = std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)>;
     void check(int code) const {
@@ -49,9 +36,7 @@ class Database {
 public:
     explicit Database(const fs::path& path) {
         fs::create_directories(path.parent_path());
-#ifdef _WIN32
         owner_.acquire(path);
-#endif
         const auto utf8 = path.u8string();
         if (sqlite3_open_v2(reinterpret_cast<const char*>(utf8.c_str()), &connection_,
             SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nullptr) != SQLITE_OK) {
@@ -73,7 +58,8 @@ public:
             } else if ((version != 1 && version != 2) || application != 1245793604) {
                 throw std::runtime_error("Unsupported database schema; the existing file has been preserved");
             } else if (version == 1) {
-                const auto backupPath = fs::path(path.wstring()+L".pre-v2-"+std::to_wstring(std::chrono::system_clock::now().time_since_epoch().count())+L".bak");
+                auto backupPath = path;
+                backupPath += ".pre-v2-" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ".bak";
                 sqlite3* copy = nullptr;
                 const auto bytes = backupPath.u8string();
                 if (sqlite3_open(reinterpret_cast<const char*>(bytes.c_str()),&copy) != SQLITE_OK) {
