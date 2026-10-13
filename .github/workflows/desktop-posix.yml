@@ -69,10 +69,15 @@ jobs:
         if: ${{ !cancelled() && steps.native.outcome == 'success' && runner.os == 'macOS' }}
         run: node scripts/verify-posix-desktop.mjs
       - name: 打包前端与原生宿主
+        id: bundle
+        if: ${{ !cancelled() && steps.native.outcome == 'success' }}
         run: pnpm build && node scripts/build-desktop.mjs --no-archive
       - name: 生成安装包和便携包
+        id: package
+        if: ${{ !cancelled() && steps.bundle.outcome == 'success' }}
         run: node scripts/package-posix.mjs
       - name: 检查安装包与实际宿主
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: node scripts/verify-posix-package.mjs
       - uses: actions/upload-artifact@v7.0.2
         with:

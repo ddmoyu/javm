@@ -24,13 +24,15 @@ export async function applicationNotices(nativeBuild) {
   );
   for (const packages of Object.values(licenses)) {
     for (const entry of packages) {
-      const directory = entry.paths[0];
-      for (const file of await readdir(directory)) {
-        if (
-          /^(license|licence|copying|notice)(\.|$)/i.test(file) &&
-          (await stat(path.join(directory, file))).isFile()
-        )
-          await collect(path.join(directory, file), `${entry.name}@${entry.version} / ${file}`);
+      for (const directory of entry.paths) {
+        const pkg = JSON.parse(await readFile(path.join(directory, "package.json"), "utf8"));
+        for (const file of await readdir(directory)) {
+          if (
+            /^(license|licence|copying|notice)(\.|$)/i.test(file) &&
+            (await stat(path.join(directory, file))).isFile()
+          )
+            await collect(path.join(directory, file), `${pkg.name}@${pkg.version} / ${file}`);
+        }
       }
     }
   }
