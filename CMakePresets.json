@@ -47,7 +47,7 @@
       "displayName": "macOS isolated database / HTTP core",
       "inherits": "native",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
-      "cacheVariables": { "JAVM_CORE_ONLY": true }
+      "cacheVariables": { "JAVM_CORE_ONLY": true, "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0" }
     },
     {
       "name": "windows-release",

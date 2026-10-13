@@ -12,6 +12,7 @@
 #endif
 #include "http_service.hpp"
 #include "service.hpp"
+#include "../../common/shared_slot.hpp"
 #include <atomic>
 #include <iostream>
 #include <memory>
@@ -46,7 +47,7 @@ int runMain(int argc, Char* argv[]) {
 
         std::unique_ptr<Database> database;
 #if JAVM_WITH_MEDIA
-        std::atomic<std::shared_ptr<media::LibraryService>> library;
+        javm::SharedSlot<media::LibraryService> library;
 #endif
         std::atomic_bool disconnected = false;
         auto sendResponse = [&](const Json& response) {

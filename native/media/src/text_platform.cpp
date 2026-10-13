@@ -1,12 +1,26 @@
 #include "file_platform.hpp"
 #ifdef _WIN32
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
 #else
 #include <unicode/ucol.h>
 #include <unicode/ustring.h>
 #endif
 
 namespace media {
+#ifdef __APPLE__
+namespace {
+template<class T> struct Cf {
+    T value;
+    explicit Cf(T input): value(input) {}
+    Cf(const Cf&) = delete;
+    Cf& operator=(const Cf&) = delete;
+    ~Cf() { if (value) CFRelease(value); }
+    operator T() const { return value; }
+};
+}
+#endif
 std::string unicodeLower(const std::string& text) {
     if (text.empty()) return {};
 #ifdef _WIN32
@@ -17,6 +31,19 @@ std::string unicodeLower(const std::string& text) {
     if (!LCMapStringEx(LOCALE_NAME_INVARIANT, LCMAP_LOWERCASE, source.data(), static_cast<int>(source.size()), mapped.data(), size, nullptr, nullptr, 0))
         throw std::runtime_error("无法转换查询文本");
     return utf8(mapped);
+#elif defined(__APPLE__)
+    Cf<CFStringRef> source{CFStringCreateWithBytes(kCFAllocatorDefault,
+        reinterpret_cast<const UInt8*>(text.data()), static_cast<CFIndex>(text.size()), kCFStringEncodingUTF8, false)};
+    if (!source.value) throw std::runtime_error("查询文本不是有效的 UTF-8");
+    Cf<CFMutableStringRef> mapped{CFStringCreateMutableCopy(kCFAllocatorDefault, 0, source)};
+    Cf<CFLocaleRef> locale{CFLocaleCreate(kCFAllocatorDefault, CFSTR("en_US_POSIX"))};
+    if (!mapped.value || !locale.value) throw std::runtime_error("无法转换查询文本");
+    CFStringLowercase(mapped, locale);
+    const auto capacity = CFStringGetMaximumSizeForEncoding(CFStringGetLength(mapped), kCFStringEncodingUTF8) + 1;
+    std::string result(static_cast<size_t>(capacity), '\0');
+    if (!CFStringGetCString(mapped, result.data(), capacity, kCFStringEncodingUTF8)) throw std::runtime_error("无法转换查询文本");
+    result.resize(std::char_traits<char>::length(result.c_str()));
+    return result;
 #else
     UErrorCode error = U_ZERO_ERROR;
     int32_t size = 0;
@@ -50,6 +77,13 @@ int compareNatural(const std::string& left, const std::string& right) {
     const auto result = CompareStringEx(L"zh-CN", NORM_IGNORECASE | NORM_IGNORENONSPACE | SORT_DIGITSASNUMBERS,
         a.data(), static_cast<int>(a.size()), b.data(), static_cast<int>(b.size()), nullptr, nullptr, 0);
     if (result) return result - CSTR_EQUAL;
+#elif defined(__APPLE__)
+    Cf<CFStringRef> a{CFStringCreateWithBytes(kCFAllocatorDefault, reinterpret_cast<const UInt8*>(left.data()), static_cast<CFIndex>(left.size()), kCFStringEncodingUTF8, false)};
+    Cf<CFStringRef> b{CFStringCreateWithBytes(kCFAllocatorDefault, reinterpret_cast<const UInt8*>(right.data()), static_cast<CFIndex>(right.size()), kCFStringEncodingUTF8, false)};
+    Cf<CFLocaleRef> locale{CFLocaleCreate(kCFAllocatorDefault, CFSTR("zh_CN"))};
+    if (a.value && b.value && locale.value)
+        return static_cast<int>(CFStringCompareWithOptionsAndLocale(a, b, CFRangeMake(0, CFStringGetLength(a)),
+            kCFCompareCaseInsensitive | kCFCompareDiacriticInsensitive | kCFCompareNumerically, locale));
 #else
     struct Collator {
         UCollator* value = nullptr;
