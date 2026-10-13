@@ -7,6 +7,7 @@ import path from "node:path";
 // neu uses and removes cwd/.tmp. Never expose the workspace's fixtures, local
 // databases or dependency downloads to that packaging scratch directory.
 if (process.platform !== "win32") throw new Error("Desktop packaging currently supports Windows.");
+const archiveEnabled = !process.argv.includes("--no-archive");
 const root = fileURLToPath(new URL("../", import.meta.url));
 const buildRoot = path.resolve(root, "build");
 await mkdir(buildRoot, { recursive: true });
@@ -37,7 +38,9 @@ try {
   for (const item of config.cli.copyItems || []) await copy(item);
   await writeFile(path.join(stage, "neutralino.config.json"), JSON.stringify(config, null, 2));
   const cli = require.resolve("@neutralinojs/neu/bin/neu.js");
-  const bundled = spawnSync(process.execPath, [cli, "build", "--release", "--embed-resources"], {
+  const args = [cli, "build", "--embed-resources"];
+  if (archiveEnabled) args.push("--release");
+  const bundled = spawnSync(process.execPath, args, {
     cwd: stage,
     stdio: "inherit",
     windowsHide: true,
@@ -61,7 +64,10 @@ try {
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
-  console.log("Windows desktop package: dist/desktop/javm and dist/desktop/javm-release.zip");
+  console.log(
+    "Windows desktop package: dist/desktop/javm" +
+      (archiveEnabled ? " and dist/desktop/javm-release.zip" : ""),
+  );
 } finally {
   const resolved = path.resolve(stage);
   if (

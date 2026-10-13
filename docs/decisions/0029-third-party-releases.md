@@ -21,6 +21,8 @@ pnpm offline:setup 查询当前源码配方对应的最新可用组件产物，�
 
 构建顺序：pnpm offline:setup → pnpm desktop:build → node scripts/package-offline.mjs。
 
+仅生成未压缩目录时，依次执行 pnpm offline:setup、pnpm native:build --Release、pnpm build、node scripts/build-desktop.mjs --no-archive、node scripts/package-offline.mjs --no-archive。仍校验组件并保留逐文件清单，latest.json 的 archive 和 sha256 为 null，bytes 表示目录内文件的总大小。
+
 完整便携 ZIP 保持单个根入口 JAVM.exe。构建脚本、开发头文件和发布清单不加入日常运行目录。
 
 ## 验证

@@ -10,6 +10,7 @@ import { verifyMetatubeLite } from "./metatube-lite-profile.mjs";
 import { components, specification, readJson } from "./third-party/components.mjs";
 
 if (process.platform !== "win32") throw new Error("Offline packaging requires Windows x64.");
+const archiveEnabled = !process.argv.includes("--no-archive");
 const root = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 const dependencies = JSON.parse(
@@ -230,30 +231,33 @@ const manifest = {
 const manifestPath = path.join(root, "build/offline-manifests", `${name}.json`);
 await mkdir(path.dirname(manifestPath), { recursive: true });
 await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
-const archive = `${output}.zip`;
-await new Promise((resolve, reject) => {
-  const child = spawn(
-    "powershell.exe",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      path.join(root, "scripts/archive-offline.ps1"),
-      "-Source",
-      output,
-      "-Destination",
-      archive,
-    ],
-    { windowsHide: true, stdio: "inherit" },
-  );
-  child.on("error", reject);
-  child.on("exit", (code) =>
-    code === 0 ? resolve() : reject(new Error(`ZIP creation failed: ${code}`)),
-  );
-});
-const sha256 = await hash(archive);
-await writeFile(`${archive}.sha256`, `${sha256}  ${path.basename(archive)}\n`);
+const archive = archiveEnabled ? `${output}.zip` : null;
+let sha256 = null;
+if (archive) {
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        path.join(root, "scripts/archive-offline.ps1"),
+        "-Source",
+        output,
+        "-Destination",
+        archive,
+      ],
+      { windowsHide: true, stdio: "inherit" },
+    );
+    child.on("error", reject);
+    child.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`ZIP creation failed: ${code}`)),
+    );
+  });
+  sha256 = await hash(archive);
+  await writeFile(`${archive}.sha256`, `${sha256}  ${path.basename(archive)}\n`);
+}
 await writeFile(
   path.join(root, "dist/offline/latest.json"),
   JSON.stringify(
@@ -261,7 +265,9 @@ await writeFile(
       directory: output,
       archive,
       sha256,
-      bytes: (await stat(archive)).size,
+      bytes: archive
+        ? (await stat(archive)).size
+        : files.reduce((total, file) => total + file.bytes, 0),
       files: files.length,
       entryPoint: "JAVM.exe",
       manifest: manifestPath,
