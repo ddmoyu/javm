@@ -1,6 +1,6 @@
 # ADR 0033：POSIX 桌面宿主与可验证分发
 
-日期：2026-10-13。状态：实现中，目标系统完整验收进行中。
+日期：2026-10-13。状态：已实施；[三个 POSIX 目标的完整桌面与安装 CI](https://github.com/ddmoyu/javm/actions/runs/38398786888) 通过。
 
 ## 决策
 
@@ -8,9 +8,13 @@
 
 Neutralino 6.10.0 的全局脚本直接拼接单引号字符串，安装路径含单引号时无法初始化前端。POSIX 配方从锁定源码与 SHA 构建，使用 JSON 序列化替换这些拼接，并保留上游提交和补丁标识。该缺陷已用隔离 cloud 宿主和安全 Unicode 路径复现。
 
-隐藏取流复用这个官方宿主和官方广播事件。专用 `--javm-isolated` 模式采用 WebKitGTK ephemeral view 或 WKWebsiteDataStore nonPersistentDataStore，不显示窗口、不复用应用 Cookie；页面不注入认证全局量或官方客户端，没有扩展及文件/进程 API。专用 WebKit 消息通道只能向既有官方事件连接转发候选，不接受原生方法名；最多 128 条、每条 160 KB。这样不依赖网页 CSP 允许连接本机 WebSocket，也不新增业务服务器或数据库协议。页面消息视为不可信数据，候选、长度、协议和公开请求头继续受限。运行受 20 秒期限和既有进程监督约束。macOS 13 无独立代理接口时明确失败，不隐式改变用户的代理选择。
+隐藏取流复用这个官方宿主和官方广播事件。专用 `--javm-isolated` 模式采用 WebKitGTK ephemeral view 或 WKWebsiteDataStore nonPersistentDataStore，不显示窗口、不复用应用 Cookie；页面不注入认证全局量或官方客户端，没有扩展及文件/进程 API。捕获脚本在顶层页面和 iframe 的文档创建时注入。专用 WebKit 消息通道只能向既有官方事件连接转发候选，不接受原生方法名；最多 128 条、每条 160 KB。这样不依赖网页 CSP 允许连接本机 WebSocket，也不新增业务服务器或数据库协议。页面消息视为不可信数据，候选、长度、协议和公开请求头继续受限。运行受 20 秒期限和既有进程监督约束。macOS 13 无独立代理接口时明确失败，不隐式改变用户的代理选择。
 
 macOS APP 入口负责接收 LaunchServices 的 URL 事件，并通过新官方宿主的现有单实例队列转交。正常再次打开 APP 同样唤回主窗口；Command-Q 通过官方菜单事件进入任务异步收尾。Linux 使用 GIO 的当前用户协议关联，保持既有 Windows 注册表实现。
+
+macOS 的可执行程序位于 `Contents/MacOS`，图标、许可和 MetaTube 组件记录位于 `Contents/Resources`。先签内部程序，再签外层 APP，随后执行深度严格校验。安装验证使用系统 `ditto` 复制 APP 并重新校验签名，覆盖安装和卸载不更改用户数据。
+
+MediaInfo 在 POSIX 工作线程内建立 UTF-8 locale，避免其文件 API 在默认 C locale 下丢失中文路径。线程结束恢复原 locale，不改变其他线程的区域设置。
 
 ## 组件和发布证据
 
