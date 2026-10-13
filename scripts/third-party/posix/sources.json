@@ -1,4 +1,11 @@
 {
+  "neutralino": {
+    "version": "6.10.0",
+    "commit": "4361b63eb1157fc7dedb29b92815a08ec0002767",
+    "url": "https://codeload.github.com/neutralinojs/neutralinojs/tar.gz/refs/tags/v6.10.0",
+    "file": "neutralinojs-6.10.0.tar.gz",
+    "sha256": "fa8397f7ed8bb3fe877245ed7a2063c8b03cc6234e9c40aa8cf177fbe9051bda"
+  },
   "openssl": {
     "version": "3.5.8",
     "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz",

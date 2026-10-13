@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { run, target } from "./common.mjs";
+import { verifyHostGlobals } from "./verify-host.mjs";
 
 export function binaryArchitecture(bytes) {
   if (bytes.length < 20) return "unknown";
@@ -28,6 +29,7 @@ export async function verifyRuntime(directory, spec) {
       mediainfo: target.startsWith("macos") ? "libmediainfo.0.dylib" : "libmediainfo.so.0",
       ffmpeg: "ffmpeg",
       metatube: "metatube-server",
+      neutralino: "neutralino",
     }[spec.component],
   );
   assert.equal(binaryArchitecture(await readFile(binary)), spec.platform, "组件架构不匹配");
@@ -110,6 +112,8 @@ export async function verifyRuntime(directory, spec) {
       await writeFile(input, data);
       const script = `import ctypes,sys\nl=ctypes.CDLL(sys.argv[1])\nl.MediaInfo_New.restype=ctypes.c_void_p\nl.MediaInfo_Open.argtypes=[ctypes.c_void_p,ctypes.c_wchar_p]\nl.MediaInfo_Open.restype=ctypes.c_size_t\nl.MediaInfo_Get.argtypes=[ctypes.c_void_p,ctypes.c_size_t,ctypes.c_size_t,ctypes.c_wchar_p,ctypes.c_size_t,ctypes.c_size_t]\nl.MediaInfo_Get.restype=ctypes.c_wchar_p\nl.MediaInfo_Delete.argtypes=[ctypes.c_void_p]\np=l.MediaInfo_New()\ntry:\n assert l.MediaInfo_Open(p,sys.argv[2])\n assert l.MediaInfo_Get(p,0,0,'Format',1,0)=='Wave'\n assert l.MediaInfo_Get(p,0,0,'Duration',1,0)=='1000'\nfinally: l.MediaInfo_Delete(p)\n`;
       await run("python3", ["-c", script, binary, input], parent);
+    } else if (spec.component === "neutralino") {
+      await verifyHostGlobals(binary);
     } else {
       // CLI 帮助不启动任何资料提供方，不读取或生成真实业务内容。
       const help = await run(binary, ["-help"], parent, "both");

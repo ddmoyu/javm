@@ -8,7 +8,7 @@ import { canonical } from "../components.mjs";
 export const root = fileURLToPath(new URL("../../../", import.meta.url));
 export const targets = ["linux-x64", "macos-x64", "macos-arm64"];
 export const target = `${process.platform === "darwin" ? "macos" : process.platform}-${process.arch}`;
-export const components = ["curl", "mediainfo", "ffmpeg", "metatube"];
+export const components = ["curl", "mediainfo", "ffmpeg", "metatube", "neutralino"];
 export const json = async (file) => JSON.parse(await readFile(file, "utf8"));
 export const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 export const environment = {
@@ -125,6 +125,10 @@ export async function specification(component, platform = target) {
       "scripts/metatube-lite-profile.mjs",
       "scripts/metatube-lite/source-lock.json",
     ],
+    neutralino: [
+      "scripts/third-party/posix/patch-neutralino.mjs",
+      "scripts/third-party/posix/verify-host.mjs",
+    ],
   };
   const files = Object.fromEntries(
     await Promise.all(
@@ -150,7 +154,7 @@ export async function specification(component, platform = target) {
       revision: 1,
     },
     sources: {
-      [component]: sources[component],
+      [component]: component === "neutralino" ? extra.neutralino : sources[component],
       ...(component === "curl" ? { openssl: extra.openssl } : {}),
       ...(component === "ffmpeg" ? { ffmpegReference: sources.ffmpegReference } : {}),
     },

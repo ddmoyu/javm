@@ -13,6 +13,8 @@ import {
   targets,
 } from "./common.mjs";
 import { verifyRuntime } from "./verify.mjs";
+import { patchNeutralino } from "./patch-neutralino.mjs";
+import { desktopHostFile } from "../../desktop-host.mjs";
 
 const suffix = process.platform === "darwin" ? "libmediainfo.0.dylib" : "libmediainfo.so.0";
 const cmakeArgs = [
@@ -109,7 +111,9 @@ export async function buildComponent(component) {
     const sourceRoot = await unpack(source, path.join(work, "source"));
     const reference = await download(spec.inputs.sources.ffmpegReference);
     const list = await run("unzip", ["-Z1", reference], work, true);
-    const entry = list.split("\n").find((name) => name.endsWith("/build-info/video-decoders.txt"));
+    const entry = list
+      .split("\n")
+      .find((name) => /(?:^|\/)build-info\/video-decoders\.txt$/.test(name));
     if (!entry) throw new Error("缺少锁定的视频解码器集合");
     const decoders = await run("unzip", ["-p", reference, entry], work, true);
     if (!/^[a-z0-9_\r\n]+$/.test(decoders)) throw new Error("视频解码器列表无效");
@@ -127,6 +131,23 @@ export async function buildComponent(component) {
       await copy(path.join(sourceRoot, name), path.join(output, "licenses", name));
     await copy(path.join(build, "ffbuild/config.mak"), path.join(output, "recipe/config.mak"));
     await copy(decoderFile, path.join(output, "recipe/video-decoders.txt"));
+  } else if (component === "neutralino") {
+    const sourceRoot = await unpack(source, path.join(work, "source"));
+    await patchNeutralino(sourceRoot, source.commit);
+    await configure(sourceRoot, path.join(work, "build"));
+    await copy(
+      path.join(sourceRoot, "bin", desktopHostFile()),
+      path.join(output, "runtime/neutralino"),
+    );
+    await copy(path.join(sourceRoot, "LICENSE"), path.join(output, "licenses/Neutralino.txt"));
+    await copy(
+      path.join(root, "scripts/third-party/posix/patch-neutralino.mjs"),
+      path.join(output, "recipe/patch-neutralino.mjs"),
+    );
+    await writeFile(
+      path.join(output, "licenses/modifications.txt"),
+      `Official Neutralino ${source.version}, source ${source.commit}.\nJAVM POSIX build: JSON-escape injected global strings and retain upstream source identity. Official APIs and Extension protocol are unchanged.\n`,
+    );
   } else {
     await run(process.execPath, [
       "--use-env-proxy",

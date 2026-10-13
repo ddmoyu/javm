@@ -129,7 +129,7 @@ try {
       path: payload,
     };
     const tools = path.join(root, "bin/tools", spec.component === "metatube" ? "metatube" : "");
-    if (spec.component !== "mediainfo") {
+    if (spec.component !== "mediainfo" && spec.component !== "neutralino") {
       await mkdir(tools, { recursive: true });
       await cp(path.join(payload, "runtime"), tools, { recursive: true });
     }

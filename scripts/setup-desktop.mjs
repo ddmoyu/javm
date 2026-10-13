@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,22 @@ import { desktopHostFile, installDesktopHost } from "./desktop-host.mjs";
 // neu update removes cwd/.tmp. Only expose a fresh, owned staging directory.
 const host = desktopHostFile();
 const root = fileURLToPath(new URL("../", import.meta.url));
+if (process.argv.includes("--verified-posix-host")) {
+  if (process.platform === "win32") throw new Error("Windows 继续使用官方发布宿主");
+  const { json, specification, target, verifyInventory } =
+    await import("./third-party/posix/common.mjs");
+  const component = (await json(path.join(root, `build/dependencies/${target}/resolved.json`)))
+    .components.neutralino;
+  const spec = await specification("neutralino");
+  if (!component?.releaseId || component.fingerprint !== spec.fingerprint)
+    throw new Error("宿主组件缺失或与当前配方不符");
+  await verifyInventory(component.path, await json(path.join(component.path, "manifest.json")));
+  await mkdir(path.join(root, "bin"), { recursive: true });
+  await copyFile(path.join(component.path, "runtime/neutralino"), path.join(root, "bin", host));
+  await chmod(path.join(root, "bin", host), 0o755);
+  console.log(`已安装经过回读校验的 Neutralino 源码构建：${component.tag}`);
+  process.exit(0);
+}
 const buildRoot = path.join(root, "build");
 await mkdir(buildRoot, { recursive: true });
 const stage = await mkdtemp(path.join(buildRoot, "desktop-setup-"));
