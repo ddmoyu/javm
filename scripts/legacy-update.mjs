@@ -109,6 +109,7 @@ export async function signLegacyFile(file, publicKey) {
       {
         // 不向命令行传递密钥，不输出可能携带密钥的 CLI 诊断。
         env: { ...process.env, JAVM_LEGACY_SIGN_FILE: path.resolve(file) },
+        windowsVerbatimArguments: windows,
         stdio: ["ignore", "pipe", "pipe"],
         timeout: 180000,
       },

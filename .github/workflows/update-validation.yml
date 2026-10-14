@@ -1,6 +1,12 @@
 name: 自动更新隔离验收
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 验收平台
+        type: choice
+        options: [all, posix, windows]
+        default: all
   push:
     branches: [codex/update-validation]
 permissions:
@@ -10,6 +16,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   posix:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'windows'
     name: ${{ matrix.target }} 安装与回退
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -91,6 +98,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   windows:
+    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'posix'
     name: Windows 旧版升级
     runs-on: windows-2025
     timeout-minutes: 60
