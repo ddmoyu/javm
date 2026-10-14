@@ -9,8 +9,6 @@ int main() {
   try {
     const auto transaction = environment("JAVM_UPDATE_TRANSACTION");
     if (transaction.empty()) {
-      std::ofstream(executablePath().parent_path() / "old-launch.txt")
-          << "safe fixture";
       return 0;
     }
     const auto root = fromUtf8(transaction);
