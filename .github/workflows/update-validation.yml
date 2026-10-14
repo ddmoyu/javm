@@ -12,7 +12,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: update-validation-${{ github.ref }}
+  group: update-validation-${{ github.ref }}-${{ inputs.scope || 'all' }}
   cancel-in-progress: true
 jobs:
   posix:
