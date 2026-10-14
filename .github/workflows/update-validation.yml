@@ -1,0 +1,64 @@
+name: 自动更新隔离验收
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/update-validation]
+permissions:
+  contents: read
+concurrency:
+  group: update-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  posix:
+    name: ${{ matrix.target }} 安装与回退
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x64, runner: ubuntu-24.04 }
+          - { target: macos-arm64, runner: macos-15 }
+          - { target: macos-x64, runner: macos-15-intel }
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Linux 安装依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build nasm libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-dev gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad libayatana-appindicator3-dev patchelf squashfs-tools desktop-file-utils xvfb gnome-keyring dbus-x11 policykit-1
+      - name: macOS 构建依赖
+        if: runner.os == 'macOS'
+        run: |
+          for formula in ninja nasm; do
+            brew list --versions "$formula" >/dev/null || brew install "$formula"
+          done
+      - name: 只读复用已验证组件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/third-party/posix/resolve.mjs
+      - run: pnpm desktop:setup --verified-posix-host
+      - run: pnpm native:build --release --update-tests
+      - name: 更新助手与数据回退
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
+        run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
+      - name: 安全桌面启动前置验证
+        run: ${{ runner.os == 'Linux' && 'dbus-run-session -- xvfb-run -a' || '' }} node scripts/verify-posix-desktop.mjs
+      - run: pnpm build && node scripts/build-desktop.mjs --no-archive
+      - run: node scripts/package-posix.mjs
+      - name: 实际安装、启动和卸载保留数据
+        run: node scripts/verify-posix-package.mjs
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: update-validation-${{ matrix.target }}
+          path: |
+            dist/posix-release/${{ matrix.target }}/*.json
+            build/desktop-verification-${{ matrix.target }}.json
+          if-no-files-found: warn
+          retention-days: 14

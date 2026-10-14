@@ -11,6 +11,7 @@ export function nativeBuildPlan(platform, args = []) {
     ["portabilitychecks", "PortabilityChecks"],
     ["coreonly", "CoreOnly"],
     ["curltransport", "CurlTransport"],
+    ["updatetests", "UpdateTests"],
   ]);
   const flags = new Set();
   for (const arg of args) {
@@ -66,7 +67,15 @@ export function nativeBuildPlan(platform, args = []) {
   }
   const preset = `${platform === "darwin" ? "macos" : "linux"}-${has("CoreOnly") ? "core" : has("Release") ? "release" : "app"}`;
   return [
-    { command: "cmake", args: [...fresh, "--preset", preset] },
+    {
+      command: "cmake",
+      args: [
+        ...fresh,
+        "--preset",
+        preset,
+        `-DJAVM_UPDATE_TESTS=${has("UpdateTests") ? "ON" : "OFF"}`,
+      ],
+    },
     { command: "cmake", args: ["--build", "--preset", preset] },
   ];
 }
