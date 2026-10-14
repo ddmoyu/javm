@@ -94,12 +94,25 @@ export async function signLegacyFile(file, publicKey) {
   )
     throw new Error("旧版兼容包必须在 GitHub Actions 中使用现有 TAURI_SIGNING_PRIVATE_KEY 签名");
   try {
-    execFileSync("pnpm", ["dlx", "@tauri-apps/cli@2.11.2", "signer", "sign", file], {
-      // 不向命令行传递密钥，不输出可能携带密钥的 CLI 诊断。
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-      timeout: 180000,
-    });
+    const windows = process.platform === "win32";
+    execFileSync(
+      windows ? process.env.ComSpec : "pnpm",
+      windows
+        ? [
+            "/d",
+            "/v:off",
+            "/s",
+            "/c",
+            'pnpm dlx @tauri-apps/cli@2.11.2 signer sign "%JAVM_LEGACY_SIGN_FILE%"',
+          ]
+        : ["dlx", "@tauri-apps/cli@2.11.2", "signer", "sign", file],
+      {
+        // 不向命令行传递密钥，不输出可能携带密钥的 CLI 诊断。
+        env: { ...process.env, JAVM_LEGACY_SIGN_FILE: path.resolve(file) },
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 180000,
+      },
+    );
   } catch {
     throw new Error("旧版签名失败，请检查原有 Tauri 密钥及密码；未输出签名器内部诊断");
   }

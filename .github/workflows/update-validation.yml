@@ -28,6 +28,13 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/update/tests/legacy-tauri/target
+          key: legacy-updater-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/update/tests/legacy-tauri/Cargo.lock') }}
       - name: Linux 安装依赖
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ninja-build nasm libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-dev gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad libayatana-appindicator3-dev patchelf squashfs-tools desktop-file-utils xvfb gnome-keyring dbus-x11 policykit-1
@@ -95,6 +102,13 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/cache@v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/update/tests/legacy-tauri/target
+          key: legacy-updater-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/update/tests/legacy-tauri/Cargo.lock') }}
       - run: cargo build --locked --manifest-path native/update/tests/legacy-tauri/Cargo.toml
       - name: 只读复用组件
         env:
@@ -105,7 +119,7 @@ jobs:
       - name: 原生失败回退
         env:
           JAVM_UPDATE_FIXTURES: build/native/windows-release/update-fixtures
-        run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
+        run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs scripts/update-setup.test.mjs
       - run: pnpm build
       - run: node scripts/build-desktop.mjs --no-archive
       - run: node scripts/package-offline.mjs --no-archive

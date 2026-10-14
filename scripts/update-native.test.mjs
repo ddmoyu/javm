@@ -191,6 +191,20 @@ test("退出收尾取消后不替换程序、不修改数据库并保留就绪�
     await cleanup(f);
   }
 });
+test("失败版本记录无法写入时仍恢复程序和数据", async () => {
+  const f = await fixture("fail");
+  try {
+    await mkdir(path.join(f.dataRoot, "updates/failed.json.tmp"));
+    await run(updater, ["--apply", f.transaction], { windowsHide: true, timeout: 30000 });
+    assert.equal((await json(path.join(f.transaction, "status.json"))).phase, "rolled-back");
+    for (const name of ["library.sqlite3", "downloads-v1.sqlite3"])
+      assert.equal(dbValue(path.join(f.dataRoot, name)), "old-safe-value");
+    assert.equal((await json(path.join(f.settings, "preferences.json"))).value, "old-safe-value");
+    assert.equal(await readFile(path.join(f.root, "old-only.txt"), "utf8"), "old-runtime");
+  } finally {
+    await cleanup(f);
+  }
+});
 test("中断恢复可重入，损坏快照会停止而保留原始资料", async () => {
   const f = await fixture("fail");
   try {

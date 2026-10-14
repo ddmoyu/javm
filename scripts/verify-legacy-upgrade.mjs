@@ -18,6 +18,7 @@ import {
 import { setTimeout as delay } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import vm from "node:vm";
 import { signLegacyFile, verifyLegacySignature } from "./legacy-update.mjs";
 import { hashFile } from "./update-format.mjs";
 assert.equal(process.env.GITHUB_ACTIONS, "true", "只允许在一次性 CI 系统中验证旧版安装");
@@ -64,7 +65,9 @@ async function launchNew(entry, args = []) {
       home,
       win ? "AppData/Roaming" : mac ? "Library/Application Support" : ".local/share",
     );
-  const authFile = path.join(data, "net.ddmoyu.javm.dev/.tmp/auth_info.json");
+  const authFile = win
+    ? path.join(path.dirname(entry), ".tmp/auth_info.json")
+    : path.join(data, "net.ddmoyu.javm.dev/.tmp/auth_info.json");
   await mkdir(path.dirname(authFile), { recursive: true });
   await rm(authFile, { force: true });
   const env = {
@@ -77,12 +80,21 @@ async function launchNew(entry, args = []) {
     XDG_CONFIG_HOME: path.join(home, ".config"),
     XDG_CACHE_HOME: path.join(home, ".cache"),
   };
-  const child = spawn(entry, [...args, "--mode=cloud", "--export-auth-info"], {
-    cwd: base,
-    env,
-    windowsHide: true,
-    stdio: "ignore",
-  });
+  const child = spawn(
+    entry,
+    [
+      ...args,
+      "--mode=cloud",
+      "--export-auth-info",
+      ...(win ? ["--data-location=app", "--storage-location=app"] : []),
+    ],
+    {
+      cwd: base,
+      env,
+      windowsHide: true,
+      stdio: "ignore",
+    },
+  );
   let socket;
   try {
     const auth = await until(async () => {
@@ -96,6 +108,12 @@ async function launchNew(entry, args = []) {
     });
     const token = auth.nlToken ?? auth.accessToken,
       connect = auth.nlConnectToken ?? token.split(".")[1];
+    const globals = {};
+    const source = await fetch(
+      `http://127.0.0.1:${auth.nlPort ?? auth.port}/__neutralino_globals.js`,
+      { signal: AbortSignal.timeout(5000) },
+    ).then((response) => response.text());
+    vm.runInNewContext(source, globals, { timeout: 200 });
     socket = new WebSocket(
       `ws://127.0.0.1:${auth.nlPort ?? auth.port}/?connectToken=${encodeURIComponent(connect)}`,
     );
@@ -124,6 +142,28 @@ async function launchNew(entry, args = []) {
       data: { requestId, protocol: 1, method: "capabilities", params: {} },
     });
     assert.equal((await until(() => native.get(requestId))).result.database, true);
+    const configureId = randomUUID();
+    await call("extensions.dispatch", {
+      extensionId: "net.ddmoyu.javm.database",
+      event: "javm.database.request",
+      data: {
+        requestId: configureId,
+        protocol: 1,
+        method: "update.configure",
+        params: {
+          appPath: globals.NL_PATH,
+          settings: `${globals.NL_DATAPATH}/.storage`,
+          ownerPid: globals.NL_PID,
+        },
+      },
+    });
+    const configured = await until(() => native.get(configureId));
+    assert.equal(configured.ok, true, configured.error);
+    assert.equal(configured.result.available, true, JSON.stringify(configured.result));
+    assert.equal(
+      configured.result.kind,
+      win ? "setup" : mac ? "app" : args.length ? "appimage" : "deb",
+    );
     socket.send(
       JSON.stringify({
         id: randomUUID(),

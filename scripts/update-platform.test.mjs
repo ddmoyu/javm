@@ -91,7 +91,7 @@ async function signed(file, kind, version) {
         {
           platform,
           kind,
-          name: path.basename(file),
+          name: `JAVM-${version}-${platform}-${kind}${path.extname(file)}`,
           bytes: (await stat(file)).size,
           sha256: await hashFile(file),
         },

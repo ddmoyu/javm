@@ -1042,7 +1042,11 @@ void applyUpdate(const fs::path &transaction, bool recover) {
                          {"error", "新版进程尚未停止，已保留快照并暂停恢复"}});
       throw;
     }
-    writeJson(data / "updates/failed.json", {{"version", job.at("version")}});
+    // 失败版本记录只用于抑制重复提示；写入失败不能阻止程序和数据恢复。
+    try {
+      writeJson(data / "updates/failed.json", {{"version", job.at("version")}});
+    } catch (...) {
+    }
     if (changed) {
       status(directory, {{"phase", "rolling-back"}, {"error", failure}});
       try {
