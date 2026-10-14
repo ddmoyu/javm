@@ -53,3 +53,20 @@ await test("保留现有 ZIP 名称，阻止版本号注入文件路径", () => 
   for (const invalid of ["../1.2.3", "1.2.3/evil", "1.2.3\n", "v1.2.3"])
     assert.throws(() => releaseAssetNames(invalid));
 });
+
+await test("Beta 兼容附件不代表进入旧版默认更新通道", () => {
+  for (const release of ["1.2.3-beta.1", "1.2.3"]) {
+    const notes = renderReleaseNotes({
+      ...options,
+      version: release,
+      assets: [...Object.values(releaseAssetNames(release)), "latest.json"],
+    });
+    if (release.includes("-beta.")) {
+      assert.match(notes, /Beta 不进入旧 Tauri 的默认更新通道，旧版用户需手动安装/);
+      assert.doesNotMatch(notes, /旧 Tauri 用户可在应用内升级/);
+    } else {
+      assert.match(notes, /旧 Tauri 用户可在应用内升级/);
+      assert.doesNotMatch(notes, /旧版用户需手动安装/);
+    }
+  }
+});

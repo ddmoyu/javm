@@ -20,7 +20,7 @@ const parser: ResolutionParser = {
     operation: K,
     input: ParseTasks[K]["input"],
   ): Promise<ParseTasks[K]["output"]> {
-    if (operation !== "playlist") throw new Error("不应执行网页 HTTP 解析");
+    if (operation !== "playlist" || !("url" in input)) throw new Error("不应执行网页 HTTP 解析");
     return parsePlaylist(input.body, input.url) as ParseTasks[K]["output"];
   },
   close() {},

@@ -14,8 +14,10 @@ import type { WatchEvent, WatchSettings } from "../../services/library/Directory
 import { LibraryDocumentsService } from "../../services/library/LibraryDocumentsService";
 import { FileOrganizationService } from "../../services/library/FileOrganizationService";
 import { normalizedPath, pathComparisonKey, pathRelativeTo } from "../../services/paths";
+import { waitForUpdateStartup } from "./updateGate";
 
 export class NativeLibraryPort implements LibraryPort {
+  constructor(private startup = false) {}
   private listening?: Promise<unknown>;
   private pending = new Map<
     string,
@@ -42,6 +44,7 @@ export class NativeLibraryPort implements LibraryPort {
     }
   };
   async request<T>(method: string, params: unknown = {}): Promise<T> {
+    if (!this.startup && !method.startsWith("library.instance.")) await waitForUpdateStartup();
     this.listening ??= events.on("javm.database.response", this.listener);
     await this.listening;
     const requestId = crypto.randomUUID();
@@ -56,7 +59,8 @@ export class NativeLibraryPort implements LibraryPort {
             ),
           );
         },
-        method.startsWith("library.scrape.") ||
+        method.startsWith("update.") ||
+          method.startsWith("library.scrape.") ||
           method.startsWith("library.maintenance.") ||
           method.startsWith("library.files.")
           ? 90000

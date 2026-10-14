@@ -1,8 +1,8 @@
-name: JAVM Alpha 安装包与便携包
+name: JAVM 正式与预发布安装包
 
 on:
   push:
-    tags: ["v*-alpha.*"]
+    tags: ["v[0-9]*.[0-9]*.[0-9]*"]
   workflow_dispatch:
     inputs:
       validation:
@@ -47,6 +47,8 @@ jobs:
       - run: pnpm check
       - name: 验证更新日志和下载表格
         run: node --test scripts/release-notes.test.mjs
+      - name: 验证旧版兼容签名和安装交接
+        run: node --test scripts/legacy-update.test.mjs scripts/legacy-installer.test.mjs
       - name: 执行默认测试集
         run: |
           New-Item -ItemType Directory -Force -Path .tmp | Out-Null
@@ -66,6 +68,13 @@ jobs:
         env:
           JAVM_HTTP_INTEGRATION: "1"
         run: pnpm exec vp test run tests/http-native.integration.test.ts
+      - name: 验证自动更新和数据回退安全夹具
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/windows-release/update-fixtures
+        run: |
+          pnpm native:build --release --update-tests
+          if ($LASTEXITCODE -ne 0) { throw 'Updater fixture build failed' }
+          node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
       - name: 验证封面与资料的原生写入
         env:
           JAVM_MEDIA_INTEGRATION: "1"
@@ -97,6 +106,7 @@ jobs:
       - uses: actions/setup-node@v7.1.0
         with:
           node-version-file: .node-version
+      - uses: pnpm/action-setup@v6.1.0
       - uses: actions/download-artifact@v8.0.2
         with:
           name: javm-alpha-windows-x64
@@ -106,8 +116,12 @@ jobs:
           pattern: javm-development-*
           path: build/posix-artifacts
       - name: 合并已验证的跨平台附件
+        env:
+          JAVM_UPDATE_PRIVATE_KEY: ${{ secrets.JAVM_UPDATE_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/release-alpha.mjs merge-posix
-      - name: 上传、回读验证并公开 Alpha Release
+      - name: 上传、回读验证并公开对应通道 Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release-alpha.mjs publish

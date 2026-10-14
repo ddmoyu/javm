@@ -1,4 +1,5 @@
 import type { ResolutionProvider, ResolutionRequest } from "../../contracts/streamResolution";
+import type { MagnetPage, MagnetSourceId, MagnetResource } from "../magnets/types";
 
 export interface StreamCandidate {
   url: string;
@@ -57,6 +58,18 @@ export type Playlist =
     }
   | { kind: "media"; duration: number; first: Segment };
 export interface ParseTasks {
+  magnetMerge: {
+    input: {
+      body: ArrayBuffer;
+      existing: readonly MagnetResource[];
+      incoming: readonly MagnetResource[];
+    };
+    output: MagnetResource[];
+  };
+  magnet: {
+    input: { url: string; source: MagnetSourceId; body: ArrayBuffer };
+    output: MagnetPage;
+  };
   page: {
     input: { url: string; provider: ResolutionProvider; body: ArrayBuffer };
     output: PageResult;

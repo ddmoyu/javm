@@ -29,11 +29,11 @@ const parser: ResolutionParser = {
     signal: AbortSignal,
   ): Promise<ParseTasks[K]["output"]> {
     check(signal);
-    return (
-      operation === "page"
-        ? parsePage(input.body, input.url, (input as ParseTasks["page"]["input"]).provider)
-        : parsePlaylist(input.body, input.url)
-    ) as ParseTasks[K]["output"];
+    if (operation === "page" && "provider" in input)
+      return parsePage(input.body, input.url, input.provider) as ParseTasks[K]["output"];
+    if (operation === "playlist" && "url" in input)
+      return parsePlaylist(input.body, input.url) as ParseTasks[K]["output"];
+    throw new Error("仅解析安全网页或 HLS 样例");
   },
   close() {},
 };

@@ -1,5 +1,6 @@
 export function releaseAssetNames(version) {
-  if (!/^\d+\.\d+\.\d+(?:-alpha\.\d+)?$/.test(version)) throw new Error("无效的发布版本号");
+  if (!/^\d+\.\d+\.\d+(?:-(?:alpha|beta)\.\d+)?$/.test(version))
+    throw new Error("无效的发布版本号");
   const base = `JAVM-${version}-windows-x64`;
   return { setup: `${base}-setup.exe`, portable: `${base}.zip` };
 }
@@ -71,6 +72,13 @@ export function renderReleaseNotes({ version, changes, repository, assets }) {
     "Windows 10/11 x64，需已安装 [WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。",
     "Setup 为安装版；Portable 解压后运行 `JAVM.exe`。两者均将数据保存在当前用户目录。",
     ...requirements,
+    ...(assets.includes("latest.json")
+      ? [
+          version.includes("-beta.")
+            ? "Beta 不进入旧 Tauri 的默认更新通道，旧版用户需手动安装；首次跨版本升级后，后续更新启用新版失败回退。"
+            : "旧 Tauri 用户可在应用内升级，仍需满足上述系统要求；Windows 会打开安装向导。首次升级沿用旧版安装机制，后续更新启用新版失败回退。",
+        ]
+      : []),
     "",
     "## 下载",
     "",

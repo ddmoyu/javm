@@ -4,6 +4,7 @@ import type { DownloadSettings, DownloadTask } from "../../contracts/downloads";
 import { recoverNativeProcesses } from "./process";
 import { logEvent } from "../../services/logging/events";
 import { importDownloadLog } from "../../services/logging/legacyDownloads";
+import { waitForUpdateStartup } from "./updateGate";
 import { nativeSettingsStorage } from "./settingsStorage";
 import { readDownloadSettings, validateSettings } from "../../services/downloads/input";
 
@@ -42,6 +43,7 @@ export class NativeDownloadRepository implements DownloadRepository {
     }
   };
   private async request<T>(method: string, params: unknown = {}): Promise<T> {
+    await waitForUpdateStartup();
     this.listening ??= events.on("javm.database.response", this.listener).then(() => {});
     await this.listening;
     const requestId = crypto.randomUUID();

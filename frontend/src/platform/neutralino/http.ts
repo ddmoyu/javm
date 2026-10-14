@@ -4,6 +4,7 @@ import type { HttpRequest, HttpResponse } from "../../services/network/HttpServi
 import { StopUnconfirmedError } from "../../services/downloads/ports";
 import { logEvent } from "../../services/logging/events";
 import { browserHeaders } from "../../services/network/browserHeaders";
+import { waitForUpdateStartup } from "./updateGate";
 
 class HttpRpc {
   private listening?: Promise<void>;
@@ -87,6 +88,7 @@ async function remove(path: string) {
 }
 const service = new HttpService({
   async execute(request, signal) {
+    await waitForUpdateStartup();
     if (pendingStops.size) throw new Error("仍有网络请求尚未确认停止，请退出应用后重试。");
     await rpc.ready();
     signal.throwIfAborted();

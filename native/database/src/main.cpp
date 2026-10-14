@@ -4,6 +4,7 @@
 #else
 #include "connection_lifetime.hpp"
 #endif
+#include "window_displays.hpp"
 #include "store.hpp"
 #if JAVM_WITH_MEDIA
 #include "scanner.hpp"
@@ -11,6 +12,7 @@
 #include "probe_service.hpp"
 #endif
 #include "http_service.hpp"
+#include "engine.hpp"
 #include "service.hpp"
 #include "../../common/shared_slot.hpp"
 #include <atomic>
@@ -80,6 +82,7 @@ int runMain(int argc, Char* argv[]) {
 #endif
         javm::http::Service http;
         javm::platform::Service platform;
+        javm::update::Engine updates(databasePath.parent_path());
         // 主实例握手先于下载数据库独占锁；第二次启动可转发参数并退出。
         auto ensureDatabase=[&] {if(!database) database=std::make_unique<Database>(databasePath);};
         std::string message;
@@ -99,6 +102,15 @@ int runMain(int argc, Char* argv[]) {
                 if (method == "capabilities") {
                     response["result"] = {{"protocol", 1}, {"database", true}, {"http", true}, {"media", JAVM_WITH_MEDIA != 0},
                         {"transport", JAVM_USE_WINHTTP ? "winhttp" : "curl"}};
+                } else if (method == "window.displays") {
+                    // 只读桌面信息，不打开数据库，也不触发媒体服务初始化。
+#ifdef _WIN32
+                    response["result"] = desktop::windowDisplays();
+#else
+                    throw std::runtime_error("当前平台尚未适配显示器查询");
+#endif
+                } else if (method.starts_with("update.")) {
+                    response["result"] = updates.request(method, data.value("params", Json::object()));
                 } else if (method.starts_with("platform.")) {
                     platform.request(requestId, method, data.value("params", Json::object()), sendResponse);
                     continue;

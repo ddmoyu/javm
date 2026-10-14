@@ -6,7 +6,8 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { Ref } from "react";
-import { Alert, Button, Group, Tabs, Text } from "@mantine/core";
+import { Alert, Button, Group, SegmentedControl, Tabs, Text } from "@mantine/core";
+import { MagnetSearchPanel } from "./MagnetSearch";
 import type { Film } from "../../contracts/media";
 import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
@@ -26,6 +27,7 @@ const noSubscribe = () => () => {};
 export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
   const { openFilm, scraping, notice, library, resourceSearch } = useWorkspace();
   const [matching, setMatching] = useState<ScrapeTask | null>(null);
+  const [searchKind, setSearchKind] = useState("metadata");
   const [selected, setSelected] = useState<Film | null>(null);
   const [searchRequest, setSearchRequest] = useState({ query: "", revision: 0 });
   const [preview, setPreview] = useState<Film | null>(null);
@@ -68,6 +70,7 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
   }, [preview]);
   useImperativeHandle(ref, () => ({
     showSearch: (query) => {
+      setSearchKind("metadata");
       setMatching(null);
       setSelected(null);
       if (query !== undefined)
@@ -96,66 +99,99 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
         </Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="search" className="fill-column">
-        {collecting && !preview && artworkState?.busy && (
-          <Group justify="space-between" mb="sm">
-            <Text size="sm" component="output" aria-live="polite">
-              正在保存图片 · {artworkState.processed} / {artworkState.total}
-            </Text>
-            <Button size="xs" variant="default" onClick={artwork?.cancel}>
-              停止获取图片
-            </Button>
+        {!matching && resourceSearch?.magnets && (
+          <Group mb="md">
+            <SegmentedControl
+              size="sm"
+              aria-label="资源搜索类型"
+              value={searchKind}
+              onChange={setSearchKind}
+              data={[
+                { value: "metadata", label: "影片资料" },
+                { value: "magnet", label: "磁力资源" },
+              ]}
+            />
           </Group>
         )}
-        {selected && (
-          <Group mb="md" justify="space-between">
-            <Text size="sm">当前影片：{selected.title}</Text>
-            <Button variant="default" size="xs" onClick={() => openFilm(selected, "edit")}>
-              编辑并补全资料
-            </Button>
-          </Group>
+        {resourceSearch?.magnets && (
+          <div
+            className="fill-column"
+            style={{
+              overflow: "auto",
+              display: !matching && searchKind === "magnet" ? undefined : "none",
+            }}
+          >
+            <MagnetSearchPanel service={resourceSearch.magnets} notice={notice} />
+          </div>
         )}
-        <MetaTubeSearch
-          allowResourceLookup={!matching}
-          onCollect={collect}
-          onLookupResources={(code, trigger) => {
-            previewOrigin.current = trigger;
-            const candidate = { provider: "", id: `code:${code}`, code, title: code };
-            setPreview(
-              movieDetailsToFilm(
-                { ...candidate, fields: { code, title: code }, homepage: "" },
-                candidate,
-              ),
-            );
-            setPreviewCandidate(null);
-            setPreviewDetails(null);
-            setPreviewView("links");
-            resourceSearch?.search(code);
+        <div
+          className="fill-column"
+          style={{
+            display:
+              !matching && searchKind === "magnet" && resourceSearch?.magnets ? "none" : undefined,
           }}
-          key={matching?.id ?? selected?.id ?? searchRequest.revision}
-          initialQuery={
-            matching?.query ||
-            matching?.name ||
-            selected?.code ||
-            selected?.title ||
-            searchRequest.query
-          }
-          onApply={
-            matching && scraping
-              ? async (candidate) => {
-                  await scraping.retry(matching.id, undefined, candidate);
-                  setMatching(null);
-                  setTab("batch");
-                }
-              : undefined
-          }
-          onSelect={(details, candidate, trigger) => {
-            previewOrigin.current = trigger;
-            setPreview(movieDetailsToFilm(details, candidate));
-            setPreviewCandidate(candidate.provider ? candidate : null);
-            setPreviewDetails(details);
-            setPreviewView("info");
-          }}
-        />
+        >
+          {collecting && !preview && artworkState?.busy && (
+            <Group justify="space-between" mb="sm">
+              <Text size="sm" component="output" aria-live="polite">
+                正在保存图片 · {artworkState.processed} / {artworkState.total}
+              </Text>
+              <Button size="xs" variant="default" onClick={artwork?.cancel}>
+                停止获取图片
+              </Button>
+            </Group>
+          )}
+          {selected && (
+            <Group mb="md" justify="space-between">
+              <Text size="sm">当前影片：{selected.title}</Text>
+              <Button variant="default" size="xs" onClick={() => openFilm(selected, "edit")}>
+                编辑并补全资料
+              </Button>
+            </Group>
+          )}
+          <MetaTubeSearch
+            allowResourceLookup={!matching}
+            onCollect={collect}
+            onLookupResources={(code, trigger) => {
+              previewOrigin.current = trigger;
+              const candidate = { provider: "", id: `code:${code}`, code, title: code };
+              setPreview(
+                movieDetailsToFilm(
+                  { ...candidate, fields: { code, title: code }, homepage: "" },
+                  candidate,
+                ),
+              );
+              setPreviewCandidate(null);
+              setPreviewDetails(null);
+              setPreviewView("links");
+              resourceSearch?.search(code);
+            }}
+            key={matching?.id ?? selected?.id ?? searchRequest.revision}
+            initialQuery={
+              matching?.query ||
+              matching?.name ||
+              selected?.code ||
+              selected?.title ||
+              searchRequest.query
+            }
+            onApply={
+              matching && scraping
+                ? async (candidate) => {
+                    await scraping.retry(matching.id, undefined, candidate);
+                    setMatching(null);
+                    setTab("batch");
+                  }
+                : undefined
+            }
+            onSelect={(details, candidate, trigger) => {
+              previewOrigin.current = trigger;
+              setPreview(movieDetailsToFilm(details, candidate));
+              setPreviewCandidate(candidate.provider ? candidate : null);
+              setPreviewDetails(details);
+              setPreviewView("info");
+            }}
+          />
+        </div>
       </Tabs.Panel>
       <Tabs.Panel value="batch" className="fill-column">
         <BatchScraper

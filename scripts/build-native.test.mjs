@@ -18,7 +18,7 @@ test("Linux 与两种 macOS 架构使用当前工具链的独立核心 preset", 
   ]) {
     const plan = nativeBuildPlan(platform, ["--core-only", "--fresh"]);
     assert.deepEqual(plan, [
-      { command: "cmake", args: ["--fresh", "--preset", preset] },
+      { command: "cmake", args: ["--fresh", "--preset", preset, "-DJAVM_UPDATE_TESTS=OFF"] },
       { command: "cmake", args: ["--build", "--preset", preset] },
     ]);
   }
@@ -35,8 +35,8 @@ test("所有平台支持隔离基础夹具，不隐式启用应用构建", () =>
 test("完整桌面构建使用相应开发或已验证组件发布 preset", () => {
   for (const platform of ["linux", "darwin"]) {
     const name = platform === "darwin" ? "macos" : "linux";
-    assert.equal(nativeBuildPlan(platform)[0].args.at(-1), `${name}-app`);
-    assert.equal(nativeBuildPlan(platform, ["--release"])[0].args.at(-1), `${name}-release`);
+    assert.ok(nativeBuildPlan(platform)[0].args.includes(`${name}-app`));
+    assert.ok(nativeBuildPlan(platform, ["--release"])[0].args.includes(`${name}-release`));
   }
 });
 test("拒绝未支持的平台、冲突参数和未知选项", () => {

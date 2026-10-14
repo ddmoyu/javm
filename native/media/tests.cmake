@@ -7,7 +7,7 @@ target_compile_definitions(javm_library_fixture PRIVATE
     JAVM_USE_WINHTTP=$<STREQUAL:${JAVM_EXTENSION_TRANSPORT},winhttp>)
 if(JAVM_EXTENSION_TRANSPORT STREQUAL "winhttp")
     target_sources(javm_library_fixture PRIVATE ../database/src/extension_winhttp.cpp)
-    target_link_libraries(javm_library_fixture PRIVATE winhttp iphlpapi ws2_32)
+    target_link_libraries(javm_library_fixture PRIVATE winhttp iphlpapi ws2_32 user32)
 else()
     target_sources(javm_library_fixture PRIVATE ../database/src/extension_curl.cpp)
     target_link_libraries(javm_library_fixture PRIVATE CURL::libcurl)

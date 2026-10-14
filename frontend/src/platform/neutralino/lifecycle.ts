@@ -53,8 +53,11 @@ function refreshTrayMenu() {
   });
 }
 
-export async function exitApplication() {
-  if (exiting) return;
+export async function exitApplication(beforeExit?: () => Promise<void>) {
+  if (exiting) {
+    if (beforeExit) throw new Error("应用已在退出，请等待退出后重试更新。");
+    return;
+  }
   exiting = true;
   refreshTrayMenu();
   stopApplicationLaunches();
@@ -65,6 +68,7 @@ export async function exitApplication() {
     else await stopLibrary?.();
     logEvent("info", "app", "stopped", "任务收尾完成，应用即将退出");
     await flushLogs();
+    await beforeExit?.();
     await app.exit();
   } catch (error) {
     logEvent(

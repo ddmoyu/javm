@@ -300,7 +300,7 @@ describe("统一搜索与资源链接（仅安全虚构数据）", () => {
         operation: K,
         input: ParseTasks[K]["input"],
       ): Promise<ParseTasks[K]["output"]> {
-        if (operation !== "playlist") throw new Error("仅解析安全 HLS 样例");
+        if (operation !== "playlist" || !("url" in input)) throw new Error("仅解析安全 HLS 样例");
         return parsePlaylist(input.body, input.url) as ParseTasks[K]["output"];
       },
       close() {},

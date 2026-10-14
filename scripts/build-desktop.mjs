@@ -19,6 +19,7 @@ if (process.platform !== "win32") {
   config.modes.window.webviewArgs = "--javm-managed";
   config.cli.copyItems = [
     "bin/javm_database",
+    "bin/javm_updater",
     "bin/javm_process",
     process.platform === "darwin" ? "bin/libmediainfo.0.dylib" : "bin/libmediainfo.so.0",
     "bin/licenses",

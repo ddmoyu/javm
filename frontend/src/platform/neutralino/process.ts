@@ -143,6 +143,7 @@ export const runNativeProcess: ProcessRunner = async (
   cooperativeCancel = false,
   envs,
 ) => {
+  await (await import("./updateGate")).waitForUpdateStartup();
   signal.throwIfAborted();
   const posix = toolPlatform() !== "Windows";
   const reservation = Symbol();

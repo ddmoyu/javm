@@ -31,7 +31,16 @@ export function validatePosixRecord(
       (report) => report.done && !report.fatal && !report.errors.length,
     ),
   );
-  const expected = Object.values(posixAssetNames(version, platform));
+  const update = `JAVM-${version}-${platform}-update.jup`;
+  const expected = [
+    ...Object.values(posixAssetNames(version, platform)),
+    ...(!version.includes("-alpha.") && platform.startsWith("macos-")
+      ? [`JAVM-${version}-${platform}-legacy.app.tar.gz`]
+      : []),
+    ...(!version.includes("-alpha.") || manifest.assets.some((asset) => asset.name === update)
+      ? [update]
+      : []),
+  ];
   assert.deepEqual(
     manifest.assets.map((asset) => asset.name).sort((a, b) => a.localeCompare(b)),
     expected.sort((a, b) => a.localeCompare(b)),

@@ -3,7 +3,7 @@
   "applicationId": "net.ddmoyu.javm.dev",
   "applicationName": "JAVM",
   "applicationIcon": "resources/icon.png",
-  "version": "1.0.5-alpha.10",
+  "version": "1.0.5-beta.1",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/dist/frontend/",
@@ -122,6 +122,7 @@
     },
     "copyItems": [
       "bin/javm_database.exe",
+      "bin/javm_updater.exe",
       "bin/MediaInfo.dll",
       "bin/mediainfo-lite.json",
       "bin/licenses",

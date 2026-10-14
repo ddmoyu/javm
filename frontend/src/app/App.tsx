@@ -64,6 +64,7 @@ import type { ResourceSearchService } from "../services/streamResolution/Resourc
 import type { Film } from "../contracts/media";
 import { LegacyImportModal } from "../features/library/LegacyImportModal";
 import { listenApplicationLaunches } from "../platform/neutralino/applicationInstance";
+import { createApplicationUpdater } from "../platform/neutralino/applicationUpdates";
 
 const PlaybackWindow = lazy(() => import("../features/player/PlaybackWindow"));
 
@@ -125,6 +126,9 @@ export function App({
   const { setColorScheme } = useMantineColorScheme();
   const theme = useComputedColorScheme("dark");
   const libraryState = useSyncExternalStore(library.subscribe, library.getSnapshot);
+  const updater = createApplicationUpdater(runtime, network);
+  const updateState = useSyncExternalStore(updater.subscribe, updater.getSnapshot);
+  const updateAvailable = !!updateState.release || updateState.status.phase === "ready";
   const playbackState = useSyncExternalStore(playback.subscribe, playback.getSnapshot);
   const [uiPreferences] = useState(() => createUiPreferences(runtime));
   const { value: preferences } = useSyncExternalStore(
@@ -138,6 +142,14 @@ export function App({
     const error = uiPreferences.getSnapshot().error;
     return error ? { message: error } : null;
   });
+  const announcedUpdate = useRef("");
+  useEffect(() => {
+    const version = updateState.release?.version;
+    if (version && announcedUpdate.current !== version) {
+      announcedUpdate.current = version;
+      setToast({ message: `发现 JAVM ${version}，可前往系统设置下载更新。` });
+    }
+  }, [updateState.release?.version]);
   const [downloadOpened, setDownloadOpened] = useState(false);
   const [downloadInitial, setDownloadInitial] = useState<{ url: string; name: string }>();
   const [downloadFilm, setDownloadFilm] = useState<Film | undefined>();
@@ -236,7 +248,7 @@ export function App({
         onClick={() => setPage(item.id)}
       >
         <Icon name={item.icon} size={20} />
-        <span>{item.short}</span>
+        <span>{item.id === "settings" && updateAvailable ? "有更新" : item.short}</span>
       </UnstyledButton>
     ) : (
       <NavLink
@@ -245,7 +257,7 @@ export function App({
         type="button"
         active={page === item.id}
         aria-current={page === item.id ? "page" : undefined}
-        label={item.title}
+        label={item.id === "settings" && updateAvailable ? "系统设置 · 有更新" : item.title}
         leftSection={<Icon name={item.icon} size={18} />}
         onClick={() => setPage(item.id)}
         variant="light"

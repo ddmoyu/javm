@@ -63,7 +63,7 @@ describe("普通界面偏好使用官方存储", () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 
-  it("缺失时异步读取旧值，刷新后才迁移且保留旧记录", async () => {
+  it("缺失时读取旧值，更新试运行期间不阻塞初始化，提交后才迁移且保留旧记录", async () => {
     native.getKeys.mockResolvedValue([]);
     const legacy = new Map([
       ["javm:preferences", JSON.stringify({ cardClickToPlay: false, navCollapsed: true })],
@@ -72,6 +72,9 @@ describe("普通界面偏好使用官方存储", () => {
     ]);
     const before = new Map(legacy);
     vi.stubGlobal("localStorage", { getItem: (name: string) => legacy.get(name) ?? null });
+    const { holdUpdateStartup, commitUpdateStartup } =
+      await import("../frontend/src/platform/neutralino/updateGate");
+    holdUpdateStartup();
     const { createUiPreferences } = await import("../frontend/src/app/preferences");
     const settings = createUiPreferences("desktop");
     await settings.initialize();
@@ -81,8 +84,11 @@ describe("普通界面偏好使用官方存储", () => {
       navCollapsed: true,
       discoverCardWidth: 420,
     });
+    const saving = settings.flush();
+    await Promise.resolve();
     expect(native.setData).not.toHaveBeenCalled();
-    await settings.flush();
+    commitUpdateStartup();
+    await saving;
     expect(native.setData).toHaveBeenCalledTimes(1);
     expect(JSON.parse(native.setData.mock.calls[0]![1] as string)).toEqual(
       settings.getSnapshot().value,

@@ -1,5 +1,6 @@
 import { filesystem, storage } from "@neutralinojs/lib";
 import { logEvent } from "../../services/logging/events";
+import { waitForUpdateStartup } from "./updateGate";
 
 const writes = new Map<string, { tail: Promise<void>; count: number }>();
 function serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
@@ -7,7 +8,10 @@ function serialize<T>(key: string, operation: () => Promise<T>): Promise<T> {
   if (queue.count >= 16) return Promise.reject(new Error("设置保存请求过多，请稍后重试。"));
   writes.set(key, queue);
   ++queue.count;
-  const job = queue.tail.then(operation);
+  const job = queue.tail.then(async () => {
+    await waitForUpdateStartup();
+    return operation();
+  });
   queue.tail = job.then(
     () => {},
     () => {},
@@ -52,7 +56,7 @@ export function nativeSettingsStorage<T>(key: string) {
     write: (value: T) => serialize(key, () => write(value)),
     migrate: (create: () => T) =>
       serialize(key, async () => {
-        // 检查必须与此键的正常保存串行执行。
+        // 检查必须在更新启动确认之后，并与此键的正常保存串行执行。
         const current = await read();
         if (current !== null) return current;
         const value = create();

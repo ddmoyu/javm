@@ -101,6 +101,10 @@ function FilmDetailContent({
   const [removingImages, setRemovingImages] = useState<{ ids?: string[] } | null>(null);
   const [tab, setTab] = useState<string | null>(initialView === "links" ? "links" : "info");
   const lookupWorkId = preview ? undefined : String(film.id);
+  useEffect(
+    () => resourceSearch?.magnets?.holdView(film.code || film.title),
+    [resourceSearch, film.code, film.title],
+  );
   // 资源查找随详情页存在；关闭或切换到其他影片后结束该番号仍在进行的后台取流。
   useEffect(
     () => resourceSearch?.holdView(film.code, lookupWorkId),

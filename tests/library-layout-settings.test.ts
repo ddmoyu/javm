@@ -58,11 +58,14 @@ describe("媒体库显示方式记忆", () => {
     expect(write.mock.calls).toEqual([[{ layout: "landscape" }], [{ layout: "list" }]]);
   });
 
-  it("保存失败保留当前显示方式，并允许重试", async () => {
+  it("保存失败恢复上次成功的显示方式，并允许重试", async () => {
     const write = vi.fn().mockRejectedValueOnce(new Error("只读存储")).mockResolvedValue(undefined);
-    const service = new LibraryLayoutService({ read: async () => null, write });
+    const service = new LibraryLayoutService({
+      read: async () => ({ layout: "landscape" }),
+      write,
+    });
     await service.setLayout("list");
-    expect(service.getSnapshot().layout).toBe("list");
+    expect(service.getSnapshot().layout).toBe("landscape");
     expect(service.getSnapshot().error).toContain("保存失败");
     await service.setLayout("list");
     expect(service.getSnapshot()).toEqual({ layout: "list", error: "" });

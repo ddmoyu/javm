@@ -28,6 +28,7 @@ import {
 import { desktopHostFile } from "./desktop-host.mjs";
 import { binaryArchitecture } from "./third-party/posix/verify.mjs";
 import { applicationNotices } from "./posix-notices.mjs";
+import { installationReceipt, updateArchive, platformVersion } from "./update-format.mjs";
 
 if (!targets.includes(target)) throw new Error("此安装包需要在相应 POSIX 系统和架构上生成");
 const pkg = await json(path.join(root, "package.json"));
@@ -66,6 +67,7 @@ const executables = [
   "JAVM",
   "JAVM-host",
   "bin/javm_database",
+  "bin/javm_updater",
   "bin/javm_process",
   "bin/tools/curl",
   "bin/tools/ffmpeg",
@@ -82,7 +84,7 @@ await writeFile(
   path.join(payload, "bin/licenses/THIRD_PARTY_NOTICES.txt"),
   await applicationNotices(path.dirname(nativeBuild)),
 );
-for (const binary of ["javm_database", "javm_process", library])
+for (const binary of ["javm_database", "javm_updater", "javm_process", library])
   assert.equal(
     sha256(await readFile(path.join(payload, "bin", binary))),
     sha256(await readFile(path.join(nativeBuild, binary))),
@@ -134,7 +136,7 @@ if (mac) {
 <key>CFBundleIdentifier</key><string>net.ddmoyu.javm</string><key>CFBundleName</key><string>JAVM</string>
 <key>CFBundleDisplayName</key><string>JAVM</string><key>CFBundleExecutable</key><string>JAVM</string>
 <key>CFBundlePackageType</key><string>APPL</string><key>CFBundleIconFile</key><string>JAVM.icns</string>
-<key>CFBundleShortVersionString</key><string>${pkg.version.split("-")[0]}</string><key>CFBundleVersion</key><string>${pkg.version.replace("-alpha.", "a")}</string>
+<key>CFBundleShortVersionString</key><string>${pkg.version.split("-")[0]}</string><key>CFBundleVersion</key><string>${platformVersion(pkg.version, "macos")}</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string><key>NSHighResolutionCapable</key><true/>
 <key>CFBundleURLTypes</key><array><dict><key>CFBundleTypeRole</key><string>Viewer</string><key>CFBundleURLName</key><string>net.ddmoyu.javm.links</string><key>CFBundleURLSchemes</key><array><string>javm</string></array></dict></array>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsArbitraryLoads</key><true/></dict>
@@ -153,6 +155,13 @@ if (mac) {
   }
   // Apple Silicon 运行所需的 ad-hoc 校验，不使用开发者证书，不执行公证。
   // The main executable is signed with the outer APP after every nested binary.
+  await installationReceipt(
+    application,
+    pkg.version,
+    "app",
+    "Contents/Resources/update-installation.json",
+    ["Contents/_CodeSignature/CodeResources"],
+  );
   await run("codesign", ["--force", "--sign", "-", application]);
   await run("codesign", ["--verify", "--deep", "--strict", application]);
   const zip = path.join(release, `${name}-portable.zip`);
@@ -175,6 +184,14 @@ if (mac) {
     dmg,
   ]);
   await asset(dmg, "installer");
+  const update = path.join(release, `${name}-update.jup`);
+  await updateArchive(application, update);
+  await asset(update, "update");
+  if (!pkg.version.includes("-alpha.")) {
+    const legacy = path.join(release, `${name}-legacy.app.tar.gz`);
+    await run("tar", ["-czf", legacy, "-C", stage, "JAVM.app"]);
+    await asset(legacy, "legacy-update");
+  }
 } else {
   // 固定 Ubuntu 24.04 ABI；系统 WebKitGTK、GTK 和密钥环由发行版维护，DEB 明确声明。
   for (const relative of executables) {
@@ -184,12 +201,20 @@ if (mac) {
     const links = await run("ldd", [file], root, true);
     assert.ok(!links.includes("not found"), `缺少运行依赖: ${relative}`);
   }
+  await installationReceipt(application, pkg.version, "portable");
+  const update = path.join(release, `${name}-update.jup`);
+  await updateArchive(application, update);
+  await asset(update, "update");
   const tar = path.join(release, `${name}-portable.tar.gz`);
   await run("tar", ["-czf", tar, "-C", stage, "JAVM"]);
   await asset(tar, "portable");
   const deb = path.join(stage, "deb");
   await mkdir(path.join(deb, "DEBIAN"), { recursive: true });
   await cp(application, path.join(deb, "opt/JAVM"), { recursive: true });
+  await writeFile(
+    path.join(deb, "opt/JAVM/installation-kind.json"),
+    JSON.stringify({ kind: "deb" }) + "\n",
+  );
   await mkdir(path.join(deb, "usr/bin"), { recursive: true });
   await writeFile(path.join(deb, "usr/bin/javm"), '#!/bin/sh\nexec /opt/JAVM/JAVM "$@"\n', {
     mode: 0o755,
@@ -205,7 +230,7 @@ if (mac) {
   );
   await writeFile(
     path.join(deb, "DEBIAN/control"),
-    `Package: javm\nVersion: ${pkg.version.replace("-alpha.", "~alpha.")}\nArchitecture: amd64\nMaintainer: JAVM <noreply@ddmoyu.net>\nSection: video\nPriority: optional\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, libsecret-1-0, libicu74, ca-certificates, libayatana-appindicator3-1\nRecommends: gnome-keyring\nHomepage: https://github.com/ddmoyu/javm\nDescription: JAVM local media library\n`,
+    `Package: javm\nVersion: ${platformVersion(pkg.version, "deb")}\nArchitecture: amd64\nMaintainer: JAVM <noreply@ddmoyu.net>\nSection: video\nPriority: optional\nDepends: libgtk-3-0t64, libwebkit2gtk-4.1-0, gstreamer1.0-libav, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, libsecret-1-0, libicu74, ca-certificates, libayatana-appindicator3-1, policykit-1\nRecommends: gnome-keyring\nHomepage: https://github.com/ddmoyu/javm\nDescription: JAVM local media library\n`,
   );
   await run("desktop-file-validate", [
     path.join(deb, "usr/share/applications/net.ddmoyu.javm.desktop"),
@@ -215,6 +240,10 @@ if (mac) {
   await asset(debFile, "installer");
   const appDir = path.join(stage, "JAVM.AppDir");
   await cp(application, path.join(appDir, "usr/lib/javm"), { recursive: true });
+  await writeFile(
+    path.join(appDir, "usr/lib/javm/installation-kind.json"),
+    JSON.stringify({ kind: "appimage" }) + "\n",
+  );
   await writeFile(
     path.join(appDir, "AppRun"),
     '#!/bin/sh\nroot=$(CDPATH= cd -- "${0%/*}" && pwd)\nexec "$root/usr/lib/javm/JAVM" "$@"\n',

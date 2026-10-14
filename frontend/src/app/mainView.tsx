@@ -16,6 +16,7 @@ import { LegacyImportService } from "../services/library/LegacyImportService";
 import { createDiscoveryCatalogService } from "../platform/neutralino/discoveryCatalog";
 import { createScrapeService } from "../platform/neutralino/scraping";
 import { createResolutionService } from "../platform/neutralino/streamResolution";
+import { createMagnetSearch } from "../platform/neutralino/magnetSearch";
 import { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
 import { nativeSettingsStorage } from "../platform/neutralino/settingsStorage";
 import { createArtworkService } from "../platform/neutralino/artwork";
@@ -34,7 +35,7 @@ import { createUiPreferences } from "./preferences";
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
   const layoutSettings = createLibraryLayoutSettings(runtime);
-  if (runtime === "desktop") initializeMainWindowSize();
+  if (runtime === "desktop") void initializeMainWindowSize();
   const network = createNetworkSettings(runtime);
   const updater = createApplicationUpdater(runtime, network);
   const backgroundSettings = createBackgroundSettings(runtime);
@@ -60,6 +61,7 @@ export function createMainView(runtime: Runtime) {
           writePreferences: (value) => resourcePreferences.write(value),
         }
       : undefined,
+    createMagnetSearch(runtime, network, () => downloads.initialize()),
   );
   const legacyImport = new LegacyImportService(
     runtime === "desktop" ? new NativeLibraryPort() : undefined,

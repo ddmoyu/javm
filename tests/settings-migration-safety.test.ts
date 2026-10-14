@@ -63,13 +63,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("设置迁移的覆盖保护", () => {
-  it("实际迁移前重新检查目标，已有值优先且不解析旧配置", async () => {
+  it("更新启动等待结束后重新检查目标，已有值优先且不解析旧配置", async () => {
     const { nativeSettingsStorage } =
       await import("../frontend/src/platform/neutralino/settingsStorage");
+    const { holdUpdateStartup, commitUpdateStartup } =
+      await import("../frontend/src/platform/neutralino/updateGate");
     const store = nativeSettingsStorage<UiPreferences>(uiKey);
+    holdUpdateStartup();
     const create = vi.fn(() => defaults);
     const migrating = store.migrate(create);
     records.set(uiKey, JSON.stringify(existing));
+    commitUpdateStartup();
     expect(await migrating).toEqual(existing);
     expect(create).not.toHaveBeenCalled();
     expect(native.setData).not.toHaveBeenCalled();
@@ -78,12 +82,16 @@ describe("设置迁移的覆盖保护", () => {
   it.each(["迁移先", "保存先"])("同一键跨适配器串行处理，%s也保留用户最终保存", async (order) => {
     const { nativeSettingsStorage } =
       await import("../frontend/src/platform/neutralino/settingsStorage");
+    const { holdUpdateStartup, commitUpdateStartup } =
+      await import("../frontend/src/platform/neutralino/updateGate");
     const one = nativeSettingsStorage<UiPreferences>(uiKey);
     const two = nativeSettingsStorage<UiPreferences>(uiKey);
+    holdUpdateStartup();
     const jobs =
       order === "迁移先"
         ? [one.migrate(() => defaults), two.write(existing)]
         : [two.write(existing), one.migrate(() => defaults)];
+    commitUpdateStartup();
     await Promise.all(jobs);
     expect(JSON.parse(records.get(uiKey)!)).toEqual(existing);
     expect(native.setData).toHaveBeenCalledTimes(order === "迁移先" ? 2 : 1);
@@ -92,9 +100,13 @@ describe("设置迁移的覆盖保护", () => {
   it("同一设置键的排队有界，失败后仍能继续保存", async () => {
     const { nativeSettingsStorage } =
       await import("../frontend/src/platform/neutralino/settingsStorage");
+    const { holdUpdateStartup, commitUpdateStartup } =
+      await import("../frontend/src/platform/neutralino/updateGate");
     const store = nativeSettingsStorage<UiPreferences>(uiKey);
+    holdUpdateStartup();
     const jobs = Array.from({ length: 16 }, () => store.write(defaults));
     await expect(store.write(existing)).rejects.toThrow("请求过多");
+    commitUpdateStartup();
     await Promise.all(jobs);
     await store.write(existing);
     expect(JSON.parse(records.get(uiKey)!)).toEqual(existing);
@@ -195,11 +207,15 @@ describe("界面偏好完整迁移与部分修改", () => {
   it("迁移等待期间只合并用户修改字段，保留后来出现的其他官方偏好", async () => {
     legacy.set("javm:color-scheme", "dark");
     const { createUiPreferences } = await import("../frontend/src/app/preferences");
+    const { holdUpdateStartup, commitUpdateStartup } =
+      await import("../frontend/src/platform/neutralino/updateGate");
     const service = createUiPreferences("desktop");
     await service.initialize();
+    holdUpdateStartup();
     const migrating = service.flush();
     const changing = service.update({ navCollapsed: true });
     records.set(uiKey, JSON.stringify(existing));
+    commitUpdateStartup();
     await Promise.all([migrating, changing]);
     const expected = { ...existing, navCollapsed: true };
     expect(service.getSnapshot().value).toEqual(expected);

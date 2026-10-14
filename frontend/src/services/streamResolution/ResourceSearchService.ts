@@ -1,5 +1,6 @@
 import type { NewDownload } from "../../contracts/downloads";
 import { DownloadAdditionCancelledError } from "../downloads/duplicates";
+import type { MagnetSearchService } from "../magnets/MagnetSearchService";
 import type {
   ResolutionHandle,
   ResolutionState,
@@ -79,6 +80,7 @@ export class ResourceSearchService {
     private readonly downloads: ResourceDownloadPort,
     readonly sources: readonly ResourceSource[] = resourceSources,
     private readonly archive?: ResourceArchive,
+    readonly magnets?: MagnetSearchService,
   ) {
     this.snapshot = {
       available: resolution.getSnapshot().webviewAvailable,
@@ -617,6 +619,7 @@ ${workId ?? ""}`;
   };
   async shutdown() {
     this.stopped = true;
+    this.magnets?.cancel();
     clearTimeout(this.preferenceTimer);
     const active = [...this.handles.values()].map((handle) => handle.result);
     this.cancel();
@@ -626,6 +629,7 @@ ${workId ?? ""}`;
     await Promise.allSettled([...this.handoffs]);
     await Promise.allSettled([...this.writes]);
     await this.flushPreferences();
+    await this.magnets?.shutdown();
     this.unsubscribe();
     this.snapshot = { ...this.snapshot, available: false };
     this.publish();

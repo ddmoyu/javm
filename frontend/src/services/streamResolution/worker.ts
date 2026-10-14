@@ -1,5 +1,7 @@
 import type { ParseTasks } from "./ports";
 import { parsePage, parsePlaylist } from "./parsers";
+import { parseMagnetPage } from "../magnets/parsers";
+import { mergeMagnets } from "../magnets/magnet";
 import { failure, ResolutionError } from "./shared";
 
 export type ParseMessage = {
@@ -10,9 +12,13 @@ export type ParseMessage = {
 globalThis.onmessage = ({ data }: MessageEvent<ParseMessage>) => {
   try {
     const value =
-      data.operation === "page"
-        ? parsePage(data.input.body, data.input.url, data.input.provider)
-        : parsePlaylist(data.input.body, data.input.url);
+      data.operation === "magnetMerge"
+        ? mergeMagnets(data.input.existing, data.input.incoming)
+        : data.operation === "magnet"
+          ? parseMagnetPage(data.input.body, data.input.url, data.input.source)
+          : data.operation === "page"
+            ? parsePage(data.input.body, data.input.url, data.input.provider)
+            : parsePlaylist(data.input.body, data.input.url);
     globalThis.postMessage({ value });
   } catch (error) {
     globalThis.postMessage({

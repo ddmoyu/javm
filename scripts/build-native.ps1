@@ -1,4 +1,4 @@
-param([switch]$Fresh, [switch]$Release, [switch]$PortabilityChecks, [switch]$CoreOnly, [switch]$CurlTransport)
+param([switch]$Fresh, [switch]$Release, [switch]$PortabilityChecks, [switch]$CoreOnly, [switch]$CurlTransport, [switch]$UpdateTests)
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
@@ -49,13 +49,16 @@ try {
         return
     }
     $preset = if ($Release) { 'windows-release' } elseif ($CoreOnly -and $CurlTransport) { 'windows-core-curl' } elseif ($CoreOnly) { 'windows-core' } else { 'windows-msvc' }
-    & $env:ComSpec /d /s /c "chcp 65001 >nul && call `"$vcvarsPath`" >nul && `"$cmakePath`"$freshOption --preset $preset -DCMAKE_MAKE_PROGRAM=`"$ninjaPath`" && `"$cmakePath`" --build --preset $preset"
+    $updateTestsOption = if ($UpdateTests) { 'ON' } else { 'OFF' }
+    & $env:ComSpec /d /s /c "chcp 65001 >nul && call `"$vcvarsPath`" >nul && `"$cmakePath`"$freshOption --preset $preset -DCMAKE_MAKE_PROGRAM=`"$ninjaPath`" -DJAVM_UPDATE_TESTS=$updateTestsOption && `"$cmakePath`" --build --preset $preset"
     if ($LASTEXITCODE -ne 0) { throw "Native build failed with exit code $LASTEXITCODE" }
     if ($CoreOnly) { return }
     # Incremental builds may skip POST_BUILD after switching Debug/Release.
     # Deploy the database executable; packaging uses the official Neutralino host.
     Copy-Item -LiteralPath (Join-Path $projectRoot "build/native/$preset/bin/javm_database.exe") `
         -Destination (Join-Path $projectRoot 'bin/javm_database.exe') -Force
+    Copy-Item -LiteralPath (Join-Path $projectRoot "build/native/$preset/bin/javm_updater.exe") `
+        -Destination (Join-Path $projectRoot 'bin/javm_updater.exe') -Force
 }
 finally {
     Pop-Location

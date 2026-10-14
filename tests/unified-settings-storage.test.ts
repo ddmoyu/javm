@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { events, extensions, filesystem, storage } from "@neutralinojs/lib";
 import { NativeDownloadRepository } from "../frontend/src/platform/neutralino/downloadRepository";
+import { createNetworkSettings } from "../frontend/src/platform/neutralino/network";
+import {
+  commitUpdateStartup,
+  holdUpdateStartup,
+} from "../frontend/src/platform/neutralino/updateGate";
 import { DownloadService } from "../frontend/src/services/downloads/DownloadService";
 import { createDownloadTasks } from "../frontend/src/services/downloads/input";
 import { defaultDownloadSettings } from "../frontend/src/contracts/downloads";
@@ -34,6 +39,7 @@ let methods: string[];
 
 beforeEach(() => {
   vi.resetAllMocks();
+  commitUpdateStartup();
   records.clear();
   listeners.clear();
   legacy = { ...current, directory: "C:/JAVM-Safe/Legacy", concurrency: 3 };
@@ -63,6 +69,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  commitUpdateStartup();
   vi.unstubAllGlobals();
 });
 
@@ -187,5 +194,24 @@ describe("普通应用设置统一使用官方 Storage", () => {
     expect(service.getSnapshot().settings).toEqual(current);
     expect(JSON.parse(records.get(key)!)).toEqual(current);
     expect(methods).not.toContain("downloads.settings");
+  });
+
+  it("下载和网络设置都经统一入口等待更新启动确认后才写入", async () => {
+    const repository = new NativeDownloadRepository();
+    const network = createNetworkSettings("desktop");
+    await network.initialize();
+    holdUpdateStartup();
+    const downloadsSaved = repository.saveSettings(current);
+    const networkSaved = network.update({ proxyEnabled: false, proxy: "http://127.0.0.1:7890" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(storage.setData).not.toHaveBeenCalled();
+    commitUpdateStartup();
+    await Promise.all([downloadsSaved, networkSaved]);
+    expect(JSON.parse(records.get(key)!)).toEqual(current);
+    expect(JSON.parse(records.get("javm-network-v1")!)).toEqual({
+      proxyEnabled: false,
+      proxy: "http://127.0.0.1:7890",
+    });
+    expect(methods).toEqual([]);
   });
 });

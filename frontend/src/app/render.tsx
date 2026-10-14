@@ -9,6 +9,7 @@ import { playerWindowId } from "../services/playback/windowChannel";
 import { createApplicationLogs } from "../platform/neutralino/logging";
 import { logEvent } from "../services/logging/events";
 import { failStartup, finishStartup } from "./startup";
+import { confirmUpdateStartup, prepareUpdateStartup } from "../platform/neutralino/updateStartup";
 import { createUiPreferences, uiColorSchemeManager } from "./preferences";
 import type { UiPreferencesService } from "../services/settings/UiPreferencesService";
 
@@ -17,7 +18,12 @@ let viewLoadedAt = 0;
 
 function StartupReady({ preferences, main }: { preferences: UiPreferencesService; main: boolean }) {
   useEffect(() => {
-    if (main) void preferences.flush().catch(failStartup);
+    void confirmUpdateStartup()
+      .then(() => {
+        // 先完成更新试运行，再落盘迁移值；不能在界面挂载前等待写入门闩。
+        if (main) return preferences.flush();
+      })
+      .catch(failStartup);
     if (!finishStartup()) return;
     logEvent("info", "app", "ui_ready", "界面已挂载", {
       frontendLoadMs: Math.round(frontendLoadedAt),
@@ -37,6 +43,7 @@ export async function start() {
   if (!root) throw new Error("缺少应用根节点");
   const id = runtime === "desktop" ? playerWindowId() : undefined;
   if (runtime === "desktop" && !id) {
+    if ((await prepareUpdateStartup()) === false) return;
     const { claimApplicationInstance } = await import("../platform/neutralino/applicationInstance");
     if (!(await claimApplicationInstance())) return;
   }

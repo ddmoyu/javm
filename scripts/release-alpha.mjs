@@ -5,13 +5,18 @@ import { root, repository, readJson, sha256 } from "./third-party/components.mjs
 import { findRelease } from "./third-party/github.mjs";
 import { changelogEntry, releaseAssetNames, renderReleaseNotes } from "./release-notes.mjs";
 import { collectPosixArtifacts } from "./release-posix.mjs";
+import { releaseVersion } from "./update-format.mjs";
+import { writeUpdateManifest } from "./update-release.mjs";
+import { writeLegacyManifest, verifyLegacyRelease } from "./legacy-update.mjs";
 
 const command = process.argv[2];
 const pkg = await readJson(path.join(root, "package.json"));
 const config = await readJson(path.join(root, "neutralino.config.json"));
+const updateKey = await readJson(path.join(root, "resources/update-public-key.json"));
 const tag = "v" + pkg.version;
-if (!/^v\d+\.\d+\.\d+-alpha\.\d+$/.test(tag) || config.version !== pkg.version)
-  throw new Error("Alpha 版本号必须在 package.json 和 Neutralino 配置中一致");
+const { channel } = releaseVersion(pkg.version);
+if (config.version !== pkg.version)
+  throw new Error("发布版本号必须在 package.json 和 Neutralino 配置中一致");
 const git = (args) => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const commit = git(["rev-parse", "HEAD"]);
 const gh = (args) =>
@@ -26,6 +31,10 @@ const api = (endpoint) => JSON.parse(gh(["api", "repos/" + repository + endpoint
 const directory = path.join(root, "build/alpha-release");
 const recordPath = path.join(directory, "release.json");
 function verifySource() {
+  if (channel !== "alpha") {
+    if (!/^04[a-f0-9]{128}$/.test(updateKey.publicKeyHex || ""))
+      throw new Error("请先配置并提交更新公钥，再发布正式版或 Beta");
+  }
   if (process.env.GITHUB_REF_NAME !== tag) throw new Error("发布标签与应用版本不一致");
   if (git(["rev-parse", tag + "^{commit}"]) !== commit) throw new Error("发布标签提交不一致");
   git(["merge-base", "--is-ancestor", commit, "origin/dev"]);
@@ -85,6 +94,12 @@ if (command === "verify-source") {
   await copyFile(bundle.archive, path.join(directory, files[0]));
   await copyFile(bundle.manifest, path.join(directory, files[1]));
   await copyFile(installer.installer, path.join(directory, names.setup));
+  if (!bundle.updatePackage) throw new Error("便携包缺少更新附件");
+  if (sha256(await readFile(bundle.updatePackage)) !== bundle.updatePackageSha256)
+    throw new Error("更新附件在打包后发生变化");
+  const updateName = `JAVM-${pkg.version}-windows-x64-update.jup`;
+  await copyFile(bundle.updatePackage, path.join(directory, updateName));
+  files.push(updateName);
   await writeFile(
     path.join(directory, files[2]),
     manifest.licenseNotices
@@ -142,6 +157,25 @@ if (command === "verify-source") {
   const files = [...record.files.filter((file) => file.name !== "SHA256SUMS"), ...posix];
   if (new Set(files.map((file) => file.name)).size !== files.length)
     throw new Error("合并发布附件存在重名");
+  if (channel !== "alpha") {
+    files.push(
+      await writeUpdateManifest(
+        directory,
+        pkg.version,
+        files,
+        path.join(root, "resources/update-public-key.json"),
+        process.env.JAVM_UPDATE_PRIVATE_KEY,
+      ),
+    );
+    files.push(
+      ...(await writeLegacyManifest(
+        directory,
+        pkg.version,
+        files,
+        changelogEntry(await readFile(path.join(root, "CHANGELOG.md"), "utf8"), pkg.version),
+      )),
+    );
+  }
   const sums = files.map((file) => `${file.sha256}  ${file.name}`).join("\n") + "\n";
   await writeFile(path.join(directory, "SHA256SUMS"), sums);
   files.push({ name: "SHA256SUMS", bytes: Buffer.byteLength(sums), sha256: sha256(sums) });
@@ -180,6 +214,12 @@ if (command === "verify-source") {
   )
     throw new Error("跨平台发布记录不完整，请先合并已验证的平台附件");
   const assets = [];
+  if (channel !== "alpha") {
+    const legacyKey = await readJson(path.join(root, "resources/legacy-update-public-key.json"));
+    await verifyLegacyRelease(directory, pkg.version, record.files, legacyKey.publicKey);
+    if (!record.files.some((file) => file.name === "JAVM-update.json"))
+      throw new Error("缺少新版更新清单，禁止公开发布");
+  }
   for (const file of record.files) {
     if (path.basename(file.name) !== file.name) throw new Error("非法发布文件名");
     const absolute = path.join(directory, file.name);
@@ -191,7 +231,7 @@ if (command === "verify-source") {
     assets.push(absolute);
   }
   let release = findRelease(gh, repository, tag);
-  if (release && !release.draft) throw new Error("拒绝覆盖已发布的 Alpha 版本");
+  if (release && !release.draft) throw new Error("拒绝覆盖已发布版本");
   const notes = path.join(directory, "notes.md");
   await writeFile(
     notes,
@@ -211,8 +251,8 @@ if (command === "verify-source") {
       repository,
       "--verify-tag",
       "--draft",
-      "--prerelease",
-      "--latest=false",
+      `--prerelease=${channel !== "stable"}`,
+      `--latest=${channel === "stable"}`,
       "--title",
       "JAVM " + pkg.version,
       "--notes-file",
@@ -248,11 +288,12 @@ if (command === "verify-source") {
     "--repo",
     repository,
     "--draft=false",
-    "--prerelease",
-    "--latest=false",
+    `--prerelease=${channel !== "stable"}`,
+    `--latest=${channel === "stable"}`,
   ]);
   release = api("/releases/tags/" + tag);
-  if (release.draft || !release.prerelease) throw new Error("Alpha 预发布状态不正确");
+  if (release.draft || release.prerelease !== (channel !== "stable"))
+    throw new Error("发布通道状态不正确");
   console.log(release.html_url);
 } else
   throw new Error(

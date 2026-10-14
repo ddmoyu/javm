@@ -49,7 +49,11 @@ jobs:
       - run: pnpm desktop:setup --verified-posix-host
       - name: 编译完整原生扩展
         id: native
-        run: pnpm native:build --release
+        run: pnpm native:build --release --update-tests
+      - name: 验证自动更新和数据回退安全夹具
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
+        run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
       - name: 验证系统凭据存储
         if: ${{ !cancelled() && steps.native.outcome == 'success' }}
         run: node scripts/verify-system-credentials.mjs
