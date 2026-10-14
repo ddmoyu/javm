@@ -37,22 +37,42 @@ jobs:
           for formula in ninja nasm; do
             brew list --versions "$formula" >/dev/null || brew install "$formula"
           done
+      - name: 编译 0.5.3 原更新插件安全驱动
+        run: cargo build --locked --manifest-path native/update/tests/legacy-tauri/Cargo.toml
       - name: 只读复用已验证组件
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/third-party/posix/resolve.mjs
+        run: |
+          for attempt in 1 2 3; do
+            node scripts/third-party/posix/resolve.mjs && break
+            test "$attempt" -lt 3 || exit 1
+            sleep 5
+          done
       - run: pnpm desktop:setup --verified-posix-host
       - run: pnpm native:build --release --update-tests
       - name: 更新助手与数据回退
         env:
           JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
         run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
-      - name: 安全桌面启动前置验证
-        run: ${{ runner.os == 'Linux' && 'dbus-run-session -- xvfb-run -a' || '' }} node scripts/verify-posix-desktop.mjs
+      - name: 临时系统只授权本次 dpkg 夹具
+        if: runner.os == 'Linux'
+        run: |
+          printf 'polkit.addRule(function(action, subject) { if (action.id == "org.freedesktop.policykit.exec" && action.lookup("program") == "/usr/bin/dpkg" && subject.user == "%s") return polkit.Result.YES; });\n' "$(id -un)" | sudo tee /etc/polkit-1/rules.d/49-javm-update-validation.rules >/dev/null
+          sudo systemctl restart polkit
+      - name: APP、AppImage、DEB 实际更新与故障回退
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
+        run: node --disable-warning=ExperimentalWarning --test scripts/update-platform.test.mjs
       - run: pnpm build && node scripts/build-desktop.mjs --no-archive
       - run: node scripts/package-posix.mjs
       - name: 实际安装、启动和卸载保留数据
-        run: node scripts/verify-posix-package.mjs
+        run: node scripts/verify-posix-package.mjs --installation-only
+      - name: 旧签名下载、原 Tauri 安装交接和新宿主启动
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/verify-legacy-upgrade.mjs
       - uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
@@ -60,5 +80,46 @@ jobs:
           path: |
             dist/posix-release/${{ matrix.target }}/*.json
             build/desktop-verification-${{ matrix.target }}.json
+            build/legacy-upgrade-${{ matrix.target }}.json
+          if-no-files-found: warn
+          retention-days: 14
+  windows:
+    name: Windows 旧版升级
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: cargo build --locked --manifest-path native/update/tests/legacy-tauri/Cargo.toml
+      - name: 只读复用组件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm offline:setup
+      - run: pnpm desktop:setup
+      - run: pnpm native:build --release --update-tests
+      - name: 原生失败回退
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/windows-release/update-fixtures
+        run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
+      - run: pnpm build
+      - run: node scripts/build-desktop.mjs --no-archive
+      - run: node scripts/package-offline.mjs --no-archive
+      - run: node scripts/package-installer.mjs
+      - name: 0.5.3 下载验签与实际新宿主安装
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/verify-legacy-upgrade.mjs
+      - uses: actions/upload-artifact@v7.0.2
+        if: always()
+        with:
+          name: update-validation-windows-x64
+          path: build/legacy-upgrade-windows-x64.json
           if-no-files-found: warn
           retention-days: 14

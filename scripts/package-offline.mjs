@@ -8,6 +8,7 @@ import { verifyFfmpegLite } from "./verify-ffmpeg-lite.mjs";
 import { verifyMediaInfoLite } from "./verify-mediainfo-lite.mjs";
 import { verifyMetatubeLite } from "./metatube-lite-profile.mjs";
 import { components, specification, readJson } from "./third-party/components.mjs";
+import { installationReceipt, updateArchive } from "./update-format.mjs";
 
 if (process.platform !== "win32") throw new Error("Offline packaging requires Windows x64.");
 const archiveEnabled = !process.argv.includes("--no-archive");
@@ -54,6 +55,7 @@ for (const component of components) {
 // Refuse a package assembled from the development Debug binary.
 for (const [binary, candidate] of [
   ["javm_database.exe", path.join(desktop, "bin/javm_database.exe")],
+  ["javm_updater.exe", path.join(desktop, "bin/javm_updater.exe")],
   ["MediaInfo.dll", path.join(desktop, "bin/MediaInfo.dll")],
 ]) {
   if (
@@ -87,7 +89,7 @@ const serializeDocuments = (documents) =>
 // The official embedded host resolves its own application directory. A separate
 // launcher is unnecessary; expose the host itself as the only root executable.
 await copy(path.join(desktop, "javm-win_x64.exe"), "JAVM.exe");
-for (const file of ["javm_database.exe", "MediaInfo.dll"]) {
+for (const file of ["javm_database.exe", "javm_updater.exe", "MediaInfo.dll"]) {
   await copy(path.join(desktop, "bin", file), `bin/${file}`);
 }
 for (const file of ["MediaInfo.html", "ZenLib.txt", "zlib.txt", "pugixml.txt", "curl.txt"]) {
@@ -204,6 +206,7 @@ if (process.env.JAVM_SIGN_CERT_THUMBPRINT)
     ],
     { stdio: "inherit", windowsHide: true },
   );
+await installationReceipt(output, pkg.version, "portable");
 await inventory();
 const manifest = {
   app: "JAVM",
@@ -232,6 +235,8 @@ const manifestPath = path.join(root, "build/offline-manifests", `${name}.json`);
 await mkdir(path.dirname(manifestPath), { recursive: true });
 await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
 const archive = archiveEnabled ? `${output}.zip` : null;
+const updatePackage = path.join(path.dirname(output), `JAVM-${pkg.version}-windows-x64-update.jup`);
+if (archiveEnabled) await updateArchive(output, updatePackage);
 let sha256 = null;
 if (archive) {
   await new Promise((resolve, reject) => {
@@ -264,6 +269,8 @@ await writeFile(
     {
       directory: output,
       archive,
+      updatePackage: archiveEnabled ? updatePackage : null,
+      updatePackageSha256: archiveEnabled ? await hash(updatePackage) : null,
       sha256,
       bytes: archive
         ? (await stat(archive)).size

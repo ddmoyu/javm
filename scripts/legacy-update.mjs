@@ -86,7 +86,7 @@ export function legacyTargets(version) {
     "linux-x86_64-deb": prefix + "linux-x64.deb",
   };
 }
-async function signFile(file, publicKey) {
+export async function signLegacyFile(file, publicKey) {
   if (
     process.env.GITHUB_ACTIONS !== "true" ||
     process.env.GITHUB_REPOSITORY !== repository ||
@@ -129,7 +129,7 @@ export async function writeLegacyManifest(directory, version, files, notes = "")
       source[0].sha256 !== actual.sha256
     )
       throw new Error("缺少已验证的旧版兼容附件：" + name);
-    signatures.set(name, await signFile(file, key.publicKey));
+    signatures.set(name, await signLegacyFile(file, key.publicKey));
     output.push(await inventory(file + ".sig"));
   }
   const manifest = {
@@ -199,7 +199,7 @@ async function proof() {
   });
   const file = path.join(output, "legacy-proof.txt");
   await writeFile(file, payload);
-  const signature = await signFile(file, key.publicKey);
+  const signature = await signLegacyFile(file, key.publicKey);
   const keyId = await verifyLegacySignature(file, signature, key.publicKey);
   await writeFile(
     path.join(output, "legacy-verification.json"),

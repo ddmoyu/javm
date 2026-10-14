@@ -3,6 +3,7 @@ import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:
 import path from "node:path";
 import { root, readJson, safePath, sha256 } from "./third-party/components.mjs";
 import { releaseAssetNames } from "./release-notes.mjs";
+import { platformVersion } from "./update-format.mjs";
 
 if (process.platform !== "win32" || process.arch !== "x64")
   throw new Error("安装包构建需要 Windows x64");
@@ -70,7 +71,9 @@ try {
       .map((notice) => notice.components.join(" / ") + "\n" + "=".repeat(72) + "\n" + notice.text)
       .join("\n\n"),
   );
-  const numeric = pkg.version.replace("-alpha.", ".");
+  const kindFile = path.join(stage, "installation-kind.json");
+  await writeFile(kindFile, JSON.stringify({ kind: "setup" }) + "\n");
+  const numeric = platformVersion(pkg.version, "windows");
   const compilation = execFileSync(
     compiler,
     [
@@ -80,6 +83,7 @@ try {
       `/DProjectRoot=${root}`,
       `/DPayloadDirectory=${payload}`,
       `/DNoticesFile=${notices}`,
+      `/DInstallationKindFile=${kindFile}`,
       `/DOutputDirectory=${output}`,
       `/DOutputName=${name.replace(/\.exe$/, "")}`,
       path.join(root, "scripts/installer/javm.iss"),

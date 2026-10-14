@@ -3,7 +3,7 @@
   "applicationId": "net.ddmoyu.javm.dev",
   "applicationName": "JAVM",
   "applicationIcon": "resources/icon.png",
-  "version": "1.0.5-alpha.10",
+  "version": "99.0.0-beta.2",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/dist/frontend/",
@@ -15,6 +15,7 @@
   "nativeAllowList": [
     "app.exit",
     "app.getConfig",
+    "clipboard.writeText",
     "storage.getKeys",
     "storage.getData",
     "storage.setData",
@@ -50,6 +51,7 @@
     "os.open",
     "os.showOpenDialog",
     "os.setTray",
+    "os.showNotification",
     "os.showMessageBox",
     "filesystem.createDirectory",
     "resources.extractFile",
@@ -123,7 +125,8 @@
       "bin/MediaInfo.dll",
       "bin/mediainfo-lite.json",
       "bin/licenses",
-      "bin/tools"
+      "bin/tools",
+      "bin/javm_updater.exe"
     ]
   }
 }

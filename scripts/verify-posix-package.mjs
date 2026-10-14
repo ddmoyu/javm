@@ -12,12 +12,16 @@ if (!targets.includes(target)) throw new Error("安装验证需要相应 POSIX �
 const state = await json(path.join(root, `build/posix-package-${target}.json`));
 const manifest = await json(state.manifest);
 assert.equal(manifest.platform, target);
-const desktop = await json(path.join(root, `build/desktop-verification-${target}.json`));
-assert.equal(desktop.platform, target);
-assert.equal(desktop.sourceCommit, manifest.sourceCommit);
-assert.equal(desktop.gui, true);
-assert.equal(desktop.reports.length, 2);
-assert.ok(desktop.reports.every((report) => report.done && !report.fatal && !report.errors.length));
+const installationOnly = process.argv.includes("--installation-only");
+if (installationOnly) assert.equal(process.env.GITHUB_ACTIONS, "true");
+const desktop = installationOnly ? null : await json(path.join(root, `build/desktop-verification-${target}.json`));
+if (desktop) {
+  assert.equal(desktop.platform, target);
+  assert.equal(desktop.sourceCommit, manifest.sourceCommit);
+  assert.equal(desktop.gui, true);
+  assert.equal(desktop.reports.length, 2);
+  assert.ok(desktop.reports.every((report) => report.done && !report.fatal && !report.errors.length));
+}
 for (const asset of manifest.assets) {
   assert.equal(path.basename(asset.name), asset.name);
   const file = path.join(state.release, asset.name);
@@ -245,7 +249,8 @@ try {
     sourceCommit: manifest.sourceCommit,
     completed,
     safeDataOnly: true,
-    gui: true,
+    gui: !installationOnly,
+    scope: installationOnly ? "installation-only" : "desktop-and-installation",
     desktop,
     manifestSha256: sha256(await readFile(state.manifest)),
     preservedUserData: true,

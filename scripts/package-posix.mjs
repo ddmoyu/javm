@@ -159,7 +159,7 @@ if (mac) {
     application,
     pkg.version,
     "app",
-    "Contents/MacOS/update-installation.json",
+    "Contents/Resources/update-installation.json",
     ["Contents/_CodeSignature/CodeResources"],
   );
   await run("codesign", ["--force", "--sign", "-", application]);

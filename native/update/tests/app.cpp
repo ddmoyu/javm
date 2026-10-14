@@ -30,8 +30,10 @@ int main() {
     }
     writeJson(fromUtf8(job.at("settings")) / "preferences.json",
               {{"value", "new-safe-value"}});
-    if (readJson(executablePath().parent_path() / "fixture-mode.json")
-            .at("mode") == "fail")
+    const auto localMode = executablePath().parent_path() / "fixture-mode.json";
+    const auto mode = fs::exists(localMode) ? localMode :
+        executablePath().parent_path().parent_path() / "Resources/fixture-mode.json";
+    if (readJson(mode).at("mode") == "fail")
       return 23;
     writeJson(root / "healthy.json",
               {{"version", job.at("version")},

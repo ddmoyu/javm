@@ -409,7 +409,7 @@ void privilegedProgramStep(const fs::path &transaction, bool rollback) {
     auto trusted = job;
     trusted["files"] = unpack(secure / "package.jup", secure / "stage");
     const auto receipt =
-        readJson(root / "Contents/MacOS/update-installation.json");
+        readJson(root / "Contents/Resources/update-installation.json");
     if (receipt.at("app") != "net.ddmoyu.javm" || receipt.at("kind") != "app" ||
         receipt.at("version") != job.at("currentVersion"))
       throw std::runtime_error("原有应用安装记录不匹配");
@@ -486,10 +486,16 @@ Json Engine::request(const std::string &method, const Json &params) {
     const auto self = fs::weakly_canonical(executablePath());
     if (app / "bin" != self.parent_path())
       return {{"available", false}, {"reason", "开发环境或未安装完整更新组件"}};
-    if (!fs::exists(app / "update-installation.json"))
+    const auto receiptPath =
+#ifdef __APPLE__
+        app.parent_path() / "Resources/update-installation.json";
+#else
+        app / "update-installation.json";
+#endif
+    if (!fs::exists(receiptPath))
       return {{"available", false},
               {"reason", "此安装包不支持整包更新，请先手动安装新版"}};
-    const auto receipt = readJson(app / "update-installation.json");
+    const auto receipt = readJson(receiptPath);
     if (receipt.at("app") != "net.ddmoyu.javm" ||
         receipt.at("version") != JAVM_VERSION)
       throw std::runtime_error("安装版本记录不匹配");
