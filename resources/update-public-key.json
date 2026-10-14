@@ -1,1 +1,8 @@
-{"algorithm":"ECDSA-P256-SHA256","publicKeyHex":""}
+{
+  "algorithm": "ECDSA-P256-SHA256",
+  "publicKeyHex": "0427c12f6dbd028eb1cff95ae0f32e4bd097828ddb197ec7e4d974cc3f7dfb541535c2b151cba8eaafe9da45d1b5b045ef0029bed215510d01491786ae5a541dab",
+  "fingerprintSha256": "7b0ba1fa3691437a29caabf13da3e13ced6fe17ff9a233181b154b00a7b6f7fc",
+  "createdAt": "2026-10-14T02:16:54.299Z",
+  "generatedBy": "https://github.com/ddmoyu/javm/actions/runs/38500189863",
+  "secretName": "JAVM_UPDATE_PRIVATE_KEY"
+}
