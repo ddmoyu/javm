@@ -24,7 +24,7 @@ import {
 import { useHotkeys } from "@mantine/hooks";
 import { WorkspaceContext } from "./state";
 import type { FilmDetailView, Page } from "./state";
-import { readPreferences, savePreferences } from "./preferences";
+import { createUiPreferences } from "./preferences";
 import { BrandMark, Icon } from "../components/icons";
 import type { IconName } from "../components/icons";
 import { Library } from "../features/library/Library";
@@ -126,11 +126,18 @@ export function App({
   const theme = useComputedColorScheme("dark");
   const libraryState = useSyncExternalStore(library.subscribe, library.getSnapshot);
   const playbackState = useSyncExternalStore(playback.subscribe, playback.getSnapshot);
-  const [preferences, setPreferences] = useState(readPreferences);
+  const [uiPreferences] = useState(() => createUiPreferences(runtime));
+  const { value: preferences } = useSyncExternalStore(
+    uiPreferences.subscribe,
+    uiPreferences.getSnapshot,
+  );
   const detail = libraryState.selectedFilm;
   const filmId = detail?.id ?? null;
   const [detailView, setDetailView] = useState<FilmDetailView>("info");
-  const [toast, setToast] = useState<{ message: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string } | null>(() => {
+    const error = uiPreferences.getSnapshot().error;
+    return error ? { message: error } : null;
+  });
   const [downloadOpened, setDownloadOpened] = useState(false);
   const [downloadInitial, setDownloadInitial] = useState<{ url: string; name: string }>();
   const [downloadFilm, setDownloadFilm] = useState<Film | undefined>();
@@ -148,6 +155,18 @@ export function App({
     setToast(content ? { message: content } : null);
     logEvent("info", "ui", "notice", message);
   };
+  useEffect(() => {
+    let previous = uiPreferences.getSnapshot().error;
+    if (previous) logEvent("warn", "settings", "ui_preferences_failed", previous);
+    return uiPreferences.subscribe(() => {
+      const error = uiPreferences.getSnapshot().error;
+      if (error && error !== previous) {
+        setToast({ message: error });
+        logEvent("warn", "settings", "ui_preferences_failed", error);
+      }
+      previous = error;
+    });
+  }, [uiPreferences]);
   useEffect(() => {
     if (runtime !== "desktop" || !libraryState.ready) return;
     return listenApplicationLaunches(
@@ -177,9 +196,7 @@ export function App({
   };
   const unavailable = (feature: string) => notice(`${feature}暂未接入`);
   const changePreference = (value: Partial<typeof preferences>) => {
-    const next = { ...preferences, ...value };
-    setPreferences(next);
-    if (!savePreferences(next)) notice("偏好已在本次会话生效，本地存储不可用");
+    void uiPreferences.update(value);
   };
   useHotkeys([["mod+B", () => changePreference({ navCollapsed: !collapsed })]]);
   useLayoutEffect(() => {

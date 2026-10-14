@@ -10,12 +10,17 @@ const native = vi.hoisted(() => ({
   show: vi.fn(),
   focus: vi.fn(),
   setTray: vi.fn(),
+  showNotification: vi.fn(),
   showMessageBox: vi.fn(),
 }));
 vi.mock("@neutralinojs/lib", () => ({
   app: { exit: native.exit },
   window: { hide: native.hide, show: native.show, focus: native.focus },
-  os: { setTray: native.setTray, showMessageBox: native.showMessageBox },
+  os: {
+    setTray: native.setTray,
+    showNotification: native.showNotification,
+    showMessageBox: native.showMessageBox,
+  },
   events: {
     on: async (name: string, callback: (event: unknown) => void) =>
       native.handlers.set(name, callback),
@@ -35,6 +40,7 @@ beforeEach(() => {
     native.show,
     native.focus,
     native.setTray,
+    native.showNotification,
     native.showMessageBox,
   ])
     mock.mockResolvedValue(undefined);

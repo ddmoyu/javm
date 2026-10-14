@@ -3,6 +3,16 @@ import { publicMessage } from "../publicMessage";
 export interface Store<T> {
   read(): Promise<unknown>;
   write(value: T): Promise<void>;
+  migrate?(create: () => T): Promise<unknown>;
+}
+/** 迁移前重新检查目标；已有记录（包括非法记录）交给调用方校验，不能覆盖。 */
+export async function migrateSettings<T>(store: Store<T>, create: () => T): Promise<unknown> {
+  if (store.migrate) return store.migrate(create);
+  const current = await store.read();
+  if (current !== null) return current;
+  const value = create();
+  await store.write(value);
+  return value;
 }
 export class Observable<T> {
   private listeners = new Set<() => void>();

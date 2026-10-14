@@ -15,6 +15,7 @@
   "nativeAllowList": [
     "app.exit",
     "app.getConfig",
+    "clipboard.writeText",
     "storage.getKeys",
     "storage.getData",
     "storage.setData",
@@ -50,6 +51,7 @@
     "os.open",
     "os.showOpenDialog",
     "os.setTray",
+    "os.showNotification",
     "os.showMessageBox",
     "filesystem.createDirectory",
     "resources.extractFile",

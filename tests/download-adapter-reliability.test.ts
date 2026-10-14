@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { events, extensions, filesystem, os } from "@neutralinojs/lib";
+import { events, extensions, filesystem, os, storage } from "@neutralinojs/lib";
 import { NativeDownloadRepository } from "../frontend/src/platform/neutralino/downloadRepository";
 import {
   recoverNativeProcesses,
@@ -12,6 +12,7 @@ vi.mock("@neutralinojs/lib", () => ({
   events: { on: vi.fn(), off: vi.fn() },
   extensions: { dispatch: vi.fn() },
   filesystem: { writeFile: vi.fn(), remove: vi.fn() },
+  storage: { getKeys: vi.fn(), getData: vi.fn(), setData: vi.fn() },
   os: {
     getPath: vi.fn(),
     getSpawnedProcesses: vi.fn(),
@@ -48,6 +49,8 @@ beforeEach(() => {
   vi.mocked(os.getPath).mockResolvedValue("E:/download-reliability");
   vi.mocked(filesystem.writeFile).mockResolvedValue(undefined);
   vi.mocked(filesystem.remove).mockResolvedValue(undefined);
+  vi.mocked(storage.getKeys).mockResolvedValue([]);
+  vi.mocked(storage.setData).mockResolvedValue(undefined);
 });
 afterEach(() => {
   vi.useRealTimers();

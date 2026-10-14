@@ -71,6 +71,7 @@ export class ResourceSearchService {
   private preferenceTimer?: ReturnType<typeof setTimeout>;
   private preferenceWrite?: Promise<void>;
   private preferencesDirty = false;
+  private preferencesReady = false;
   private pendingSources: ResourceSource[] = [];
   private views = new Map<string, number>();
   constructor(
@@ -118,9 +119,20 @@ export class ResourceSearchService {
     if (!this.archive) return;
     try {
       const raw = await this.archive.readPreferences();
-      if (this.stopped || !raw) return;
+      if (this.stopped) return;
+      if (raw === null) {
+        this.preferencesReady = true;
+        return;
+      }
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error();
       const value = raw as Partial<ResourcePreferences>;
-      if (typeof value.query !== "string") throw new Error();
+      if (
+        typeof value.query !== "string" ||
+        (value.code !== undefined && typeof value.code !== "string") ||
+        (value.workId !== undefined && typeof value.workId !== "string") ||
+        (value.filter !== undefined && !["all", "found", "failed"].includes(value.filter))
+      )
+        throw new Error();
       this.snapshot = {
         ...this.snapshot,
         sourcePerformance: readSourcePerformance(value.sourcePerformance, this.sources),
@@ -146,6 +158,7 @@ export class ResourceSearchService {
           saved: true,
         })),
       };
+      this.preferencesReady = true;
     } catch {
       this.snapshot = {
         ...this.snapshot,
@@ -157,7 +170,7 @@ export class ResourceSearchService {
     }
   }
   private savePreferences() {
-    if (!this.archive || this.snapshot.restoring || this.stopped) return;
+    if (!this.archive || !this.preferencesReady || this.snapshot.restoring || this.stopped) return;
     this.preferencesDirty = true;
     clearTimeout(this.preferenceTimer);
     this.preferenceTimer = setTimeout(() => {
@@ -167,31 +180,34 @@ export class ResourceSearchService {
   private flushPreferences(): Promise<void> {
     if (this.preferenceWrite) return this.preferenceWrite;
     const job = (async () => {
-      while (this.archive && this.preferencesDirty) {
-        this.preferencesDirty = false;
-        const { query, code, selected, filter } = this.snapshot;
-        try {
-          await this.archive.writePreferences({
-            query,
-            code,
-            selected,
-            filter,
-            workId: this.workId,
-            sourcePerformance: this.snapshot.sourcePerformance,
-          });
-        } catch {
-          this.snapshot = {
-            ...this.snapshot,
-            storageError: "资源查询设置保存失败，请检查数据目录后重试。",
-          };
-          this.publish();
+      // 先让调用方登记进行中的写入，再在同一异步任务内清理，避免漏掉末次修改。
+      await Promise.resolve();
+      try {
+        while (this.archive && this.preferencesDirty) {
+          this.preferencesDirty = false;
+          const { query, code, selected, filter } = this.snapshot;
+          try {
+            await this.archive.writePreferences({
+              query,
+              code,
+              selected,
+              filter,
+              workId: this.workId,
+              sourcePerformance: this.snapshot.sourcePerformance,
+            });
+          } catch {
+            this.snapshot = {
+              ...this.snapshot,
+              storageError: "资源查询设置保存失败，请检查数据目录后重试。",
+            };
+            this.publish();
+          }
         }
+      } finally {
+        this.preferenceWrite = undefined;
       }
     })();
     this.preferenceWrite = job;
-    void job.finally(() => {
-      if (this.preferenceWrite === job) this.preferenceWrite = undefined;
-    });
     return job;
   }
   readSaved = async (code: string, workId?: string): Promise<SavedResource[]> => {

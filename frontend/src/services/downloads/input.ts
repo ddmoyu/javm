@@ -1,5 +1,5 @@
 import type { DownloadSettings, DownloadTask, NewDownload } from "../../contracts/downloads";
-import { downloadTaskLimit } from "../../contracts/downloads";
+import { defaultDownloadSettings, downloadTaskLimit } from "../../contracts/downloads";
 import { keepTextTail } from "./text";
 import { identifyCode, normalizeCode } from "../scraping/identity";
 import { downloadCode, duplicateDownloadCodes, DuplicateDownloadError } from "./duplicates";
@@ -63,8 +63,26 @@ export function parseHeaders(value: string): Record<string, string> {
   return result;
 }
 
-export function validateSettings(settings: DownloadSettings) {
-  validateDirectory(settings.directory);
+export function readDownloadSettings(value: unknown): DownloadSettings {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("下载设置格式无效，原配置已保留。");
+  const data = value as Record<string, unknown>;
+  const settings = { ...defaultDownloadSettings };
+  for (const field of ["directory", "ffmpegPath", "curlPath"] as const) {
+    if (data[field] === undefined) continue;
+    if (typeof data[field] !== "string") throw new Error("下载设置中的路径格式无效。");
+    settings[field] = data[field];
+  }
+  if (data.concurrency !== undefined) {
+    if (typeof data.concurrency !== "number") throw new Error("下载设置中的并发数格式无效。");
+    settings.concurrency = data.concurrency;
+  }
+  // 未指定目录的旧配置继续由下载引擎解析系统默认目录；只保留现行字段。
+  return validateSettings(settings, true);
+}
+
+export function validateSettings(settings: DownloadSettings, allowDefaultDirectory = false) {
+  if (!allowDefaultDirectory || settings.directory !== "") validateDirectory(settings.directory);
   if (
     [settings.ffmpegPath, settings.curlPath].some((value) => /[\u0000-\u001f\u007f]/.test(value))
   ) {

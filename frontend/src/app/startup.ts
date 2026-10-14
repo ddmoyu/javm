@@ -15,7 +15,12 @@ function moduleError(event: Event) {
 export function initializeStartup() {
   initializeContextMenu();
   try {
-    const saved = localStorage.getItem("javm:color-scheme");
+    // 桌面端在官方 API 初始化后读取主题；此处只为浏览器预览预着色。
+    const saved =
+      "NL_PORT" in window
+        ? null
+        : (JSON.parse(localStorage.getItem("javm-ui-preferences-v1") ?? "null")?.colorScheme ??
+          localStorage.getItem("javm:color-scheme"));
     document.documentElement.dataset.mantineColorScheme =
       saved === "light" || (saved === "auto" && matchMedia("(prefers-color-scheme: light)").matches)
         ? "light"

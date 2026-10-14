@@ -87,6 +87,15 @@ export async function closeMainWindow() {
   if (runInBackground && trayReady) {
     await nativeWindow.hide();
     logEvent("info", "app", "hidden", "主窗口已隐藏，后台任务继续运行");
+    if (exiting) return;
+    void os
+      .showNotification(
+        "JAVM 仍在后台运行",
+        "关闭窗口不会退出软件，后台任务将继续执行。如需彻底退出，请在托盘菜单中选择“退出 JAVM”。",
+      )
+      .catch(() => {
+        logEvent("warn", "app", "background_notification_failed", "后台运行通知发送失败");
+      });
   } else await exitApplication();
 }
 export function initializeLifecycle(

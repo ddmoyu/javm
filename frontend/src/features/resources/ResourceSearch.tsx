@@ -12,6 +12,7 @@ import {
   Text,
 } from "@mantine/core";
 import { os } from "@neutralinojs/lib";
+import { copyText } from "../../platform/neutralino/clipboard";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import type { ResourceSearchService } from "../../services/streamResolution/ResourceSearchService";
@@ -183,7 +184,7 @@ export function ResourceSearchPanel({
           "已导出至 " + documents!.getSnapshot().directory + "。地址失效后需重新导出。",
         );
       } else if (action === "copy") {
-        await navigator.clipboard.writeText(url);
+        await copyText(url);
         notice("已复制资源链接。");
       } else {
         setAdded((value) => new Set(value).add(key));

@@ -2,19 +2,22 @@ import "@mantine/core/styles.css";
 import "../styles/global.css";
 import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { localStorageColorSchemeManager, MantineProvider } from "@mantine/core";
+import { MantineProvider } from "@mantine/core";
 import { cssVariablesResolver, theme } from "./theme";
 import { initializePlatform } from "../platform/neutralino/bootstrap";
 import { playerWindowId } from "../services/playback/windowChannel";
 import { createApplicationLogs } from "../platform/neutralino/logging";
 import { logEvent } from "../services/logging/events";
 import { failStartup, finishStartup } from "./startup";
+import { createUiPreferences, uiColorSchemeManager } from "./preferences";
+import type { UiPreferencesService } from "../services/settings/UiPreferencesService";
 
 let frontendLoadedAt = 0;
 let viewLoadedAt = 0;
 
-function StartupReady() {
+function StartupReady({ preferences, main }: { preferences: UiPreferencesService; main: boolean }) {
   useEffect(() => {
+    if (main) void preferences.flush().catch(failStartup);
     if (!finishStartup()) return;
     logEvent("info", "app", "ui_ready", "界面已挂载", {
       frontendLoadMs: Math.round(frontendLoadedAt),
@@ -22,7 +25,7 @@ function StartupReady() {
       renderMs: Math.round(performance.now() - viewLoadedAt),
       totalMs: Math.round(performance.now()),
     });
-  }, []);
+  }, [preferences, main]);
   return null;
 }
 
@@ -38,6 +41,15 @@ export async function start() {
     if (!(await claimApplicationInstance())) return;
   }
   if (!id) createApplicationLogs(runtime);
+  const preferences = createUiPreferences(runtime);
+  await preferences.initialize();
+  const scheme = preferences.getSnapshot().value.colorScheme;
+  document.documentElement.dataset.mantineColorScheme =
+    scheme === "auto"
+      ? matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : scheme;
   frontendLoadedAt = performance.now();
   logEvent("info", "app", "frontend_loaded", "前端基础模块已加载", {
     elapsedMs: Math.round(frontendLoadedAt),
@@ -54,10 +66,10 @@ export async function start() {
         theme={theme}
         cssVariablesResolver={cssVariablesResolver}
         defaultColorScheme="dark"
-        colorSchemeManager={localStorageColorSchemeManager({ key: "javm:color-scheme" })}
+        colorSchemeManager={uiColorSchemeManager(preferences)}
       >
         {view}
-        <StartupReady />
+        <StartupReady preferences={preferences} main={!id} />
       </MantineProvider>
     </StrictMode>,
   );

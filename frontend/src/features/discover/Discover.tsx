@@ -49,6 +49,8 @@ import { OnlineWorks } from "./OnlineWorks";
 import { OnlineActorSearch } from "./OnlineActorSearch";
 import { WorksProfile } from "./WorksProfile";
 import { publicMessage } from "../../services/publicMessage";
+import { createUiPreferences } from "../../app/preferences";
+import { discoverCardWidth as CARD_WIDTH } from "../../services/settings/UiPreferencesService";
 
 export interface DiscoverHandle {
   select: (dimension: FilmFacet, value: string) => void;
@@ -72,28 +74,9 @@ const avatarGradient = (name: string) =>
   ]!;
 const noSubscribe = () => () => {};
 type WorksTab = "all" | "local" | "missing";
-const CARD_WIDTH_KEY = "javm:discover-card-width";
-const CARD_WIDTH = { min: 140, max: 640, fallback: 260 };
-function readCardWidth() {
-  try {
-    const value = Number(localStorage.getItem(CARD_WIDTH_KEY));
-    return Number.isFinite(value) && value >= CARD_WIDTH.min && value <= CARD_WIDTH.max
-      ? value
-      : CARD_WIDTH.fallback;
-  } catch {
-    return CARD_WIDTH.fallback;
-  }
-}
-function saveCardWidth(value: number) {
-  try {
-    localStorage.setItem(CARD_WIDTH_KEY, String(value));
-  } catch {
-    /* 存储不可用时只在本次会话生效。 */
-  }
-}
-
 export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
-  const { page, library, libraryState, toggleFavorite, openFilm, play, notice } = useWorkspace();
+  const { page, library, libraryState, toggleFavorite, openFilm, play, notice, runtime } =
+    useWorkspace();
   const root = useRef<HTMLDivElement>(null);
   const returnTo = useRef<{ name: string; top: number } | null>(null);
   const pendingPosition = useRef<{ top: number; name?: string } | null>(null);
@@ -103,7 +86,10 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
   const [worksTab, setWorksTab] = useState<WorksTab>("all");
   const [worksFilter, setWorksFilter] = useState("");
   const [worksSearch] = useDebouncedValue(worksFilter.trim(), 250);
-  const [cardWidth, setCardWidth] = useState(readCardWidth);
+  const [uiPreferences] = useState(() => createUiPreferences(runtime));
+  const preferences = useSyncExternalStore(uiPreferences.subscribe, uiPreferences.getSnapshot);
+  const [previewCardWidth, setPreviewCardWidth] = useState<number | null>(null);
+  const cardWidth = previewCardWidth ?? preferences.value.discoverCardWidth;
   const [query, setQuery] = useState("");
   const [search] = useDebouncedValue(query.trim(), 500);
   const onlineSearch =
@@ -632,8 +618,11 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                     label={null}
                     aria-label="封面大小"
                     value={cardWidth}
-                    onChange={setCardWidth}
-                    onChangeEnd={saveCardWidth}
+                    onChange={setPreviewCardWidth}
+                    onChangeEnd={(value) => {
+                      setPreviewCardWidth(null);
+                      void uiPreferences.update({ discoverCardWidth: value });
+                    }}
                   />
                 </Group>
               </div>

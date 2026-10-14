@@ -27,4 +27,35 @@ Fancybox 打开期间暂停 Mantine 抽屉的焦点约束和 Escape 关闭。关
 
 ## 验证
 
+2026-10-14：桌面端的文字与链接复制统一使用官方 `clipboard.writeText`。主题、侧栏折叠、卡片点击行为和发现页卡片宽度统一使用官方 Storage 的 `javm-ui-preferences-v1`；浏览器预览继续使用 localStorage。启动时异步读取，官方记录缺失时迁移当前 WebView 可读取的旧偏好，保留旧记录；读取失败不自动覆盖，保存串行合并，失败恢复上次设置并提示，退出前等待写入结束。主题通过 Mantine 的 ColorSchemeManager 接入，多窗口只发送重读通知，不另建持久化通道。
+
 见 [本轮验证记录](../verification/2026-10-09-mantine-interface.md)。2026-10-12 已移除两版独立原型、演示素材、专用测试和启动配置，历史设计保留在 ADR 与 Git 历史中；当前入口为 `frontend/src`，业务范围见 [功能开发状态](../FEATURE_STATUS.md)。
+
+## 普通设置统一与迁移保护（2026-10-14）
+
+桌面端的普通设置统一通过 `nativeSettingsStorage` 调用官方 Neutralino Storage，按功能分键保存：
+
+| 设置                                         | Storage 键                    |
+| -------------------------------------------- | ----------------------------- |
+| 主题、导航折叠、卡片点击行为、发现页卡片宽度 | `javm-ui-preferences-v1`      |
+| 片库显示方式                                 | `javm-library-layout-v1`      |
+| 默认下载目录、并发数及兼容工具路径           | `javm-download-settings-v1`   |
+| 网络代理                                     | `javm-network-v1`             |
+| 播放器与播放窗口偏好                         | `javm-playback-settings-v1`   |
+| 关闭窗口后后台运行                           | `javm-background-settings-v1` |
+| 目录监控开关                                 | `library-watch-v1`            |
+| 广告过滤规则                                 | `javm-ad-filter-v1`           |
+| 刮削流程偏好                                 | `metadata-pipeline-v1`        |
+| 资源查询、筛选与来源表现记录                 | `resource-search-v1`          |
+
+窗口位置和尺寸继续由 Neu 官方 `useSavedState` 管理。SQLite 保存媒体资料、目录及其扫描选项、任务、资源记录和播放进度；旧 `download_settings` 表仅供兼容读取，当前前端不再写入。AI 与 MetaTube 配置包含密钥，继续使用 Windows 加密存储或 macOS/Linux 系统密钥库。localStorage 仅用于浏览器预览和读取旧界面偏好；sessionStorage 仅登记当前宿主的工作进程。
+
+迁移遵循以下规则：
+
+- 只有目标键确实缺失才迁移。不可读、损坏 JSON 或已有空记录均报错，保留原记录，不按“未配置”写入默认值。
+- 同一主窗口内，同一键的迁移与保存共用有界串行队列。在实际迁移前重新读取目标；期间新增的官方记录优先，旧代理不能覆盖已保存的关闭状态。
+- 旧界面偏好须全部读取并校验成功后才迁移，任何一个旧键异常都不做部分迁移。原 localStorage 和 SQLite 记录保留；迁移失败可重试。
+- 界面修改按字段合并到最新已确认配置，避免迁移等待期间的操作携带旧默认值覆盖其他字段。界面偏好和片库显示方式保存失败时恢复上次成功设置，写入收尾时仍处理最后一次修改。
+- 资源查询配置读取失败、格式无效时停止自动保存，避免后续查询将默认值写回。恢复后重新打开应用再读取。
+
+迁移保护由应用服务实现，持久化仍使用官方 Storage，不增加自定义跨平台文件存储。仅主窗口落盘普通设置，独立播放器接收界面偏好重读通知。

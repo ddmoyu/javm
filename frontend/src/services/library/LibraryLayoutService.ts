@@ -17,6 +17,7 @@ export class LibraryLayoutService {
   private saving?: Promise<void>;
   private pending?: FilmLayout;
   private changed = false;
+  private committed: FilmLayout = "poster";
 
   constructor(private store: LayoutStore) {}
 
@@ -37,14 +38,15 @@ export class LibraryLayoutService {
     this.initialized ??= (async () => {
       try {
         const value = await this.store.read();
-        if (this.changed || value === null) return;
+        if (value === null) return;
         if (
           typeof value !== "object" ||
           !("layout" in value) ||
           (value.layout !== "poster" && value.layout !== "landscape" && value.layout !== "list")
         )
           throw new Error("显示方式设置无效");
-        this.publish({ layout: value.layout });
+        this.committed = value.layout;
+        if (!this.changed) this.publish({ layout: value.layout });
       } catch {
         if (!this.changed)
           this.publish({ error: "无法读取上次的显示方式，暂用海报视图。可重新选择并保存。" });
@@ -62,21 +64,27 @@ export class LibraryLayoutService {
 
   flush() {
     this.saving ??= (async () => {
-      await this.initialize();
-      // 只保留一个待写入值，快速切换时最终选择不会被较早的写入覆盖。
-      while (this.pending !== undefined) {
-        const layout = this.pending;
-        this.pending = undefined;
-        try {
-          await this.store.write({ layout });
-        } catch {
-          if (this.pending === undefined)
-            this.publish({ error: "显示方式已切换，但保存失败。请重试保存，以便下次启动恢复。" });
+      try {
+        await this.initialize();
+        // 只保留一个待写入值，快速切换时最终选择不会被较早的写入覆盖。
+        while (this.pending !== undefined) {
+          const layout = this.pending;
+          this.pending = undefined;
+          try {
+            await this.store.write({ layout });
+            this.committed = layout;
+          } catch {
+            if (this.pending === undefined)
+              this.publish({
+                layout: this.committed,
+                error: "显示方式保存失败，已恢复上次设置，请重试。",
+              });
+          }
         }
+      } finally {
+        this.saving = undefined;
       }
-    })().finally(() => {
-      this.saving = undefined;
-    });
+    })();
     return this.saving;
   }
 }

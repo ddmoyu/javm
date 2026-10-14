@@ -29,6 +29,7 @@ import { LibraryBackupService } from "../services/library/LibraryBackupService";
 import { isRunning } from "../contracts/downloads";
 import { activeScrape } from "../contracts/scraping";
 import { createLibraryLayoutSettings } from "../platform/neutralino/libraryLayout";
+import { createUiPreferences } from "./preferences";
 
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
@@ -179,6 +180,7 @@ export function createMainView(runtime: Runtime) {
   }));
   if (runtime === "desktop")
     initializeLifecycle(downloads, backgroundSettings, async () => {
+      await createUiPreferences(runtime).flush();
       await layoutSettings.flush();
       await updater.shutdown();
       await library.artwork?.shutdown();

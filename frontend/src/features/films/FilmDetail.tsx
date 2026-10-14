@@ -32,6 +32,7 @@ import { FilmEditor } from "./FilmEditor";
 import { FilmDeleteDialog } from "./FilmDeleteDialog";
 import { FilmResources } from "./FilmResources";
 import { os } from "@neutralinojs/lib";
+import { copyText } from "../../platform/neutralino/clipboard";
 import { libraryError } from "../../services/library/LibraryService";
 import { LibraryDocumentsPanel } from "../directories/LibraryDocumentsPanel";
 import { FileOrganizationModal } from "./FileOrganizationModal";
@@ -130,7 +131,7 @@ function FilmDetailContent({
     !!downloadConfirmation;
   const copy = async (value: string) => {
     try {
-      await navigator.clipboard.writeText(value);
+      await copyText(value);
       notice("已复制");
     } catch {
       notice("复制失败，请重试");

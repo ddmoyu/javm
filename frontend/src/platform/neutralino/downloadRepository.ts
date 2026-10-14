@@ -4,9 +4,12 @@ import type { DownloadSettings, DownloadTask } from "../../contracts/downloads";
 import { recoverNativeProcesses } from "./process";
 import { logEvent } from "../../services/logging/events";
 import { importDownloadLog } from "../../services/logging/legacyDownloads";
+import { nativeSettingsStorage } from "./settingsStorage";
+import { readDownloadSettings, validateSettings } from "../../services/downloads/input";
 
 const extensionId = "net.ddmoyu.javm.database";
 export class NativeDownloadRepository implements DownloadRepository {
+  private settingsStore = nativeSettingsStorage<DownloadSettings>("javm-download-settings-v1");
   private stopping = false;
   private recoveredProcesses = false;
   beginShutdown() {
@@ -64,11 +67,14 @@ export class NativeDownloadRepository implements DownloadRepository {
       this.recoveredProcesses = true;
     }
     const tasks: DownloadTask[] = [];
-    let settings: Partial<DownloadSettings> = {};
+    const rawSettings = await this.settingsStore.read();
+    // Storage 中已有配置时优先使用，读取失败或损坏时不能回退并覆盖它。
+    const stored = rawSettings === null ? null : readDownloadSettings(rawSettings);
+    let legacySettings: unknown;
     for (let offset = 0; ;) {
       const page = await this.request<{
         tasks: DownloadTask[];
-        settings: Partial<DownloadSettings> & { proxy?: string; ffprobePath?: string };
+        settings: unknown;
         nextOffset: number | null;
       }>("downloads.load", { offset });
       if (
@@ -81,15 +87,23 @@ export class NativeDownloadRepository implements DownloadRepository {
       )
         throw new Error("下载数据库分页响应无效，请更新数据库扩展后恢复下载服务。");
       if (offset === 0) {
-        const { proxy, ffprobePath: _retiredProbePath, ...saved } = page.settings;
-        settings = saved;
-        if (typeof proxy === "string") await this.importLegacyProxy?.(proxy);
+        legacySettings = page.settings;
+        if (legacySettings && typeof legacySettings === "object" && "proxy" in legacySettings) {
+          const proxy = legacySettings.proxy;
+          if (typeof proxy === "string") await this.importLegacyProxy?.(proxy);
+        }
       }
       tasks.push(...page.tasks);
       if (page.nextOffset === null) break;
       offset = page.nextOffset;
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
+    // 首次读取旧库后只写官方 Storage，保留旧表供兼容和回退，不双写配置。
+    const settings =
+      stored ??
+      readDownloadSettings(
+        await this.settingsStore.migrate(() => readDownloadSettings(legacySettings)),
+      );
     for (let index = 0; index < tasks.length; index++) {
       if (this.stopping) break;
       const task = tasks[index]!;
@@ -107,7 +121,7 @@ export class NativeDownloadRepository implements DownloadRepository {
     await this.request("downloads.remove", { id, revision });
   }
   async saveSettings(settings: DownloadSettings) {
-    await this.request("downloads.settings", settings);
+    await this.settingsStore.write(validateSettings(readDownloadSettings(settings)));
   }
   async close() {
     if (!this.listening) return;

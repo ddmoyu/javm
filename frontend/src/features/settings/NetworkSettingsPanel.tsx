@@ -7,6 +7,7 @@ import { describeError } from "../../services/downloads/DownloadService";
 import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
 import classes from "./Settings.module.css";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
+import { copyText } from "../../platform/neutralino/clipboard";
 
 const recommendedProxyUrl = "https://mojie.app/register?aff=6U9kDSoZ";
 const proxyInvitationCode = "6U9kDSoZ";
@@ -52,7 +53,7 @@ export function NetworkSettingsPanel() {
   };
   const copyInvitationCode = async () => {
     try {
-      await navigator.clipboard.writeText(proxyInvitationCode);
+      await copyText(proxyInvitationCode);
       notice("邀请码已复制");
     } catch {
       notice("复制失败，请手动复制邀请码。");

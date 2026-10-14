@@ -1,6 +1,7 @@
 import { defaultNetworkSettings, validateNetworkSettings } from "../../contracts/network";
 import type { NetworkSettings } from "../../contracts/network";
 import { StopUnconfirmedError } from "../downloads/ports";
+import { migrateSettings, type Store } from "../metadata/shared";
 
 export type ProxyProbe = (proxy: string, signal: AbortSignal) => Promise<{ elapsedMs: number }>;
 
@@ -10,10 +11,7 @@ interface ProxyTestResult {
   message: string;
 }
 
-export interface NetworkSettingsStore {
-  read(): Promise<unknown>;
-  write(settings: NetworkSettings): Promise<void>;
-}
+export type NetworkSettingsStore = Store<NetworkSettings>;
 
 interface Snapshot {
   settings: NetworkSettings;
@@ -97,8 +95,11 @@ export class NetworkSettingsService {
       // A saved global choice, including disabling the proxy, always wins.
       if (this.saved || !proxy || !this.snapshot.available || this.snapshot.error) return;
       try {
-        const settings = validateNetworkSettings({ proxyEnabled: true, proxy });
-        await this.store.write(settings);
+        const settings = validateNetworkSettings(
+          await migrateSettings(this.store, () =>
+            validateNetworkSettings({ proxyEnabled: true, proxy }),
+          ),
+        );
         this.saved = true;
         this.publish({ settings });
       } catch {
