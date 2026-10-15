@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { Button, Group, Menu, SimpleGrid, Text, UnstyledButton } from "@mantine/core";
 import type { Film, MediaTrailer } from "../../contracts/media";
 import { Icon } from "../../components/icons";
@@ -26,17 +27,20 @@ export function FilmScreenshots({
   onAction?: (action: ScreenshotAction, index?: number) => void;
   onPlayTrailer?: (trailer: MediaTrailer) => void;
 }) {
+  useLocale();
   const { open } = useImagePreview();
   const images = film.screenshots ?? [];
   const trailer = onPlayTrailer ? film.trailers?.[0] : undefined;
   const poster = images[0]?.src || film.coverUrl;
   return (
-    <section aria-label={label}>
+    <section aria-label={t(label)}>
       <Group justify="space-between" mb="sm">
         <Text fw={600} size="sm">
-          {label}{" "}
+          {t(label)}{" "}
           <Text span size="xs" c="dimmed">
-            {trailer ? `1 段预览片 · ${images.length} 张图片` : `${images.length} 张图片`}
+            {trailer
+              ? t("1 段预览片 · {0} 张图片", t(images.length))
+              : t("{0} 张图片", t(images.length))}
           </Text>
         </Text>
         {onAction && (
@@ -48,7 +52,7 @@ export function FilmScreenshots({
                 color="gray"
                 rightSection={<Icon name="down" size={13} />}
               >
-                管理截图
+                {t("管理截图")}
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
@@ -56,16 +60,16 @@ export function FilmScreenshots({
                 leftSection={<Icon name="image" />}
                 onClick={() => onAction("pick-previews")}
               >
-                从视频选择预览图
+                {t("从视频选择预览图")}
               </Menu.Item>
               <Menu.Item leftSection={<Icon name="image" />} onClick={() => onAction("pick-cover")}>
-                从视频选择封面
+                {t("从视频选择封面")}
               </Menu.Item>
               <Menu.Item leftSection={<Icon name="download" />} onClick={() => onAction("fetch")}>
-                获取封面与截图
+                {t("获取封面与截图")}
               </Menu.Item>
               <Menu.Item leftSection={<Icon name="layers" />} onClick={() => onAction("long")}>
-                获取长截图
+                {t("获取长截图")}
               </Menu.Item>
               <Menu.Divider />
               <Menu.Item
@@ -73,7 +77,7 @@ export function FilmScreenshots({
                 disabled={!images.some((image) => image.id)}
                 onClick={() => onAction("clear")}
               >
-                清空截图
+                {t("清空截图")}
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -83,7 +87,7 @@ export function FilmScreenshots({
         {trailer && (
           <UnstyledButton
             className="thumb trailer-thumb"
-            aria-label="播放预览片"
+            aria-label={t("播放预览片")}
             onClick={() => onPlayTrailer?.(trailer)}
           >
             {poster && (
@@ -100,7 +104,7 @@ export function FilmScreenshots({
             )}
             <span className="trailer-thumb-content">
               <Icon name="play" size={24} filled />
-              <span>预览片</span>
+              <span>{t("预览片")}</span>
             </span>
           </UnstyledButton>
         )}
@@ -112,11 +116,11 @@ export function FilmScreenshots({
               (image.path || image.id) && (
                 <>
                   {image.path && (
-                    <Menu.Item onClick={() => onAction("cover", index)}>设为封面</Menu.Item>
+                    <Menu.Item onClick={() => onAction("cover", index)}>{t("设为封面")}</Menu.Item>
                   )}
                   {image.id && (
                     <Menu.Item color="red" onClick={() => onAction("remove", index)}>
-                      删除截图
+                      {t("删除截图")}
                     </Menu.Item>
                   )}
                 </>
@@ -126,14 +130,14 @@ export function FilmScreenshots({
             <UnstyledButton
               key={`${image.src}:${index}`}
               className="thumb"
-              aria-label={`查看截图 ${index + 1}`}
+              aria-label={t("查看截图 {0}", t(index + 1))}
               onClick={() => open(images, index, film.metadata?.homepage)}
             >
               <SourceImage
                 candidates={[image.src]}
                 referer={film.metadata?.homepage}
                 placeholder={(loading) => (
-                  <span className="poster-empty">{loading ? "读取中…" : "图片暂不可用"}</span>
+                  <span className="poster-empty">{loading ? t("读取中…") : t("图片暂不可用")}</span>
                 )}
                 alt={image.title || `截图 ${index + 1}`}
                 h="100%"
@@ -149,8 +153,10 @@ export function FilmScreenshots({
       {!images.length && !trailer && (
         <Empty
           icon="image"
-          title="暂无截图"
-          description={onAction ? "可以从视频中截取画面，或获取影片预览图。" : "暂无影片预览图。"}
+          title={t("暂无截图")}
+          description={
+            onAction ? t("可以从视频中截取画面，或获取影片预览图。") : t("暂无影片预览图。")
+          }
         />
       )}
     </section>

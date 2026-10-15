@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useId } from "react";
 import type { ReactNode } from "react";
 import { Group, Paper, Text } from "@mantine/core";
@@ -16,6 +17,7 @@ export function SettingCard({
   extra?: ReactNode;
   children: ReactNode;
 }) {
+  useLocale();
   const headingId = useId();
   return (
     <Paper component="section" className={classes.card} aria-labelledby={headingId}>
@@ -42,6 +44,7 @@ export function SettingRow({
   hint?: string;
   children: ReactNode;
 }) {
+  useLocale();
   return (
     <div className={classes.row}>
       <div className={classes.rowText}>
@@ -50,7 +53,7 @@ export function SettingRow({
         </Text>
         {hint && (
           <Text size="xs" c="dimmed" mt={4} lh={1.65}>
-            {hint}
+            {t(hint)}
           </Text>
         )}
       </div>
@@ -60,6 +63,7 @@ export function SettingRow({
 }
 
 export function SettingNote({ children }: { children: ReactNode }) {
+  useLocale();
   return (
     <div className={classes.note}>
       <Icon name="info" size={17} />

@@ -1,7 +1,8 @@
+import { t, useLocale } from "../i18n/index";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Fancybox } from "@fancyapps/ui/dist/fancybox/";
-import { zh_CN } from "@fancyapps/ui/dist/fancybox/l10n/zh_CN.js";
+import { imagePreviewLanguages } from "../i18n/imagePreview";
 import "@fancyapps/ui/dist/fancybox/fancybox.css";
 import type { MediaImage } from "../contracts/media";
 import { bindImagePreviewFullscreen } from "../platform/neutralino/imagePreviewFullscreen";
@@ -48,6 +49,7 @@ async function decodeImage(src: string, signal: AbortSignal) {
 }
 
 export function ImagePreviewProvider({ children }: { children: ReactNode }) {
+  const language = useLocale();
   const [gallery, setGallery] = useState<Gallery | null>(null);
   const images = useImageSources();
   const [preparing, setPreparing] = useState<{
@@ -141,7 +143,7 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
           startIndex: Math.max(0, available.indexOf(resolved[gallery.index]!)),
           triggerEl: gallery.trigger,
           placeFocusBack: true,
-          l10n: zh_CN,
+          l10n: imagePreviewLanguages[language],
           mainClass: "javm-image-preview",
           mainStyle: { "z-index": "1000" },
           theme: "dark",
@@ -176,14 +178,14 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
       instance?.destroy();
       releaseFullscreen?.();
     };
-  }, [gallery, images]);
+  }, [gallery, images, language]);
   return (
     <PreviewContext.Provider value={value}>
       {children}
       <Modal
         opened={!!gallery && preparing?.gallery === gallery}
         onClose={() => setGallery(null)}
-        title="图片预览"
+        title={t("图片预览")}
         centered
         zIndex={1000}
       >
@@ -191,13 +193,13 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
           {!preparing?.failed && <Loader size="sm" />}
           <Text component="output" aria-live="polite">
             {preparing?.failed
-              ? "图片暂不可用，请稍后重试。"
-              : `正在读取图片 ${preparing?.completed ?? 0}/${gallery?.images.length ?? 0}…`}
+              ? t("图片暂不可用，请稍后重试。")
+              : t("正在读取图片 {0}/{1}…", preparing?.completed ?? 0, gallery?.images.length ?? 0)}
           </Text>
         </Group>
         <Group justify="flex-end" mt="md">
           <Button variant="default" onClick={() => setGallery(null)}>
-            {preparing?.failed ? "关闭" : "取消"}
+            {preparing?.failed ? t("关闭") : t("取消")}
           </Button>
         </Group>
       </Modal>

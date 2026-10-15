@@ -1,4 +1,5 @@
 import { app, events, window as nativeWindow } from "@neutralinojs/lib";
+import { t } from "../../i18n/core";
 import { PlayerWindowController } from "../../services/playback/PlayerWindowController";
 import { playbackError } from "../../services/playback/PlaybackService";
 import type { PlaybackController } from "../../services/playback/PlaybackService";
@@ -17,7 +18,7 @@ export function createPlayerWindowController(windowMode: () => PlaybackWindowMod
       const args = (window as unknown as { NL_ARGS: string[] }).NL_ARGS;
       const resourceMode = args.find((arg) => /^--res-mode=(directory|bundle|embedded)$/.test(arg));
       await nativeWindow.create(url.href, {
-        title: "JAVM 播放器",
+        title: t("JAVM 播放器"),
         width: 960,
         height: 600,
         minWidth: 440,

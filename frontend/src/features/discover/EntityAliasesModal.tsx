@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useEffect, useState } from "react";
 import {
   Alert,
@@ -21,6 +22,7 @@ export function EntityAliasesModal({
   library: LibraryService;
   onClose(): void;
 }) {
+  useLocale();
   const { notice } = useWorkspace();
   const [dimension, setDimension] = useState("actors"),
     [query, setQuery] = useState(""),
@@ -68,7 +70,7 @@ export function EntityAliasesModal({
     <Modal
       opened
       onClose={() => !busy && onClose()}
-      title="名称与别名管理"
+      title={t("名称与别名管理")}
       size="lg"
       centered
       closeOnEscape={!busy}
@@ -76,47 +78,48 @@ export function EntityAliasesModal({
     >
       <Stack>
         <Text size="sm">
-          将同一实体的不同语言名称归并到规范名称。屏蔽规则会让该名称独立显示；移除规则后恢复原始关联。原始资料与
-          NFO 保留。
+          {t(
+            "将同一实体的不同语言名称归并到规范名称。屏蔽规则会让该名称独立显示；移除规则后恢复原始关联。原始资料与 NFO 保留。",
+          )}
         </Text>
         <Select
-          label="类型"
+          label={t("类型")}
           value={dimension}
           disabled={busy}
           allowDeselect={false}
-          data={[
+          data={localizeOptions([
             { value: "actors", label: "演员" },
             { value: "studios", label: "制作商" },
             { value: "labels", label: "发行商" },
             { value: "directors", label: "导演" },
             { value: "series", label: "系列" },
             { value: "genres", label: "分类" },
-          ]}
+          ])}
           onChange={(value) => {
             setDimension(value!);
             setOffset(0);
           }}
         />
         <TextInput
-          label="原名称／别名"
+          label={t("原名称／别名")}
           value={alias}
           disabled={busy}
           onChange={(event) => setAlias(event.currentTarget.value)}
         />
         <TextInput
-          label="规范名称"
+          label={t("规范名称")}
           value={canonical}
           disabled={busy || blocked}
           onChange={(event) => setCanonical(event.currentTarget.value)}
         />
         <TextInput
-          label="中文显示名称（可选）"
+          label={t("中文显示名称（可选）")}
           value={label}
           disabled={busy || blocked}
           onChange={(event) => setLabel(event.currentTarget.value)}
         />
         <Checkbox
-          label="屏蔽这个名称的归并"
+          label={t("屏蔽这个名称的归并")}
           checked={blocked}
           disabled={busy}
           onChange={(event) => setBlocked(event.currentTarget.checked)}
@@ -136,10 +139,10 @@ export function EntityAliasesModal({
             })
           }
         >
-          保存规则
+          {t("保存规则")}
         </Button>
         <TextInput
-          label="搜索已有规则"
+          label={t("搜索已有规则")}
           value={query}
           disabled={busy}
           onChange={(event) => {
@@ -150,9 +153,9 @@ export function EntityAliasesModal({
         <Table>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th>原名称</Table.Th>
-              <Table.Th>规范名称</Table.Th>
-              <Table.Th>操作</Table.Th>
+              <Table.Th>{t("原名称")}</Table.Th>
+              <Table.Th>{t("规范名称")}</Table.Th>
+              <Table.Th>{t("操作")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -161,7 +164,7 @@ export function EntityAliasesModal({
                 <Table.Td>{row.alias}</Table.Td>
                 <Table.Td>
                   {row.blocked
-                    ? "已屏蔽"
+                    ? t("已屏蔽")
                     : row.label
                       ? `${row.canonical} · ${row.label}`
                       : row.canonical}
@@ -179,7 +182,7 @@ export function EntityAliasesModal({
                         setBlocked(!!row.blocked);
                       }}
                     >
-                      编辑
+                      {t("编辑")}
                     </Button>
                     <Button
                       size="compact-xs"
@@ -192,7 +195,7 @@ export function EntityAliasesModal({
                         })
                       }
                     >
-                      移除规则
+                      {t("移除规则")}
                     </Button>
                   </Group>
                 </Table.Td>
@@ -207,7 +210,7 @@ export function EntityAliasesModal({
             disabled={!offset || busy}
             onClick={() => setOffset((n) => Math.max(0, n - 50))}
           >
-            上一页
+            {t("上一页")}
           </Button>
           <Button
             size="xs"
@@ -215,11 +218,11 @@ export function EntityAliasesModal({
             disabled={rows.length < 50 || busy}
             onClick={() => setOffset((n) => n + 50)}
           >
-            下一页
+            {t("下一页")}
           </Button>
         </Group>
         <Text size="xs" c="dimmed">
-          旧归档恢复只补充当前没有的规则与收藏，冲突或缺少规范名称的分组保留在归档中供核对。
+          {t("旧归档恢复只补充当前没有的规则与收藏，冲突或缺少规范名称的分组保留在归档中供核对。")}
         </Text>
         <Button
           variant="light"
@@ -238,14 +241,14 @@ export function EntityAliasesModal({
             })
           }
         >
-          恢复旧收藏／别名
+          {t("恢复旧收藏／别名")}
         </Button>
         {restoring && (
           <Button
             variant="default"
             onClick={() => void library.cancelAliasRestore().catch(() => {})}
           >
-            取消恢复
+            {t("取消恢复")}
           </Button>
         )}
         {restoreSummary && (
@@ -255,7 +258,7 @@ export function EntityAliasesModal({
         )}
         {error && (
           <Alert color="red" role="alert">
-            {error}
+            {t(error)}
           </Alert>
         )}
       </Stack>

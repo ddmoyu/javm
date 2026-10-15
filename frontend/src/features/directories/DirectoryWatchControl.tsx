@@ -1,8 +1,10 @@
+import { t, useLocale } from "../../i18n/index";
 import { useSyncExternalStore } from "react";
 import { Badge, Button, Group, Popover, Stack, Switch, Text, Tooltip } from "@mantine/core";
 import type { DirectoryWatchService } from "../../services/library/DirectoryWatchService";
 
 export function DirectoryWatchControl({ service }: { service: DirectoryWatchService }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   return (
     <Group gap="xs" wrap="nowrap">
@@ -11,12 +13,16 @@ export function DirectoryWatchControl({ service }: { service: DirectoryWatchServ
         w={240}
         label={
           state.enabled
-            ? `目录变化后自动扫描。正在监听 ${state.watching} 个目录，待扫描 ${state.queued} 个。`
-            : "目录内的文件变化后，自动进行增量扫描。"
+            ? t(
+                "目录变化后自动扫描。正在监听 {0} 个目录，待扫描 {1} 个。",
+                t(state.watching),
+                t(state.queued),
+              )
+            : t("目录内的文件变化后，自动进行增量扫描。")
         }
       >
         <Switch
-          label="自动扫描"
+          label={t("自动扫描")}
           size="xs"
           checked={state.enabled}
           disabled={!state.ready || state.changing}
@@ -25,14 +31,14 @@ export function DirectoryWatchControl({ service }: { service: DirectoryWatchServ
       </Tooltip>
       {state.enabled && state.queued > 0 && (
         <Badge size="sm" variant="light" color="gray">
-          {state.queued} 待扫描
+          {t("{0} 待扫描", state.queued)}
         </Badge>
       )}
       {state.error && (
         <Popover width={320} position="bottom-end" withArrow shadow="md">
           <Popover.Target>
             <Button size="compact-xs" color="yellow" autoContrast>
-              监听异常
+              {t("监听异常")}
             </Button>
           </Popover.Target>
           <Popover.Dropdown>
@@ -42,7 +48,7 @@ export function DirectoryWatchControl({ service }: { service: DirectoryWatchServ
                 role="alert"
                 style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
               >
-                {state.error}
+                {t(state.error)}
               </Text>
               <Button
                 size="xs"
@@ -50,7 +56,7 @@ export function DirectoryWatchControl({ service }: { service: DirectoryWatchServ
                 disabled={state.changing}
                 onClick={() => void service.setEnabled(state.enabled)}
               >
-                重试
+                {t("重试")}
               </Button>
             </Stack>
           </Popover.Dropdown>

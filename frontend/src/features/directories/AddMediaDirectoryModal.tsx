@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useImperativeHandle, useRef, useState } from "react";
 import type { Ref } from "react";
 import {
@@ -49,6 +50,7 @@ export function AddMediaDirectoryModal({
   ref: Ref<AddMediaDirectoryHandle>;
   runtime: Runtime;
 }) {
+  useLocale();
   const { library, libraryState, go, notice } = useWorkspace();
   const [opened, setOpened] = useState(false);
   const [path, setPath] = useState("");
@@ -123,7 +125,7 @@ export function AddMediaDirectoryModal({
     <Modal
       opened={opened}
       onClose={close}
-      title="添加媒体目录"
+      title={t("添加媒体目录")}
       centered
       size={520}
       trapFocus={!selecting}
@@ -139,7 +141,7 @@ export function AddMediaDirectoryModal({
       >
         <Stack gap="lg">
           <Text size="sm" c="dimmed">
-            选择存放影片的文件夹，集中管理本地媒体。
+            {t("选择存放影片的文件夹，集中管理本地媒体。")}
           </Text>
           <Paper withBorder p="md">
             <Stack gap="md">
@@ -149,13 +151,13 @@ export function AddMediaDirectoryModal({
                 </ThemeIcon>
                 <Stack gap={4} style={{ minWidth: 0, flex: 1 }} aria-live="polite">
                   <Text size="xs" c="dimmed">
-                    媒体目录
+                    {t("媒体目录")}
                   </Text>
                   <Text fw={600} style={{ overflowWrap: "anywhere" }}>
-                    {path ? folderName : "尚未选择文件夹"}
+                    {path ? folderName : t("尚未选择文件夹")}
                   </Text>
                   <Text size="sm" c="dimmed" style={{ overflowWrap: "anywhere" }}>
-                    {path || "通过系统文件夹选择器选择，无需手动输入路径。"}
+                    {path || t("通过系统文件夹选择器选择，无需手动输入路径。")}
                   </Text>
                 </Stack>
               </Group>
@@ -169,11 +171,11 @@ export function AddMediaDirectoryModal({
                 data-autofocus
                 fullWidth
               >
-                {path ? "更换目录" : "选择文件夹"}
+                {path ? t("更换目录") : t("选择文件夹")}
               </Button>
               {!desktop && (
                 <Text size="xs" c="dimmed">
-                  请在桌面应用中选择本机文件夹。
+                  {t("请在桌面应用中选择本机文件夹。")}
                 </Text>
               )}
             </Stack>
@@ -185,20 +187,20 @@ export function AddMediaDirectoryModal({
             chevron={<Icon name="down" size={16} />}
           >
             <Accordion.Item value="options">
-              <Accordion.Control disabled={locked}>导入选项</Accordion.Control>
+              <Accordion.Control disabled={locked}>{t("导入选项")}</Accordion.Control>
               <Accordion.Panel>
                 <Stack gap="md">
                   <Checkbox
-                    label="包含子目录"
-                    description="同时查找所选文件夹下的影片"
+                    label={t("包含子目录")}
+                    description={t("同时查找所选文件夹下的影片")}
                     checked={includeSubdirectories}
                     onChange={(event) => setIncludeSubdirectories(event.currentTarget.checked)}
                     disabled={locked}
                   />
                   <TagsInput
-                    label="视频格式"
-                    description="留空使用全部内置视频格式，也可输入其他扩展名"
-                    placeholder="选择或输入格式"
+                    label={t("视频格式")}
+                    description={t("留空使用全部内置视频格式，也可输入其他扩展名")}
+                    placeholder={t("选择或输入格式")}
                     data={videoFormatOptions}
                     value={videoFormats}
                     onChange={(formats) =>
@@ -221,13 +223,13 @@ export function AddMediaDirectoryModal({
           </Accordion>
           {error && (
             <Alert color="red" icon={<Icon name="info" size={16} />} role="alert">
-              {error}
+              {t(error)}
             </Alert>
           )}
           <Divider />
           <Group justify="flex-end">
             <Button variant="default" onClick={close} disabled={locked}>
-              取消
+              {t("取消")}
             </Button>
             <Button
               type="submit"
@@ -235,12 +237,12 @@ export function AddMediaDirectoryModal({
               loading={submitting}
               leftSection={<Icon name="plus" size={16} />}
             >
-              开始导入
+              {t("开始导入")}
             </Button>
           </Group>
           {libraryState.scan?.state === "scanning" && (
             <Text size="xs" c="dimmed">
-              已有目录正在扫描，完成后即可添加。
+              {t("已有目录正在扫描，完成后即可添加。")}
             </Text>
           )}
         </Stack>

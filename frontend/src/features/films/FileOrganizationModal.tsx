@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Progress, Stack, Text, TextInput } from "@mantine/core";
 import { os } from "@neutralinojs/lib";
@@ -11,6 +12,7 @@ export function FileOrganizationModal({
   file: { id: string; path: string };
   onClose(): void;
 }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const normalized = file.path.replaceAll("\\", "/");
   const [directory, setDirectory] = useState(normalized.slice(0, normalized.lastIndexOf("/")));
@@ -28,7 +30,7 @@ export function FileOrganizationModal({
   return (
     <Modal
       opened
-      title="改名或移动文件"
+      title={t("改名或移动文件")}
       onClose={() => !state.busy && onClose()}
       closeOnEscape={!state.busy}
       closeOnClickOutside={!state.busy}
@@ -37,16 +39,16 @@ export function FileOrganizationModal({
     >
       <Stack>
         <Text size="sm" style={{ overflowWrap: "anywhere" }}>
-          原路径：{file.path}
+          {t("原路径：{0}", file.path)}
         </Text>
         <TextInput
-          label="文件名（保留扩展名）"
+          label={t("文件名（保留扩展名）")}
           value={name}
           disabled={state.busy}
           onChange={(event) => setName(event.currentTarget.value)}
         />
         <TextInput
-          label="目标目录"
+          label={t("目标目录")}
           value={directory}
           readOnly
           rightSectionWidth={85}
@@ -57,20 +59,22 @@ export function FileOrganizationModal({
               disabled={state.busy}
               onClick={() =>
                 void perform(async () => {
-                  const path = await os.showFolderDialog("移动到目录");
+                  const path = await os.showFolderDialog(t("移动到目录"));
                   if (path) setDirectory(path);
                 })
               }
             >
-              选择目录
+              {t("选择目录")}
             </Button>
           }
         />
         <Text size="sm" style={{ overflowWrap: "anywhere" }}>
-          目标路径：{target}
+          {t("目标路径：{0}", target)}
         </Text>
         <Text size="xs" c="dimmed">
-          核对副本后更新片库并移除原视频。NFO、封面及其他文件保留原路径和关联；需要足够空间保存副本。
+          {t(
+            "核对副本后更新片库并移除原视频。NFO、封面及其他文件保留原路径和关联；需要足够空间保存副本。",
+          )}
         </Text>
         {state.busy && (
           <>
@@ -80,13 +84,13 @@ export function FileOrganizationModal({
             </Text>
           </>
         )}
-        {(error || state.error) && <Alert color="red">{error || state.error}</Alert>}
+        {(error || state.error) && <Alert color="red">{t(error || state.error)}</Alert>}
         {!!state.pending.length && !state.busy && (
-          <Alert color="yellow">有未完成的整理任务，请在目录管理中恢复或取消。</Alert>
+          <Alert color="yellow">{t("有未完成的整理任务，请在目录管理中恢复或取消。")}</Alert>
         )}
         <Group justify="flex-end">
           <Button variant="default" onClick={state.busy ? service.cancel : onClose}>
-            {state.busy ? "暂停" : "关闭"}
+            {state.busy ? t("暂停") : t("关闭")}
           </Button>
           <Button
             loading={state.busy}
@@ -98,7 +102,7 @@ export function FileOrganizationModal({
               })
             }
           >
-            确认路径并执行
+            {t("确认路径并执行")}
           </Button>
         </Group>
       </Stack>

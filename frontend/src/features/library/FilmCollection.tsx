@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ActionIcon, Badge, Group, Skeleton, Table, Text, UnstyledButton } from "@mantine/core";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -52,6 +53,7 @@ const FilmCard = memo(function FilmCard({
   cardClickToPlay: boolean;
   deleteVideo: (film: Film) => void;
 }) {
+  useLocale();
   const statsId = useId();
   cardClickToPlay =
     cardClickToPlay &&
@@ -67,24 +69,24 @@ const FilmCard = memo(function FilmCard({
       >
         <UnstyledButton
           className="film-card-open"
-          aria-label={`${cardClickToPlay ? "播放" : "查看详情"} ${film.code} ${film.title}`}
+          aria-label={`${t(cardClickToPlay ? "播放" : "查看详情")} ${film.code} ${film.title}`}
           aria-describedby={statsId}
-          title={`${cardClickToPlay ? "单击播放" : "单击查看详情"} · 右键管理`}
+          title={t("{0} · 右键管理", cardClickToPlay ? t("单击播放") : t("单击查看详情"))}
           onKeyDown={objectMenuKey}
           onClick={() => activateFilm(film)}
         >
           <span className="film-cover">
             <Poster film={film} />
             <span className="cover-hover">
-              <span className="cover-hint">{cardClickToPlay ? "播放影片" : "查看详情"}</span>
+              <span className="cover-hint">{cardClickToPlay ? t("播放影片") : t("查看详情")}</span>
               <span className="cover-stats" id={statsId}>
                 <span className={film.rating == null ? undefined : "cover-rating"}>
                   <Icon name="star" size={14} filled={film.rating != null} />
-                  {film.rating == null ? "暂无评分" : `${film.rating.toFixed(1)} / 5`}
+                  {film.rating == null ? t("暂无评分") : t(`${film.rating.toFixed(1)} / 5`)}
                 </span>
                 <span>
                   <Icon name="clock" size={14} />
-                  {film.duration > 0 ? `${film.duration} 分钟` : "时长未知"}
+                  {film.duration > 0 ? t("{0} 分钟", t(film.duration)) : t("时长未知")}
                 </span>
               </span>
             </span>
@@ -97,10 +99,10 @@ const FilmCard = memo(function FilmCard({
               c={film.quality === "4K" ? "dark.9" : "gray.2"}
             >
               {film.availability === "metadata_only"
-                ? "未下载"
+                ? t("未下载")
                 : film.availability === "unavailable"
-                  ? "文件不可用"
-                  : film.quality}
+                  ? t("文件不可用")
+                  : t(film.quality)}
             </Badge>
             {film.missing && (
               <Badge
@@ -112,7 +114,7 @@ const FilmCard = memo(function FilmCard({
                 c="champagne.4"
                 leftSection={<Icon name="warning" size={11} />}
               >
-                资料待补全
+                {t("资料待补全")}
               </Badge>
             )}
           </span>
@@ -137,14 +139,14 @@ const FilmCard = memo(function FilmCard({
           size={30}
           variant={film.favorite ? "filled" : "transparent"}
           color={film.favorite ? "rouge" : "dark"}
-          aria-label={`${film.favorite ? "取消收藏" : "收藏"} ${film.code}`}
+          aria-label={`${t(film.favorite ? "取消收藏" : "收藏")} ${film.code}`}
           aria-pressed={film.favorite}
           onClick={() => toggleFavorite(film)}
         >
           <Icon name="heart" size={16} filled={film.favorite} />
         </ActionIcon>
         <div className="film-card-menu" style={{ top: width * 1.39 + 6 }}>
-          <ObjectMenuButton label={`${film.code} 更多操作`} />
+          <ObjectMenuButton label={t("{0} 更多操作", film.code)} />
         </div>
       </li>
     </ObjectMenu>
@@ -166,6 +168,7 @@ const FilmRow = memo(function FilmRow({
   play: (film: Film) => void;
   deleteVideo: (film: Film) => void;
 }) {
+  useLocale();
   return (
     <ObjectMenu items={<FilmMenuItems film={film} deleteVideo={() => deleteVideo(film)} />}>
       <Table.Tr
@@ -194,7 +197,7 @@ const FilmRow = memo(function FilmRow({
           <Group gap="sm" wrap="nowrap">
             <UnstyledButton
               className="mini-poster"
-              aria-label={`${cardClickToPlay ? "播放" : "查看详情"} ${film.code} 封面`}
+              aria-label={t("{0} {1} 封面", cardClickToPlay ? t("播放") : t("查看详情"), film.code)}
               onKeyDown={objectMenuKey}
               onClick={() => activateFilm(film)}
             >
@@ -222,10 +225,10 @@ const FilmRow = memo(function FilmRow({
         <Table.Td>
           <Text size="sm">
             {film.availability === "metadata_only"
-              ? "未下载"
+              ? t("未下载")
               : film.availability === "unavailable"
-                ? "文件不可用"
-                : film.quality}
+                ? t("文件不可用")
+                : t(film.quality)}
           </Text>
           <Text size="xs" c="dimmed">
             {film.size}
@@ -233,18 +236,18 @@ const FilmRow = memo(function FilmRow({
         </Table.Td>
         <Table.Td>
           <Pill tone={film.missing ? "warning" : "success"}>
-            {film.missing ? "待补全" : "完整"}
+            {film.missing ? t("待补全") : t("完整")}
           </Pill>
         </Table.Td>
         <Table.Td>
           <Group gap={2} wrap="nowrap">
             <IconButton
               icon="play"
-              label={`播放 ${film.code}`}
+              label={t("播放 {0}", film.code)}
               disabled={!film.files?.some((file) => file.kind === "video" && !file.missing)}
               onClick={() => play(film)}
             />
-            <ObjectMenuButton label={`${film.code} 更多操作`} />
+            <ObjectMenuButton label={t("{0} 更多操作", film.code)} />
           </Group>
         </Table.Td>
       </Table.Tr>
@@ -263,6 +266,7 @@ export function FilmCollection({
   toggleFavorite,
   cardWidth: minCardWidth,
 }: CollectionProps) {
+  useLocale();
   const { cardClickToPlay } = useWorkspace();
   const activateFilm = useCallback(
     (film: Film) =>
@@ -348,7 +352,7 @@ export function FilmCollection({
         data-cover-layout={landscape ? "landscape" : "portrait"}
       >
         {poster ? (
-          <ul className="virtual-canvas" aria-label="影片海报" style={{ height: totalHeight }}>
+          <ul className="virtual-canvas" aria-label={t("影片海报")} style={{ height: totalHeight }}>
             {rows.flatMap((row) =>
               Array.from(
                 { length: Math.min(columns, count - row.index * columns) },
@@ -360,7 +364,7 @@ export function FilmCollection({
                       <li
                         key={`loading:${index}`}
                         className="film-card"
-                        aria-label="正在加载影片"
+                        aria-label={t("正在加载影片")}
                         aria-busy="true"
                         style={{
                           transform: `translateY(${row.start - geometry.margin}px)`,
@@ -396,7 +400,7 @@ export function FilmCollection({
           </ul>
         ) : (
           <Table
-            aria-label="影片列表"
+            aria-label={t("影片列表")}
             aria-rowcount={count + 1}
             highlightOnHover
             verticalSpacing={10}
@@ -405,11 +409,11 @@ export function FilmCollection({
           >
             <Table.Thead>
               <Table.Tr aria-rowindex={1}>
-                <Table.Th w="38%">影片</Table.Th>
-                <Table.Th w="16%">演员</Table.Th>
-                <Table.Th w="17%">画质 / 大小</Table.Th>
-                <Table.Th w="15%">资料状态</Table.Th>
-                <Table.Th w="14%">操作</Table.Th>
+                <Table.Th w="38%">{t("影片")}</Table.Th>
+                <Table.Th w="16%">{t("演员")}</Table.Th>
+                <Table.Th w="17%">{t("画质 / 大小")}</Table.Th>
+                <Table.Th w="15%">{t("资料状态")}</Table.Th>
+                <Table.Th w="14%">{t("操作")}</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -433,7 +437,7 @@ export function FilmCollection({
                       style={{ height: 72 }}
                     >
                       <Table.Td colSpan={5}>
-                        <Skeleton height={36} aria-label="正在加载影片" />
+                        <Skeleton height={36} aria-label={t("正在加载影片")} />
                       </Table.Td>
                     </Table.Tr>
                   );

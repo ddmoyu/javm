@@ -1,8 +1,12 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Loader, Paper, Stack, Text, UnstyledButton } from "@mantine/core";
 import { Video, VideoPlayer, VideoSkin } from "@videojs/react/video";
 import { HlsJsVideo } from "@videojs/react/media/hlsjs-video";
 import { I18nProvider } from "@videojs/react/i18n";
+import "@videojs/react/i18n/locales/zh-CN/register";
+import "@videojs/react/i18n/locales/zh-TW/register";
+import "@videojs/react/i18n/locales/ja/register";
 import workerUrl from "hls.js/dist/hls.worker.js?url";
 import "@videojs/react/video/skin.css";
 import "./player.css";
@@ -27,6 +31,7 @@ import {
 } from "../../platform/neutralino/windowFrame";
 
 function Media({ media }: { media: PreparedPlayback }) {
+  const language = useLocale();
   const [error, setError] = useState("");
   const [progressError, setProgressError] = useState("");
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
@@ -102,7 +107,7 @@ function Media({ media }: { media: PreparedPlayback }) {
   return (
     <>
       <div className="playback-surface">
-        <I18nProvider locale="zh-CN">
+        <I18nProvider locale={language}>
           <VideoPlayer title={media.request.title}>
             <VideoSkin className="javm-video-skin">
               {media.format === "hls" ? (
@@ -124,19 +129,19 @@ function Media({ media }: { media: PreparedPlayback }) {
       </div>
       {error && (
         <Alert color="red" className="playback-feedback" role="alert">
-          {error}
+          {t(error)}
         </Alert>
       )}
       {progressError && (
         <Alert color="yellow" className="playback-feedback" role="alert">
-          {progressError}
+          {t(progressError)}
         </Alert>
       )}
       {autoplayBlocked && (
         <Group className="playback-feedback" justify="space-between">
-          <Text size="sm">请点击播放以开始视频。</Text>
+          <Text size="sm">{t("请点击播放以开始视频。")}</Text>
           <Button size="xs" onClick={start}>
-            播放
+            {t("播放")}
           </Button>
         </Group>
       )}
@@ -157,6 +162,7 @@ export default function PlaybackWindow({
   native?: boolean;
   onClose?: () => Promise<void>;
 }) {
+  useLocale();
   const [expanded, setExpanded] = useState(false);
   const { maximized, alwaysOnTop } = useSyncExternalStore(subscribeWindowState, getWindowState);
   const isExpanded = native ? maximized : expanded;
@@ -197,7 +203,7 @@ export default function PlaybackWindow({
       ref={root}
       tabIndex={-1}
       aria-modal={false}
-      aria-label="视频播放器"
+      aria-label={t("视频播放器")}
       withBorder={!native}
       shadow={native ? undefined : "xl"}
       className="playback-window"
@@ -215,10 +221,10 @@ export default function PlaybackWindow({
             }
       }
     >
-      <header className="playback-titlebar" ref={toolbar} aria-label="播放窗口工具栏">
+      <header className="playback-titlebar" ref={toolbar} aria-label={t("播放窗口工具栏")}>
         <UnstyledButton
           className="playback-drag"
-          aria-label={`移动播放器：${snapshot.request?.title ?? "视频"}`}
+          aria-label={t("移动播放器：{0}", snapshot.request?.title ?? t("视频"))}
           onDoubleClick={() => report(toggleMaximize())}
           onPointerDown={(event) => {
             if (native) {
@@ -287,14 +293,14 @@ export default function PlaybackWindow({
         >
           <Icon name="play" size={15} />
           <Text truncate size="sm" fw={600}>
-            {snapshot.request?.title ?? "视频播放器"}
+            {snapshot.request?.title ?? t("视频播放器")}
           </Text>
         </UnstyledButton>
         <Group gap={0} wrap="nowrap">
           {native && (
             <UnstyledButton
               className="window-button"
-              aria-label={alwaysOnTop ? "取消置顶" : "置顶播放器"}
+              aria-label={alwaysOnTop ? t("取消置顶") : t("置顶播放器")}
               aria-pressed={alwaysOnTop}
               data-active={alwaysOnTop || undefined}
               onClick={() => report(toggleWindowAlwaysOnTop())}
@@ -305,7 +311,7 @@ export default function PlaybackWindow({
           {native && (
             <UnstyledButton
               className="window-button"
-              aria-label="最小化播放器"
+              aria-label={t("最小化播放器")}
               onClick={() => report(nativeWindow.minimize())}
             >
               <Icon name="minimize" size={14} />
@@ -313,14 +319,14 @@ export default function PlaybackWindow({
           )}
           <UnstyledButton
             className="window-button"
-            aria-label={isExpanded ? "还原播放器" : "最大化播放器"}
+            aria-label={isExpanded ? t("还原播放器") : t("最大化播放器")}
             onClick={() => report(toggleMaximize())}
           >
             <Icon name={isExpanded ? "restore" : "maximize"} size={14} />
           </UnstyledButton>
           <UnstyledButton
             className="window-button close"
-            aria-label="关闭播放器"
+            aria-label={t("关闭播放器")}
             onClick={() => report(onClose ? onClose() : service.close())}
           >
             <Icon name="close" size={16} />
@@ -339,13 +345,13 @@ export default function PlaybackWindow({
           {snapshot.preparing ? (
             <>
               <Loader size="sm" />
-              <Text size="sm">正在加载视频…</Text>
+              <Text size="sm">{t("正在加载视频…")}</Text>
             </>
           ) : (
             <>
               <Icon name="warning" size={28} />
               <Text size="sm" ta="center">
-                {snapshot.error ?? "视频已停止"}
+                {snapshot.error ?? t("视频已停止")}
               </Text>
             </>
           )}

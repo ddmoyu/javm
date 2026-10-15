@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState } from "react";
 import { Alert, Badge, Button, Group, Modal, Paper, Progress, Stack, Text } from "@mantine/core";
 import type { ScanProgress, ScanState } from "../../contracts/library";
@@ -23,6 +24,7 @@ export function DirectoryScanStatus({
   onCancel: () => void;
   onOpenLibrary: () => void;
 }) {
+  useLocale();
   const [opened, setOpened] = useState(false);
   const scanning = scan.state === "scanning";
   const progress = scan.discovered ? (scan.processed / scan.discovered) * 100 : 0;
@@ -42,23 +44,28 @@ export function DirectoryScanStatus({
               {scanLabels[scan.state]}
             </Badge>
             <Text size="xs" c="dimmed">
-              已处理 {scan.processed} / {scan.discovered} · 新增或更新 {scan.imported}
+              {t(
+                "已处理 {0} / {1} · 新增或更新 {2}",
+                scan.processed,
+                scan.discovered,
+                scan.imported,
+              )}
             </Text>
             {(scan.errors > 0 || scan.warnings > 0) && (
               <Text size="xs">
-                {scan.errors > 0 && `${scan.errors} 项待处理`}
+                {scan.errors > 0 && t("{0} 项待处理", t(scan.errors))}
                 {scan.errors > 0 && scan.warnings > 0 && " · "}
-                {scan.warnings > 0 && `${scan.warnings} 项兼容提示`}
+                {scan.warnings > 0 && t("{0} 项兼容提示", t(scan.warnings))}
               </Text>
             )}
           </Group>
           <Group gap="xs">
             <Button size="compact-xs" variant="subtle" onClick={() => setOpened(true)}>
-              查看详情
+              {t("查看详情")}
             </Button>
             {scanning && (
               <Button size="compact-xs" variant="default" loading={pending} onClick={onCancel}>
-                停止扫描
+                {t("停止扫描")}
               </Button>
             )}
           </Group>
@@ -69,23 +76,37 @@ export function DirectoryScanStatus({
             size={3}
             mt="xs"
             animated
-            aria-label="当前已发现文件的处理进度"
+            aria-label={t("当前已发现文件的处理进度")}
           />
         )}
       </Paper>
-      <Modal opened={opened} onClose={() => setOpened(false)} title="扫描详情" size="lg" centered>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title={t("扫描详情")}
+        size="lg"
+        centered
+      >
         <Stack gap="sm">
           <Text component="output" fw={600} aria-live="polite">
             {scanLabels[scan.state]}
           </Text>
-          {scanning && <Progress value={progress} animated aria-label="当前已发现文件的处理进度" />}
+          {scanning && (
+            <Progress value={progress} animated aria-label={t("当前已发现文件的处理进度")} />
+          )}
           <Text size="sm">
-            已处理 {scan.processed} / 已发现 {scan.discovered} · 新增或更新 {scan.imported} ·
-            视频未变化 {scan.unchanged} · 非视频 {scan.skipped}
+            {t(
+              "已处理 {0} / 已发现 {1} · 新增或更新 {2} · 视频未变化 {3} · 非视频 {4}",
+              scan.processed,
+              scan.discovered,
+              scan.imported,
+              scan.unchanged,
+              scan.skipped,
+            )}
           </Text>
           {scanning && (
             <Text size="xs" c="dimmed">
-              发现数量会随扫描增加，停止后保留已导入的影片。
+              {t("发现数量会随扫描增加，停止后保留已导入的影片。")}
             </Text>
           )}
           {scan.current && (
@@ -94,7 +115,7 @@ export function DirectoryScanStatus({
             </Text>
           )}
           {scan.warnings > 0 && (
-            <Alert color="yellow" title={`${scan.warnings} 项兼容提示`}>
+            <Alert color="yellow" title={t("{0} 项兼容提示", t(scan.warnings))}>
               <Stack gap={5} mah={160} style={{ overflowY: "auto" }}>
                 {scan.notices.map((item, index) => (
                   <Text
@@ -102,17 +123,17 @@ export function DirectoryScanStatus({
                     size="xs"
                     style={{ overflowWrap: "anywhere" }}
                   >
-                    {item.path}：{item.message}
+                    {item.path}：{t(item.message)}
                   </Text>
                 ))}
               </Stack>
               <Text size="xs" mt="xs">
-                原始 NFO 保持原样，已读取的内容保存了快照。
+                {t("原始 NFO 保持原样，已读取的内容保存了快照。")}
               </Text>
             </Alert>
           )}
           {scan.errors > 0 && (
-            <Alert color="yellow" title={`${scan.errors} 项需要处理，已有资料已保留`}>
+            <Alert color="yellow" title={t("{0} 项需要处理，已有资料已保留", t(scan.errors))}>
               <Stack gap={5} mah={200} style={{ overflowY: "auto" }}>
                 {scan.issues.map((issue, index) => (
                   <Text
@@ -120,13 +141,13 @@ export function DirectoryScanStatus({
                     size="xs"
                     style={{ overflowWrap: "anywhere" }}
                   >
-                    {issue.path}：{issue.message}
+                    {issue.path}：{t(issue.message)}
                   </Text>
                 ))}
               </Stack>
               {scan.errors > scan.issues.length && (
                 <Text size="xs" mt="xs">
-                  显示前 {scan.issues.length} 项。处理后可重新扫描。
+                  {t("显示前 {0} 项。处理后可重新扫描。", scan.issues.length)}
                 </Text>
               )}
             </Alert>
@@ -134,7 +155,7 @@ export function DirectoryScanStatus({
           <Group justify="flex-end">
             {scanning ? (
               <Button size="xs" variant="default" loading={pending} onClick={onCancel}>
-                停止扫描
+                {t("停止扫描")}
               </Button>
             ) : (
               <Button
@@ -144,7 +165,7 @@ export function DirectoryScanStatus({
                   onOpenLibrary();
                 }}
               >
-                查看片库
+                {t("查看片库")}
               </Button>
             )}
           </Group>

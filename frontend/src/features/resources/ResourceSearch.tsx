@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActionIcon,
@@ -42,6 +43,7 @@ export function ResourceLookupButton({
   disabled = false,
   compact = false,
 }: LookupProps & { onStart?: () => void; disabled?: boolean; compact?: boolean }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const searching = service.matches(code, workId) && state.searching;
   let valid = true;
@@ -66,8 +68,8 @@ export function ResourceLookupButton({
       <ActionIcon
         size="sm"
         variant="subtle"
-        aria-label={`获取 ${code} 资源链接`}
-        title="获取资源链接"
+        aria-label={t("获取 {0} 资源链接", code)}
+        title={t("获取资源链接")}
         loading={searching}
         disabled={blocked}
         onClick={start}
@@ -84,7 +86,7 @@ export function ResourceLookupButton({
       disabled={blocked}
       onClick={start}
     >
-      获取资源链接
+      {t("获取资源链接")}
     </Button>
   );
 }
@@ -102,6 +104,7 @@ export function ResourceSearchPanel({
   documents,
   notice,
 }: LookupProps & { documents?: LibraryDocumentsService; notice: (message: string) => void }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const current = service.matches(code, workId);
   const searching = current && state.searching;
@@ -163,7 +166,7 @@ export function ResourceSearchPanel({
         return;
       }
       if (action === "download" && (row.added || added.has(key))) return;
-      const root = action === "strm" ? await os.showFolderDialog("导出 STRM 与 NFO") : "";
+      const root = action === "strm" ? await os.showFolderDialog(t("导出 STRM 与 NFO")) : "";
       if (action === "strm" && !root) return;
       if (action === "strm") {
         setExportResult("");
@@ -205,51 +208,51 @@ export function ResourceSearchPanel({
   };
 
   return (
-    <section aria-label={code + " 资源链接"}>
+    <section aria-label={t("获取 {0} 资源链接", code)}>
       <Stack gap="md">
         <Group justify="space-between">
           <Group gap="xs">
             <ResourceLookupButton service={service} code={code} workId={workId} disabled={!!busy} />
             {searching && (
               <Button size="sm" variant="default" onClick={service.cancel}>
-                取消查找
+                {t("取消查找")}
               </Button>
             )}
           </Group>
           {!!rows.length && (
             <SegmentedControl
               size="xs"
-              aria-label="资源排序"
+              aria-label={t("资源排序")}
               value={sort}
               onChange={setSort}
-              data={[
+              data={localizeOptions([
                 { value: "recommended", label: "默认" },
                 { value: "quality", label: "分辨率" },
                 { value: "date", label: "最近校验" },
-              ]}
+              ])}
             />
           )}
         </Group>
-        {!state.available && <Alert>请在 Windows 桌面应用中获取资源链接。</Alert>}
+        {!state.available && <Alert>{t("请在 Windows 桌面应用中获取资源链接。")}</Alert>}
         {!code && (
           <Text size="sm" c="dimmed">
-            影片尚未提供番号，补全资料后即可获取资源链接。
+            {t("影片尚未提供番号，补全资料后即可获取资源链接。")}
           </Text>
         )}
         {searching && (
           <Stack gap={6}>
             <Text size="sm" component="output" aria-live="polite">
-              正在获取资源链接 · 已找到 {rows.length} 个
+              {t("正在获取资源链接 · 已找到 {0} 个", rows.length)}
             </Text>
             <Progress
               value={state.total ? (state.completed / state.total) * 100 : 0}
-              aria-label="资源查找进度"
+              aria-label={t("资源查找进度")}
             />
           </Stack>
         )}
         {current && state.cancelled && !searching && (
           <Text size="sm" component="output" aria-live="polite">
-            已停止查找，找到的链接仍可使用。
+            {t("已停止查找，找到的链接仍可使用。")}
           </Text>
         )}
         {state.storageError && (
@@ -259,12 +262,12 @@ export function ResourceSearchPanel({
         )}
         {current && state.error && (
           <Alert color="red" role="alert">
-            {publicMessage(state.error)}
+            {t(publicMessage(state.error))}
           </Alert>
         )}
         {!!state.cleanupPending && (
           <Alert color="red" role="alert">
-            取流实例尚未完成清理。
+            {t("取流实例尚未完成清理。")}
             <Button
               ml="sm"
               size="xs"
@@ -273,26 +276,26 @@ export function ResourceSearchPanel({
                 void service.retryCleanup().catch(() => notice("清理仍未完成，请重试。"));
               }}
             >
-              重试清理
+              {t("重试清理")}
             </Button>
           </Alert>
         )}
         {!loading && readError && (
           <Alert color="yellow" role="alert">
-            {readError}
+            {t(readError)}
             <Button
               ml="sm"
               size="xs"
               variant="default"
               onClick={() => setRevision((value) => value + 1)}
             >
-              重新读取
+              {t("重新读取")}
             </Button>
           </Alert>
         )}
         {exportError && (
           <Alert color="red" role="alert">
-            {publicMessage(exportError)}
+            {t(publicMessage(exportError))}
           </Alert>
         )}
         {exportResult && (
@@ -307,19 +310,19 @@ export function ResourceSearchPanel({
         )}
         {loading && !rows.length && (
           <Text size="sm" component="output" aria-live="polite">
-            正在读取已保存链接…
+            {t("正在读取已保存链接…")}
           </Text>
         )}
         {!loading && !searching && !rows.length && (
           <Empty
             icon="link"
-            title={current && state.total ? "暂未找到可用链接" : "暂无资源链接"}
+            title={current && state.total ? t("暂未找到可用链接") : t("暂无资源链接")}
             description={
-              current && state.total ? "可稍后重新获取。" : "点击“获取资源链接”开始查找。"
+              current && state.total ? t("可稍后重新获取。") : t("点击“获取资源链接”开始查找。")
             }
           />
         )}
-        <Stack gap="sm" aria-label="资源结果">
+        <Stack gap="sm" aria-label={t("资源结果")}>
           {rows.map((row, index) => {
             const track = videoTrack(row);
             const key = linkKey(row.stream.manifestUrl);
@@ -329,11 +332,11 @@ export function ResourceSearchPanel({
                 <Stack gap="sm">
                   <Group gap="xs">
                     <Text size="sm" fw={600}>
-                      资源 {index + 1}
+                      {t("资源 {0}", index + 1)}
                     </Text>
                     <Badge variant="light">HLS</Badge>
                     <Badge variant="light" color={track?.height ? undefined : "gray"}>
-                      {track?.height ? track.height + "p" : "分辨率未知"}
+                      {track?.height ? t(track.height + "p") : t("分辨率未知")}
                     </Badge>
                     {!!track?.width && !!track.height && (
                       <Text size="xs" c="dimmed">
@@ -362,7 +365,7 @@ export function ResourceSearchPanel({
                       leftSection={<Icon name="copy" size={14} />}
                       onClick={() => void use(row, "copy")}
                     >
-                      复制链接
+                      {t("复制链接")}
                     </Button>
                     <Button
                       size="xs"
@@ -370,7 +373,7 @@ export function ResourceSearchPanel({
                       leftSection={<Icon name="download" size={14} />}
                       onClick={() => void use(row, "download")}
                     >
-                      {downloaded ? "已加入下载" : "加入下载"}
+                      {downloaded ? t("已加入下载") : t("加入下载")}
                     </Button>
                     {documents && workId && (
                       <Button
@@ -379,7 +382,7 @@ export function ResourceSearchPanel({
                         disabled={!!busy}
                         onClick={() => void use(row, "strm")}
                       >
-                        导出 STRM
+                        {t("导出 STRM")}
                       </Button>
                     )}
                     {!!row.savedIds.length && (
@@ -390,7 +393,7 @@ export function ResourceSearchPanel({
                         disabled={!!busy || searching || state.busy}
                         onClick={() => void use(row, "remove")}
                       >
-                        移除链接
+                        {t("移除链接")}
                       </Button>
                     )}
                   </Group>

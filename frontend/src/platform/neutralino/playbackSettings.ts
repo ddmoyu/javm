@@ -1,4 +1,5 @@
 import { filesystem, os } from "@neutralinojs/lib";
+import { t } from "../../i18n/core";
 import {
   PlaybackSettingsService,
   validatePlaybackSettings,
@@ -26,12 +27,12 @@ export function createPlaybackSettings(runtime: Runtime) {
     runtime === "desktop",
     async () =>
       (
-        await os.showOpenDialog("选择外部播放器", {
+        await os.showOpenDialog(t("选择外部播放器"), {
           filters:
             toolPlatform() === "Windows"
-              ? [{ name: "Windows 播放器", extensions: ["exe"] }]
+              ? [{ name: t("Windows 播放器"), extensions: ["exe"] }]
               : toolPlatform() === "Darwin"
-                ? [{ name: "macOS 应用", extensions: ["app", "*"] }]
+                ? [{ name: t("macOS 应用"), extensions: ["app", "*"] }]
                 : undefined,
           multiSelections: false,
         })

@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
@@ -24,6 +25,7 @@ import { Icon } from "../../components/icons";
 import { usePagedQuery } from "../../services/library/usePagedQuery";
 
 export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void }) {
+  useLocale();
   const { library, libraryState, ai, metatube, notice } = useWorkspace();
   const [initial] = useState(() => editableMetadata(film));
   const [draft, setDraft] = useState(initial);
@@ -101,7 +103,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
       <Modal
         opened
         onClose={requestClose}
-        title="编辑影片资料"
+        title={t("编辑影片资料")}
         size={720}
         centered
         zIndex={400}
@@ -123,7 +125,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
               disabled={saving || assisting}
               onClick={() => setLookupOpened(true)}
             >
-              查找资料
+              {t("查找资料")}
             </Button>
             <Button
               type="button"
@@ -131,22 +133,22 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
               disabled={saving || aiState.busy}
               onClick={() => void assist(false)}
             >
-              AI 翻译标题与简介
+              {t("AI 翻译标题与简介")}
             </Button>
             {assisting && (
               <Button type="button" variant="subtle" onClick={ai.cancel}>
-                取消 AI 请求
+                {t("取消 AI 请求")}
               </Button>
             )}
           </Group>
           {error && (
             <Alert color="red" role="alert" mb="md">
-              {error}
+              {t(error)}
             </Alert>
           )}
           {assisting && (
             <Text size="sm" component="output" mb="sm">
-              {aiState.action}…
+              {t(aiState.action)}…
             </Text>
           )}
           <fieldset
@@ -156,28 +158,28 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="sm">
               <TextInput
                 style={{ gridColumn: "1 / -1" }}
-                label="影片标题"
+                label={t("影片标题")}
                 data-autofocus
                 value={draft.title}
-                error={attempted && invalidTitle}
+                error={attempted && t(invalidTitle)}
                 onChange={(event) => patch({ title: event.currentTarget.value })}
               />
               <TextInput
                 style={{ gridColumn: "1 / -1" }}
-                label="原标题 / 文件名"
+                label={t("原标题 / 文件名")}
                 value={draft.originalTitle}
                 onChange={(event) => patch({ originalTitle: event.currentTarget.value })}
               />
               <TextInput
-                label="番号"
+                label={t("番号")}
                 value={draft.code}
                 error={
                   codeState.error ? (
                     <Button variant="subtle" color="red" size="compact-xs" onClick={lookup.retry}>
-                      番号校验失败，点击重试
+                      {t("番号校验失败，点击重试")}
                     </Button>
                   ) : duplicate ? (
-                    "该番号已存在"
+                    t("该番号已存在")
                   ) : undefined
                 }
                 onChange={(event) => patch({ code: event.currentTarget.value })}
@@ -191,19 +193,19 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
                       disabled={aiState.busy}
                       onClick={() => void assist(true)}
                     >
-                      AI 识别
+                      {t("AI 识别")}
                     </Button>
                   </Group>
                 )}
               />
               <TextInput
-                label="发行日期"
+                label={t("发行日期")}
                 type="date"
                 value={draft.premiered}
                 onChange={(event) => patch({ premiered: event.currentTarget.value })}
               />
               <NumberInput
-                label="时长（分钟）"
+                label={t("时长（分钟）")}
                 size="sm"
                 min={0}
                 max={1440}
@@ -218,14 +220,14 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
                       size="xs"
                       onClick={() => patch({ duration: film.duration })}
                     >
-                      读取时长
+                      {t("读取时长")}
                     </Button>
                   </Group>
                 )}
               />
               <NumberInput
-                label="评分（0–5）"
-                description="0 表示未评分"
+                label={t("评分（0–5）")}
+                description={t("0 表示未评分")}
                 min={0}
                 max={5}
                 clampBehavior="strict"
@@ -235,45 +237,45 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
                 onChange={(value) => patch({ rating: Number(value) || 0 })}
               />
               <TextInput
-                label="导演"
+                label={t("导演")}
                 value={draft.director}
                 onChange={(event) => patch({ director: event.currentTarget.value })}
               />
               <TextInput
-                label="制作商"
+                label={t("制作商")}
                 value={draft.studio}
                 onChange={(event) => patch({ studio: event.currentTarget.value })}
               />
               <TextInput
-                label="发行商"
+                label={t("发行商")}
                 value={draft.label}
                 onChange={(event) => patch({ label: event.currentTarget.value })}
               />
               <TextInput
-                label="系列"
+                label={t("系列")}
                 value={draft.series}
                 onChange={(event) => patch({ series: event.currentTarget.value })}
               />
               <TextInput
-                label="分辨率"
+                label={t("分辨率")}
                 value={getFilmMetadata(film).resolution}
                 readOnly
-                description="由实际视频文件探测"
+                description={t("由实际视频文件探测")}
               />
               <TagsInput
-                label="演员"
+                label={t("演员")}
                 value={draft.actors}
                 onChange={(value) => patch({ actors: value })}
-                placeholder="输入姓名后按回车"
+                placeholder={t("输入姓名后按回车")}
               />
               <TagsInput
-                label="分类 / 标签"
+                label={t("分类 / 标签")}
                 value={draft.genres}
                 onChange={(value) => patch({ genres: value })}
-                placeholder="输入标签后按回车"
+                placeholder={t("输入标签后按回车")}
               />
               <Textarea
-                label="简介"
+                label={t("简介")}
                 autosize
                 minRows={3}
                 maxRows={8}
@@ -286,19 +288,19 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
           {discard && (
             <Alert color="champagne" variant="light" mt="md" role="alert">
               <Group justify="space-between">
-                <span style={{ flex: 1 }}>修改尚未保存</span>
+                <span style={{ flex: 1 }}>{t("修改尚未保存")}</span>
                 <Button type="button" size="xs" variant="default" onClick={() => setDiscard(false)}>
-                  继续编辑
+                  {t("继续编辑")}
                 </Button>
                 <Button type="button" size="xs" color="red" variant="light" onClick={onClose}>
-                  放弃修改
+                  {t("放弃修改")}
                 </Button>
               </Group>
             </Alert>
           )}
           <Group justify="flex-end" mt="lg">
             <Button type="button" variant="default" onClick={requestClose}>
-              取消
+              {t("取消")}
             </Button>
             <Button
               type="submit"
@@ -306,7 +308,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
               loading={saving}
               disabled={!dirty || assisting}
             >
-              保存修改
+              {t("保存修改")}
             </Button>
           </Group>
         </form>
@@ -314,7 +316,7 @@ export function FilmEditor({ film, onClose }: { film: Film; onClose: () => void 
       {lookupOpened && (
         <Modal
           opened
-          title="查找影片资料"
+          title={t("查找影片资料")}
           size={760}
           zIndex={450}
           centered

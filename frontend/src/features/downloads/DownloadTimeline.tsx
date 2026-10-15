@@ -1,3 +1,4 @@
+import { t, useLocale, formatDate } from "../../i18n/index";
 import { Alert, Group, Progress, Stack, Text, Timeline } from "@mantine/core";
 import { Icon } from "../../components/icons";
 import type { IconName } from "../../components/icons";
@@ -112,7 +113,10 @@ function scrapeStage(
         label: scrape.status === "running" ? "状态待确认" : "队列异常",
         description:
           scrape.status === "running"
-            ? `最后记录阶段：${scrapePhaseLabels[scrape.phase]}。服务异常，暂时无法确认执行状态。`
+            ? t(
+                "最后记录阶段：{0}。服务异常，暂时无法确认执行状态。",
+                t(scrapePhaseLabels[scrape.phase]),
+              )
             : "刮削队列已停止调度，请先处理服务异常。",
         error: queue.error,
       };
@@ -138,7 +142,10 @@ function scrapeStage(
             ? "处理已结束，部分资料未能完整保存。"
             : scrape.status === "queued"
               ? "等待检查入库、获取资料并保存。"
-              : `${scrape.status === "running" ? "当前阶段" : "停留阶段"}：${scrapePhaseLabels[scrape.phase]}`,
+              : t(
+                  scrape.status === "running" ? "当前阶段：{0}" : "停留阶段：{0}",
+                  t(scrapePhaseLabels[scrape.phase]),
+                ),
       error: scrape.error,
     };
   }
@@ -179,7 +186,7 @@ function scrapeStage(
     : base;
 }
 
-const dateFormat = new Intl.DateTimeFormat("zh-CN", {
+const dateOptions: Intl.DateTimeFormatOptions = {
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -187,7 +194,7 @@ const dateFormat = new Intl.DateTimeFormat("zh-CN", {
   minute: "2-digit",
   second: "2-digit",
   hour12: false,
-});
+};
 
 export function DownloadTimeline({
   task,
@@ -198,6 +205,7 @@ export function DownloadTimeline({
   scrape?: ScrapeTask;
   queue: ScrapeQueue;
 }) {
+  useLocale();
   const createdAt = new Date(task.createdAt);
   const stages: Stage[] = [
     {
@@ -208,7 +216,7 @@ export function DownloadTimeline({
       label: "已创建",
       description: Number.isNaN(createdAt.getTime())
         ? "任务已创建。"
-        : dateFormat.format(createdAt),
+        : formatDate(createdAt, dateOptions),
     },
     downloadStage(task, "download"),
     downloadStage(task, "merge"),
@@ -220,7 +228,7 @@ export function DownloadTimeline({
   return (
     <Stack gap="sm">
       <Text size="sm" fw={600}>
-        任务进度
+        {t("任务进度")}
       </Text>
       <Timeline
         component="ol"
@@ -229,7 +237,7 @@ export function DownloadTimeline({
         lineWidth={2}
         m={0}
         style={{ listStyle: "none" }}
-        aria-label="任务阶段进度"
+        aria-label={t("任务阶段进度")}
       >
         {stages.map((stage) => {
           const look = appearance[stage.state];
@@ -248,15 +256,15 @@ export function DownloadTimeline({
               title={
                 <Group justify="space-between" gap="xs">
                   <Text size="sm" fw={600}>
-                    {stage.title}
+                    {t(stage.title)}
                   </Text>
-                  <Pill tone={look.tone}>{stage.label}</Pill>
+                  <Pill tone={look.tone}>{t(stage.label)}</Pill>
                 </Group>
               }
               pb={stage.id === "scrape" ? 0 : "xs"}
             >
               <Text size="xs" c="dimmed" mt={4}>
-                {stage.description}
+                {t(stage.description)}
               </Text>
               {progress !== undefined && (
                 <Group gap="xs" mt="xs" wrap="nowrap">
@@ -265,7 +273,7 @@ export function DownloadTimeline({
                     color={look.color}
                     size={5}
                     style={{ flex: 1 }}
-                    aria-label={`${stage.title}进度`}
+                    aria-label={t("{0}进度", t(stage.title))}
                   />
                   <Text size="xs" c="dimmed" style={{ fontVariantNumeric: "tabular-nums" }}>
                     {progress.toFixed(1)}%
@@ -275,7 +283,7 @@ export function DownloadTimeline({
               {stage.error && (
                 <Alert color={stage.state === "failed" ? "red" : "yellow"} mt="xs" p="xs">
                   <Text size="xs" style={{ overflowWrap: "anywhere" }}>
-                    {publicMessage(stage.error)}
+                    {t(publicMessage(stage.error))}
                   </Text>
                 </Alert>
               )}

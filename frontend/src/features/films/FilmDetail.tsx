@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import {
@@ -46,6 +47,7 @@ interface Props {
   onClose: () => void;
 }
 export function FilmDetail({ film, ...props }: Props) {
+  useLocale();
   return film ? <FilmDetailContent film={film} {...props} /> : null;
 }
 function FilmDetailContent({
@@ -56,6 +58,7 @@ function FilmDetailContent({
   previewStatus,
   onClose,
 }: Omit<Props, "film"> & { film: Film }) {
+  useLocale();
   const {
     play,
     playSource,
@@ -88,7 +91,7 @@ function FilmDetailContent({
   };
   const attach = () =>
     operate(async () => {
-      const files = await os.showOpenDialog("关联本地视频", { multiSelections: false });
+      const files = await os.showOpenDialog(t("关联本地视频"), { multiSelections: false });
       if (files[0]) {
         await library.attachVideo(film.id, files[0]);
         notice("视频已关联到当前作品。");
@@ -217,7 +220,7 @@ function FilmDetailContent({
         onClose={onClose}
         position="right"
         size="min(900px, 100vw)"
-        title="影片详情"
+        title={t("影片详情")}
         closeOnEscape={!overlay}
         closeOnClickOutside={!overlay}
         trapFocus={!overlay}
@@ -229,7 +232,7 @@ function FilmDetailContent({
           <div className="detail-cover">
             <UnstyledButton
               className="detail-poster"
-              aria-label="查看影片封面"
+              aria-label={t("查看影片封面")}
               disabled={!film.coverUrl}
               onClick={() => open(gallery, 0, metadata.homepage)}
             >
@@ -243,7 +246,7 @@ function FilmDetailContent({
                 mt="xs"
                 onClick={() => open(gallery, 0, metadata.homepage)}
               >
-                查看封面（{covers.length}）
+                {t("查看封面（{0}）", covers.length)}
               </Button>
             )}
           </div>
@@ -258,32 +261,34 @@ function FilmDetailContent({
                 disabled={!film.code}
                 onClick={() => void copy(film.code)}
               >
-                {film.code || "番号未填写"}
+                {film.code || t("番号未填写")}
               </Button>
               {film.quality && <Pill>{film.quality}</Pill>}
-              {film.missing && <Pill tone="warning">资料待补全</Pill>}
-              {preview && <Pill>资料预览</Pill>}
+              {film.missing && <Pill tone="warning">{t("资料待补全")}</Pill>}
+              {preview && <Pill>{t("资料预览")}</Pill>}
             </Group>
             <Title order={2} fz={28} lh={1.3} style={{ overflowWrap: "anywhere" }}>
               {film.title}
             </Title>
             <Group gap="lg" c="dimmed">
-              <Text size="sm">{metadata.premiered || "发行日期未知"}</Text>
-              <Text size="sm">{film.duration ? `${film.duration} 分钟` : "时长未知"}</Text>
+              <Text size="sm">{metadata.premiered || t("发行日期未知")}</Text>
+              <Text size="sm">
+                {film.duration ? t("{0} 分钟", t(film.duration)) : t("时长未知")}
+              </Text>
               {!preview && film.availability !== "metadata_only" && (
-                <Text size="sm">{film.size || "大小未知"}</Text>
+                <Text size="sm">{film.size || t("大小未知")}</Text>
               )}
             </Group>
             <UnstyledButton
               component={preview ? "div" : "button"}
               className="rating-button"
-              aria-label={preview ? "影片评分" : "修改影片评分"}
+              aria-label={preview ? t("影片评分") : t("修改影片评分")}
               onClick={preview ? undefined : () => setEditing(true)}
               style={preview ? { cursor: "default" } : undefined}
             >
               <Icon name="star" size={19} filled={film.rating !== undefined} />
               <Text span fz={20} fw={700}>
-                {film.rating === undefined ? "暂无评分" : film.rating.toFixed(1)}
+                {film.rating === undefined ? t("暂无评分") : t(film.rating.toFixed(1))}
               </Text>
               {film.rating !== undefined && (
                 <Text span size="sm" c="dimmed">
@@ -294,7 +299,7 @@ function FilmDetailContent({
             {preview && onCollect && (
               <Group gap="sm" wrap="wrap">
                 <Button loading={busy} onClick={() => void operate(onCollect)}>
-                  收藏并保存资料
+                  {t("收藏并保存资料")}
                 </Button>
               </Group>
             )}
@@ -306,14 +311,14 @@ function FilmDetailContent({
                   leftSection={<Icon name="play" size={16} />}
                   onClick={() => play(film)}
                 >
-                  播放影片
+                  {t("播放影片")}
                 </Button>
                 <Button
                   variant="default"
                   leftSection={<Icon name="heart" size={16} />}
                   onClick={() => toggleFavorite(film)}
                 >
-                  {film.favorite ? "已收藏" : "收藏"}
+                  {film.favorite ? t("已收藏") : t("收藏")}
                 </Button>
                 <Button
                   variant="light"
@@ -323,13 +328,13 @@ function FilmDetailContent({
                     scrape(film);
                   }}
                 >
-                  刮削资料
+                  {t("刮削资料")}
                 </Button>
                 {/* 已有可播放的本地视频时不再突出下载与关联，关联入口收进更多菜单。 */}
                 {!playable && (
                   <>
                     <Button variant="default" onClick={() => add("download", film)}>
-                      下载视频
+                      {t("下载视频")}
                     </Button>
                     <Button
                       variant="default"
@@ -337,26 +342,26 @@ function FilmDetailContent({
                       disabled={runtime !== "desktop"}
                       onClick={() => void attach()}
                     >
-                      关联视频
+                      {t("关联视频")}
                     </Button>
                   </>
                 )}
                 <Menu position="bottom-end">
                   <Menu.Target>
-                    <Button aria-label="更多影片操作" variant="default" px={10}>
+                    <Button aria-label={t("更多影片操作")} variant="default" px={10}>
                       <Icon name="more" />
                     </Button>
                   </Menu.Target>
                   <Menu.Dropdown>
-                    <Menu.Item onClick={() => setEditing(true)}>编辑资料</Menu.Item>
-                    <Menu.Item onClick={() => action("fetch")}>获取封面与截图</Menu.Item>
-                    <Menu.Item onClick={() => setTab("files")}>查看本地文件</Menu.Item>
+                    <Menu.Item onClick={() => setEditing(true)}>{t("编辑资料")}</Menu.Item>
+                    <Menu.Item onClick={() => action("fetch")}>{t("获取封面与截图")}</Menu.Item>
+                    <Menu.Item onClick={() => setTab("files")}>{t("查看本地文件")}</Menu.Item>
                     {playable && (
                       <Menu.Item
                         disabled={busy || runtime !== "desktop"}
                         onClick={() => void attach()}
                       >
-                        关联其他视频
+                        {t("关联其他视频")}
                       </Menu.Item>
                     )}
                     <Menu.Divider />
@@ -365,7 +370,7 @@ function FilmDetailContent({
                       disabled={busy || !library.maintenance}
                       onClick={() => setDeletingVideo(film)}
                     >
-                      删除
+                      {t("删除")}
                     </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
@@ -375,16 +380,16 @@ function FilmDetailContent({
         </Group>
         <Tabs value={tab} onChange={setTab} mt="xl">
           <Tabs.List mb="lg">
-            <Tabs.Tab value="info">资料与预览</Tabs.Tab>
-            <Tabs.Tab value="links">资源链接</Tabs.Tab>
-            {!preview && <Tabs.Tab value="files">本地文件</Tabs.Tab>}
+            <Tabs.Tab value="info">{t("资料与预览")}</Tabs.Tab>
+            <Tabs.Tab value="links">{t("资源链接")}</Tabs.Tab>
+            {!preview && <Tabs.Tab value="files">{t("本地文件")}</Tabs.Tab>}
           </Tabs.List>
           <Tabs.Panel value="info">
             <SimpleGrid cols={{ base: 1, sm: 2 }} spacing={36}>
               <DataList orientation="horizontal" labelWidth={72} size="sm" gap={14}>
                 {rows.map(([label, value]) => (
                   <DataList.Item key={label}>
-                    <DataList.ItemLabel c="dimmed">{label}</DataList.ItemLabel>
+                    <DataList.ItemLabel c="dimmed">{t(label)}</DataList.ItemLabel>
                     <DataList.ItemValue style={{ overflowWrap: "anywhere" }}>
                       {value}
                     </DataList.ItemValue>
@@ -393,14 +398,14 @@ function FilmDetailContent({
               </DataList>
               <FilmScreenshots
                 film={film}
-                label="预览"
+                label={t("预览")}
                 onAction={preview ? undefined : action}
                 onPlayTrailer={playTrailer}
               />
             </SimpleGrid>
             {metadata.plot && (
               <Stack gap="xs" mt="xl">
-                <Text fw={600}>简介</Text>
+                <Text fw={600}>{t("简介")}</Text>
                 <Text size="sm" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
                   {metadata.plot}
                 </Text>
@@ -422,14 +427,18 @@ function FilmDetailContent({
                       <div>
                         <Text size="sm">
                           {file.part
-                            ? `第 ${file.part}${file.parts ? `／${file.parts}` : ""} 卷 · `
+                            ? t(
+                                "第 {0}{1} 卷 · ",
+                                t(file.part),
+                                file.parts ? t(`／${file.parts}`) : "",
+                              )
                             : ""}
                           {file.name}
                         </Text>
                         <Text size="xs" c="dimmed">
                           {file.missing
-                            ? "文件不可用"
-                            : file.size || (file.kind === "metadata" ? "NFO 资料" : "")}
+                            ? t("文件不可用")
+                            : file.size || t(file.kind === "metadata" ? "NFO 资料" : "")}
                         </Text>
                       </div>
                       <Group gap="xs">
@@ -444,11 +453,11 @@ function FilmDetailContent({
                               })
                             }
                           >
-                            播放
+                            {t("播放")}
                           </Button>
                         )}
                         <Button variant="subtle" size="xs" onClick={() => void copy(file.path)}>
-                          复制路径
+                          {t("复制路径")}
                         </Button>
                         {file.kind === "video" && file.id && library.maintenance && (
                           <Button
@@ -458,7 +467,7 @@ function FilmDetailContent({
                             disabled={busy}
                             onClick={() => setDeletingVideo({ ...film, files: [file] })}
                           >
-                            删除
+                            {t("删除")}
                           </Button>
                         )}
                         {file.kind === "video" &&
@@ -471,7 +480,7 @@ function FilmDetailContent({
                               disabled={busy}
                               onClick={() => setOrganizing({ id: file.id!, path: file.path })}
                             >
-                              改名／移动
+                              {t("改名／移动")}
                             </Button>
                           )}
                       </Group>
@@ -481,8 +490,8 @@ function FilmDetailContent({
               ) : (
                 <Empty
                   icon="folder"
-                  title="暂无关联文件"
-                  description="关联本地影片后，在这里查看文件信息。"
+                  title={t("暂无关联文件")}
+                  description={t("关联本地影片后，在这里查看文件信息。")}
                 />
               )}
             </Tabs.Panel>
@@ -503,11 +512,11 @@ function FilmDetailContent({
       <Modal
         opened={!!removingImages}
         onClose={() => !busy && setRemovingImages(null)}
-        title={removingImages?.ids ? "删除截图" : "清空截图"}
+        title={removingImages?.ids ? t("删除截图") : t("清空截图")}
         centered
       >
         <Stack>
-          <Text size="sm">删除这部作品的所选截图文件与记录，当前封面会保留。</Text>
+          <Text size="sm">{t("删除这部作品的所选截图文件与记录，当前封面会保留。")}</Text>
           <Button
             color="red"
             loading={busy}
@@ -518,7 +527,7 @@ function FilmDetailContent({
               })
             }
           >
-            确认删除
+            {t("确认删除")}
           </Button>
         </Stack>
       </Modal>

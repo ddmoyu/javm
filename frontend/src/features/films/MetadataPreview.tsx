@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState } from "react";
 import { Button, Checkbox, Group, Modal, Stack, Text } from "@mantine/core";
 import type { EditableMetadata } from "../../contracts/metadata";
@@ -16,6 +17,7 @@ export function MetadataPreview({
   onApply: (patch: Partial<EditableMetadata>) => void;
   onClose: () => void;
 }) {
+  useLocale();
   const keys = (Object.keys(metadataLabels) as (keyof EditableMetadata)[]).filter((key) => {
     const value = candidate[key];
     return (
@@ -39,7 +41,7 @@ export function MetadataPreview({
   return (
     <Modal
       opened
-      title={title}
+      title={t(title)}
       onClose={onClose}
       size={760}
       zIndex={450}
@@ -49,16 +51,16 @@ export function MetadataPreview({
     >
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          勾选需要采用的字段，未勾选的资料保持原值。结果进入编辑草稿后，还需保存。
+          {t("勾选需要采用的字段，未勾选的资料保持原值。结果进入编辑草稿后，还需保存。")}
         </Text>
-        {!keys.length && <Text size="sm">没有可采用的新资料。</Text>}
+        {!keys.length && <Text size="sm">{t("没有可采用的新资料。")}</Text>}
         {keys.map((key) => (
           <div
             key={key}
             style={{ borderBottom: "1px solid var(--velvet-line)", paddingBottom: 12 }}
           >
             <Checkbox
-              label={metadataLabels[key]}
+              label={t(metadataLabels[key])}
               checked={selected.has(key)}
               onChange={(event) => {
                 const checked = event.currentTarget.checked;
@@ -71,10 +73,12 @@ export function MetadataPreview({
               }}
             />
             <Text size="xs" c="dimmed" mt={8}>
-              当前：{show(current[key]) || "未填写"}
+              {t("当前：")}
+              {show(current[key]) || t("未填写")}
             </Text>
             <Text size="sm" mt={4} style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
-              候选：{show(candidate[key])}
+              {t("候选：")}
+              {show(candidate[key])}
             </Text>
           </div>
         ))}
@@ -84,11 +88,11 @@ export function MetadataPreview({
             onClick={() => setSelected(new Set(keys))}
             disabled={!keys.length}
           >
-            选择全部差异
+            {t("选择全部差异")}
           </Button>
           <Group>
             <Button variant="default" onClick={onClose}>
-              取消
+              {t("取消")}
             </Button>
             <Button
               disabled={!selected.size}
@@ -96,7 +100,7 @@ export function MetadataPreview({
                 onApply(Object.fromEntries([...selected].map((key) => [key, candidate[key]])))
               }
             >
-              采用所选字段
+              {t("采用所选字段")}
             </Button>
           </Group>
         </Group>

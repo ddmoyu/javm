@@ -1,3 +1,4 @@
+import { subscribeLocale, t } from "../../i18n/index";
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Alert, Button, Center, Group, Stack, Text } from "@mantine/core";
@@ -13,6 +14,13 @@ export class FeedbackBoundary extends Component<
   state = { failed: false };
   private failure?: FailureInput;
   private reportId?: string;
+  private unsubscribeLocale?: () => void;
+  componentDidMount() {
+    this.unsubscribeLocale = subscribeLocale(() => this.forceUpdate());
+  }
+  componentWillUnmount() {
+    this.unsubscribeLocale?.();
+  }
   static getDerivedStateFromError() {
     return { failed: true };
   }
@@ -43,12 +51,14 @@ export class FeedbackBoundary extends Component<
     return (
       <Center h="100vh" p="xl">
         <Stack maw={560}>
-          <Alert title="界面发生异常" color="red" role="alert">
-            界面无法继续显示，诊断信息已记录。
+          <Alert title={t("界面发生异常")} color="red" role="alert">
+            {t("界面无法继续显示，诊断信息已记录。")}
           </Alert>
-          <Text size="sm">可以复制反馈信息，或重新加载界面。重新加载会中断当前界面操作。</Text>
+          <Text size="sm">
+            {t("可以复制反馈信息，或重新加载界面。重新加载会中断当前界面操作。")}
+          </Text>
           <Group>
-            {this.props.service && <Button onClick={this.openFeedback}>反馈问题</Button>}
+            {this.props.service && <Button onClick={this.openFeedback}>{t("反馈问题")}</Button>}
             <Button
               variant="default"
               onClick={() =>
@@ -58,7 +68,7 @@ export class FeedbackBoundary extends Component<
                 })()
               }
             >
-              重新加载
+              {t("重新加载")}
             </Button>
           </Group>
         </Stack>

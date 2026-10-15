@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { os } from "@neutralinojs/lib";
@@ -9,6 +10,7 @@ export function LibraryDocumentsPanel({
   service: LibraryDocumentsService;
   workId: string;
 }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const [opened, setOpened] = useState(false),
     [choosing, setChoosing] = useState(false),
@@ -17,7 +19,7 @@ export function LibraryDocumentsPanel({
     setChoosing(true);
     setError("");
     try {
-      const root = await os.showFolderDialog("导出 NFO 的位置");
+      const root = await os.showFolderDialog(t("导出 NFO 的位置"));
       if (root) {
         setOpened(true);
         await service.exportNfo(root, workId);
@@ -38,36 +40,36 @@ export function LibraryDocumentsPanel({
           disabled={state.running || choosing}
           onClick={() => void start()}
         >
-          导出 NFO
+          {t("导出 NFO")}
         </Button>
         {(state.running || state.processed > 0) && (
           <Button size="xs" variant="subtle" onClick={() => setOpened(true)}>
-            资料任务 {state.processed}
+            {t("资料任务 {0}", state.processed)}
           </Button>
         )}
       </Group>
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
-        title={state.mode || "资料文件"}
+        title={state.mode || t("资料文件")}
         centered
       >
         <Stack>
           <Text size="sm" role="status">
-            {state.running ? "正在处理" : state.cancelled ? "已停止" : "已结束"} · 成功{" "}
-            {state.succeeded} · 失败 {state.failed}
+            {state.running ? t("正在处理") : state.cancelled ? t("已停止") : t("已结束")}
+            {t(" · 成功 {0} · 失败 {1}", state.succeeded, state.failed)}
           </Text>
           {state.directory && (
             <Text size="xs" style={{ overflowWrap: "anywhere" }}>
-              保存位置：{state.directory}
+              {t("保存位置：{0}", state.directory)}
             </Text>
           )}
           <Text size="xs" c="dimmed">
-            导出保存在独立的新目录，停止后保留已导出的文件。
+            {t("导出保存在独立的新目录，停止后保留已导出的文件。")}
           </Text>
           {(error || state.error) && (
             <Alert color="red" role="alert">
-              {error || state.error}
+              {t(error || state.error)}
             </Alert>
           )}
           {!!state.failures.length && (
@@ -81,7 +83,7 @@ export function LibraryDocumentsPanel({
           )}
           {state.running && (
             <Button variant="default" onClick={service.cancel} disabled={state.cancelled}>
-              停止任务
+              {t("停止任务")}
             </Button>
           )}
         </Stack>

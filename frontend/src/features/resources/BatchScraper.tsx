@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -29,6 +30,7 @@ const empty = {
 const ignore = () => () => {};
 
 export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void }) {
+  useLocale();
   const { scraping, libraryState, page, notice } = useWorkspace();
   const state = useSyncExternalStore(
     page === "scraper" && scraping ? scraping.subscribe : ignore,
@@ -65,7 +67,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
     <div className="fill-column">
       <Group justify="space-between" mb="md">
         <Text size="sm" c="dimmed" component="output" aria-live="polite">
-          {count} 个刮削任务 · {state.tasks.filter(activeScrape).length} 个待完成
+          {t("{0} 个刮削任务 · {1} 个待完成", count, state.tasks.filter(activeScrape).length)}
         </Text>
         <Group gap="xs">
           <Button
@@ -80,7 +82,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
             }}
             leftSection={<Icon name={state.paused ? "play" : "pause"} size={15} />}
           >
-            {state.paused ? "继续队列" : "暂停队列"}
+            {state.paused ? t("继续队列") : t("暂停队列")}
           </Button>
           <Button
             size="xs"
@@ -88,23 +90,23 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
             leftSection={<Icon name="plus" size={15} />}
             onClick={() => setOpened(true)}
           >
-            新建刮削
+            {t("新建刮削")}
           </Button>
         </Group>
       </Group>
       {state.error && (
         <Alert color="red" role="alert" mb="sm">
-          {publicMessage(state.error)}
+          {t(publicMessage(state.error))}
         </Alert>
       )}
       <div className="table-panel">
         <Table stickyHeader verticalSpacing="sm" horizontalSpacing="md" layout="fixed" miw={660}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th w="31%">影片</Table.Th>
-              <Table.Th w="15%">番号</Table.Th>
-              <Table.Th w="30%">状态</Table.Th>
-              <Table.Th w="24%">操作</Table.Th>
+              <Table.Th w="31%">{t("影片")}</Table.Th>
+              <Table.Th w="15%">{t("番号")}</Table.Th>
+              <Table.Th w="30%">{t("状态")}</Table.Th>
+              <Table.Th w="24%">{t("操作")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -114,8 +116,8 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                   <Text size="sm" fw={600} truncate>
                     {task.name}
                   </Text>
-                  <Text size="xs" c="dimmed" truncate title={task.path}>
-                    {task.path || "仅保存作品资料"}
+                  <Text size="xs" c="dimmed" truncate title={t(task.path)}>
+                    {task.path || t("仅保存作品资料")}
                   </Text>
                 </Table.Td>
                 <Table.Td>
@@ -133,12 +135,12 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                           : "neutral"
                     }
                   >
-                    {scrapeLabels[task.status]}
+                    {t(scrapeLabels[task.status])}
                   </Pill>
                   <Text size="xs" c="dimmed" mt={4} style={{ overflowWrap: "anywhere" }}>
                     {task.status === "running"
-                      ? scrapePhaseLabels[task.phase]
-                      : publicMessage(task.error)}
+                      ? t(scrapePhaseLabels[task.phase])
+                      : t(publicMessage(task.error))}
                   </Text>
                 </Table.Td>
                 <Table.Td>
@@ -150,7 +152,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                         disabled={busy || (task.phase === "save" && task.status === "running")}
                         onClick={() => void perform(() => scraping!.cancel(task.id))}
                       >
-                        取消
+                        {t("取消")}
                       </Button>
                     ) : (
                       <>
@@ -166,7 +168,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                               } else void perform(() => scraping!.retry(task.id));
                             }}
                           >
-                            {task.status === "needsInput" ? "确认番号" : "重试刮削"}
+                            {task.status === "needsInput" ? t("确认番号") : t("重试刮削")}
                           </Button>
                         )}
                         <Button
@@ -175,7 +177,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                           disabled={busy}
                           onClick={() => onMatch?.(task)}
                         >
-                          手动匹配
+                          {t("手动匹配")}
                         </Button>
                         <Button
                           size="compact-xs"
@@ -184,7 +186,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                           disabled={busy}
                           onClick={() => void perform(() => scraping!.remove(task.id))}
                         >
-                          移除记录
+                          {t("移除记录")}
                         </Button>
                       </>
                     )}
@@ -197,11 +199,11 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
         {!count && (
           <Empty
             icon="scan"
-            title={state.ready ? "暂无刮削任务" : "正在读取刮削任务"}
+            title={state.ready ? t("暂无刮削任务") : t("正在读取刮削任务")}
             description={
               state.available
-                ? "下载完成后自动入库并刮削，也可补全片库中的影片资料。"
-                : "请在 Windows 桌面应用中使用刮削。"
+                ? t("下载完成后自动入库并刮削，也可补全片库中的影片资料。")
+                : t("请在 Windows 桌面应用中使用刮削。")
             }
           />
         )}
@@ -210,7 +212,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
         <Pagination
           size="sm"
           mt="sm"
-          aria-label="刮削任务分页"
+          aria-label={t("刮削任务分页")}
           value={current}
           total={Math.ceil(count / 50)}
           onChange={setPageNumber}
@@ -221,7 +223,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
         onClose={() => {
           if (!busy) setOpened(false);
         }}
-        title="新建批量刮削"
+        title={t("新建批量刮削")}
         centered
         closeOnClickOutside={!busy}
         closeOnEscape={!busy}
@@ -229,26 +231,26 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
         <Stack>
           {error && (
             <Alert color="red" role="alert">
-              {error}
+              {t(error)}
             </Alert>
           )}
           <Select
-            label="刮削范围"
-            data={[
+            label={t("刮削范围")}
+            data={localizeOptions([
               { value: "missing", label: "缺失资料的影片" },
               { value: "all", label: "全部影片" },
-            ]}
+            ])}
             value={scope}
             onChange={(value) => setScope(value || "missing")}
             disabled={busy}
             allowDeselect={false}
           />
           <Select
-            label="媒体目录"
-            data={[
+            label={t("媒体目录")}
+            data={localizeOptions([
               { value: "", label: "全部目录" },
               ...libraryState.directories.map((item) => ({ value: item.path, label: item.path })),
-            ]}
+            ])}
             value={directory}
             onChange={(value) => setDirectory(value || "")}
             disabled={busy}
@@ -256,7 +258,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
             allowDeselect={false}
           />
           <Text size="sm" c="dimmed">
-            补全缺失字段、封面并写入 NFO，保留已有资料和人工修改。
+            {t("补全缺失字段、封面并写入 NFO，保留已有资料和人工修改。")}
           </Text>
           <Group justify="flex-end">
             <Button
@@ -266,7 +268,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                 if (!busy) setOpened(false);
               }}
             >
-              {busy ? "停止添加" : "取消"}
+              {busy ? t("停止添加") : t("取消")}
             </Button>
             <Button
               loading={busy}
@@ -289,7 +291,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
                 })
               }
             >
-              开始刮削
+              {t("开始刮削")}
             </Button>
           </Group>
         </Stack>
@@ -297,18 +299,18 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
       <Modal
         opened={!!editing}
         onClose={() => !busy && setEditing(null)}
-        title="确认影片番号"
+        title={t("确认影片番号")}
         centered
       >
         <Stack>
           {error && (
             <Alert color="red" role="alert">
-              {error}
+              {t(error)}
             </Alert>
           )}
           <Text size="sm">{editing?.name}</Text>
           <TextInput
-            label="番号"
+            label={t("番号")}
             value={query}
             maxLength={80}
             onChange={(event) => setQuery(event.currentTarget.value)}
@@ -325,7 +327,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
               })
             }
           >
-            按此番号刮削
+            {t("按此番号刮削")}
           </Button>
         </Stack>
       </Modal>

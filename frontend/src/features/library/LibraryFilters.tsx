@@ -1,3 +1,4 @@
+import { getLocale, t, localizeOptions, useLocale } from "../../i18n/index";
 import { useState } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import {
@@ -33,11 +34,15 @@ export function libraryFilterLabels(
       .map((option) => ({
         key: "availability" as const,
         value: option.value,
-        label: `本地视频：${option.label}`,
+        label: t("本地视频：{0}", t(option.label)),
       })),
     ...filters.actors.map((value) => ({ key: "actors" as const, value, label: value })),
-    ...filters.genres.map((value) => ({ key: "genres" as const, value, label: `分类：${value}` })),
-    ...filters.years.map((value) => ({ key: "years" as const, value, label: `${value} 年` })),
+    ...filters.genres.map((value) => ({
+      key: "genres" as const,
+      value,
+      label: t("分类：{0}", value),
+    })),
+    ...filters.years.map((value) => ({ key: "years" as const, value, label: t("{0} 年", value) })),
     ...filters.qualities.map((value) => ({ key: "qualities" as const, value, label: value })),
     ...(["duration", "size", "metadata"] as const).flatMap((key) => {
       const options =
@@ -48,7 +53,7 @@ export function libraryFilterLabels(
             {
               key,
               value: filters[key],
-              label: options.find((option) => option.value === filters[key])!.label,
+              label: t(options.find((option) => option.value === filters[key])!.label),
             },
           ];
     }),
@@ -68,6 +73,7 @@ export function LibraryFilterButton({
   onAvailabilityChange: (availability: NonNullable<LibraryQuery["availability"]>) => void;
   resultCount: number;
 }) {
+  useLocale();
   const [opened, setOpened] = useState(false);
   const count = libraryFilterLabels(filters, availability).length;
   const comboboxProps = { withinPortal: false };
@@ -91,10 +97,11 @@ export function LibraryFilterButton({
           color={count || opened ? "rouge" : "gray"}
           leftSection={<Icon name="filter" size={16} />}
           aria-expanded={opened}
-          aria-label="筛选影片"
+          aria-label={t("筛选影片")}
           onClick={() => setOpened(!opened)}
         >
-          筛选{count ? ` ${count}` : ""}
+          {t("筛选")}
+          {count ? ` ${count}` : ""}
         </Button>
       </Popover.Target>
       <Popover.Dropdown
@@ -112,7 +119,7 @@ export function LibraryFilterButton({
       >
         <Group justify="space-between" mb="md">
           <Text fw={600} tabIndex={-1} data-autofocus>
-            筛选影片
+            {t("筛选影片")}
           </Text>
           <Anchor
             component="button"
@@ -125,61 +132,61 @@ export function LibraryFilterButton({
               onAvailabilityChange("all");
             }}
           >
-            重置条件
+            {t("重置条件")}
           </Anchor>
         </Group>
         <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md" verticalSpacing="sm">
           <FacetSelect
             dimension="actors"
             active={opened}
-            label="演员"
-            placeholder="全部演员"
+            label={t("演员")}
+            placeholder={t("全部演员")}
             value={filters.actors}
             onChange={(actors) => onChange({ ...filters, actors })}
           />
           <FacetSelect
             dimension="genres"
             active={opened}
-            label="分类"
-            placeholder="全部分类"
+            label={t("分类")}
+            placeholder={t("全部分类")}
             value={filters.genres}
             onChange={(genres) => onChange({ ...filters, genres })}
           />
           <FacetSelect
             dimension="years"
             active={opened}
-            label="发行年份"
-            placeholder="全部年份"
+            label={t("发行年份")}
+            placeholder={t("全部年份")}
             value={filters.years}
             onChange={(years) => onChange({ ...filters, years })}
           />
           <FacetSelect
             dimension="qualities"
             active={opened}
-            label="画质"
-            placeholder="全部画质"
+            label={t("画质")}
+            placeholder={t("全部画质")}
             value={filters.qualities}
             onChange={(qualities) => onChange({ ...filters, qualities })}
           />
           <Select
-            label="影片时长"
-            data={durationOptions}
+            label={t("影片时长")}
+            data={localizeOptions(durationOptions)}
             value={filters.duration}
             comboboxProps={comboboxProps}
             allowDeselect={false}
             onChange={(duration) => onChange({ ...filters, duration: duration ?? "all" })}
           />
           <Select
-            label="文件大小"
-            data={sizeOptions}
+            label={t("文件大小")}
+            data={localizeOptions(sizeOptions)}
             value={filters.size}
             comboboxProps={comboboxProps}
             allowDeselect={false}
             onChange={(size) => onChange({ ...filters, size: size ?? "all" })}
           />
           <Select
-            label="本地视频状态"
-            data={availabilityOptions}
+            label={t("本地视频状态")}
+            data={localizeOptions(availabilityOptions)}
             value={availability}
             comboboxProps={comboboxProps}
             allowDeselect={false}
@@ -188,8 +195,8 @@ export function LibraryFilterButton({
             }
           />
           <Select
-            label="资料状态"
-            data={metadataOptions}
+            label={t("资料状态")}
+            data={localizeOptions(metadataOptions)}
             value={filters.metadata}
             comboboxProps={comboboxProps}
             allowDeselect={false}
@@ -200,10 +207,11 @@ export function LibraryFilterButton({
         </SimpleGrid>
         <Group justify="space-between" mt="lg">
           <Text size="sm" c="dimmed" aria-live="polite">
-            {resultCount.toLocaleString()} 部影片
+            {resultCount.toLocaleString(getLocale())}
+            {t(" 部影片")}
           </Text>
           <Button size="xs" onClick={() => setOpened(false)}>
-            完成
+            {t("完成")}
           </Button>
         </Group>
       </Popover.Dropdown>
@@ -226,6 +234,7 @@ function FacetSelect({
   value: string[];
   onChange: (value: string[]) => void;
 }) {
+  useLocale();
   const { library, libraryState } = useWorkspace();
   const [search, setSearch] = useState("");
   const [query] = useDebouncedValue(search.trim(), 180);
@@ -234,8 +243,8 @@ function FacetSelect({
   const data = [...new Set([...value, ...Array.from(state.items.values(), (item) => item.name)])];
   return (
     <MultiSelect
-      label={label}
-      placeholder={placeholder}
+      label={t(label)}
+      placeholder={t(placeholder)}
       value={value}
       onChange={onChange}
       data={data}
@@ -245,12 +254,12 @@ function FacetSelect({
       onSearchChange={setSearch}
       comboboxProps={{ withinPortal: false }}
       limit={50}
-      description={state.total > 50 ? "输入关键词查找更多" : undefined}
-      nothingFoundMessage={state.loading ? "正在查找…" : "没有匹配的条目"}
+      description={state.total > 50 ? t("输入关键词查找更多") : undefined}
+      nothingFoundMessage={state.loading ? t("正在查找…") : t("没有匹配的条目")}
       error={
         state.error ? (
           <Button size="compact-xs" variant="subtle" color="red" onClick={view.retry}>
-            读取失败，点击重试
+            {t("读取失败，点击重试")}
           </Button>
         ) : undefined
       }

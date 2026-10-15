@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { SegmentedControl } from "@mantine/core";
 import type { FilmLayout } from "../../contracts/library";
 import { Icon } from "../../components/icons";
@@ -17,9 +18,10 @@ export function LibraryLayoutControl({
   value: FilmLayout;
   onChange: (value: FilmLayout) => void;
 }) {
+  useLocale();
   return (
     <SegmentedControl<FilmLayout>
-      aria-label="媒体库显示方式"
+      aria-label={t("媒体库显示方式")}
       value={value}
       onChange={onChange}
       size="xs"
@@ -28,15 +30,17 @@ export function LibraryLayoutControl({
       withItemsBorders={false}
       transitionDuration={140}
       classNames={classes}
-      data={layouts.map((layout) => ({
-        value: layout.value,
-        label: (
-          <span className={classes.option}>
-            <Icon name={layout.icon} size={17} filled={value === layout.value} />
-            <span>{layout.label}</span>
-          </span>
-        ),
-      }))}
+      data={localizeOptions(
+        layouts.map((layout) => ({
+          value: layout.value,
+          label: (
+            <span className={classes.option}>
+              <Icon name={layout.icon} size={17} filled={value === layout.value} />
+              <span>{t(layout.label)}</span>
+            </span>
+          ),
+        })),
+      )}
     />
   );
 }

@@ -1,3 +1,4 @@
+import { getLocale, t, localizeOptions, useLocale } from "../../i18n/index";
 import {
   useCallback,
   useEffect,
@@ -75,6 +76,7 @@ const avatarGradient = (name: string) =>
 const noSubscribe = () => () => {};
 type WorksTab = "all" | "local" | "missing";
 export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
+  useLocale();
   const { page, library, libraryState, toggleFavorite, openFilm, play, notice, runtime } =
     useWorkspace();
   const root = useRef<HTMLDivElement>(null);
@@ -272,10 +274,10 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
       <div className="page-toolbar discover-toolbar">
         <Group justify="space-between" wrap="wrap" gap="sm" pb="sm">
           <SegmentedControl
-            aria-label="发现维度"
+            aria-label={t("发现维度")}
             value={selectedFacet ? "" : dimension}
             onChange={(value) => changeDimension(value as DiscoverCategory)}
-            data={[...discoverCategories]}
+            data={localizeOptions([...discoverCategories])}
           />
           {!selected && (
             <Group gap="xs" wrap="nowrap">
@@ -288,23 +290,23 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                 disabled={!libraryState.ready || !libraryState.available}
                 onClick={() => setAliasesOpened(true)}
               >
-                名称管理
+                {t("名称管理")}
               </Button>
               <TextInput
                 size="xs"
                 w={200}
-                aria-label={`搜索${dimension}`}
+                aria-label={t("搜索{0}", t(dimension))}
                 placeholder={
                   isActorDirectoryDimension(discoverDimensions[dimension])
-                    ? "在线搜索演员"
-                    : `搜索${dimension}`
+                    ? t("在线搜索演员")
+                    : t("搜索{0}", t(dimension))
                 }
                 leftSection={<Icon name="search" size={15} />}
                 rightSection={
                   query ? (
                     <ActionIcon
                       size={22}
-                      aria-label="清除发现搜索"
+                      aria-label={t("清除发现搜索")}
                       onClick={() => {
                         setQuery("");
                         resetPosition();
@@ -323,14 +325,14 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               <Select
                 size="xs"
                 w={145}
-                aria-label="发现排序"
+                aria-label={t("发现排序")}
                 disabled={onlineSearch}
                 value={onlineSearch ? "source" : sort}
-                data={[
+                data={localizeOptions([
                   { value: "source", label: "网站顺序" },
                   { value: "name", label: "名称 A–Z" },
                   { value: "videoCount", label: "视频数量最多" },
-                ]}
+                ])}
                 allowDeselect={false}
                 onChange={(value) => {
                   if (value === "source" || value === "name" || value === "videoCount")
@@ -343,7 +345,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                 disabled={onlineSearch || !libraryState.available || !libraryState.ready}
                 color={onlyFavorites ? "rouge" : "gray"}
                 size="xs"
-                aria-label={`只看收藏${dimension}`}
+                aria-label={t("只看收藏{0}", t(dimension))}
                 aria-pressed={onlyFavorites}
                 leftSection={<Icon name="star" size={14} filled={onlyFavorites} />}
                 onClick={() => {
@@ -351,7 +353,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                   resetPosition();
                 }}
               >
-                收藏
+                {t("收藏")}
               </Button>
             </Group>
           )}
@@ -381,31 +383,33 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
           <Text size="xs" c="dimmed" my="sm" aria-live="polite">
             {query.trim() || onlyFavorites
               ? `${facetState.total} / ${facetState.available}`
-              : facetState.total}{" "}
-            项
+              : facetState.total}
+            {t(" 项")}
             {library.catalog &&
-              (libraryState.available && libraryState.ready && !libraryState.error
-                ? " · 作品总数与本地已收录数量分别显示"
-                : " · 本地影片数量尚不可用")}
-            {sort === "videoCount" && " · 数量未知的条目排在最后"}
+              t(
+                libraryState.available && libraryState.ready && !libraryState.error
+                  ? " · 作品总数与本地已收录数量分别显示"
+                  : " · 本地影片数量尚不可用",
+              )}
+            {sort === "videoCount" && t(" · 数量未知的条目排在最后")}
           </Text>
           {portraits.progress && (
             <Text component="output" size="xs" c="dimmed" aria-live="polite" mb="sm">
-              正在加载头像 {portraits.progress.completed}/{portraits.progress.total}…
+              {t("正在加载头像 {0}/{1}…", portraits.progress.completed, portraits.progress.total)}
             </Text>
           )}
           {facetState.error && (
             <Alert color="red" role="alert" mb="md">
-              {publicMessage(facetState.error)}
+              {t(publicMessage(facetState.error))}
               <Button size="xs" variant="subtle" onClick={facetView.retry}>
-                重试
+                {t("重试")}
               </Button>
             </Alert>
           )}
           {!facetState.error && (!facetState.ready || (facetState.loading && !facetState.total)) ? (
             <Group component="output" justify="center" py="xl">
               <Loader size="sm" />
-              <Text size="sm">正在读取条目…</Text>
+              <Text size="sm">{t("正在读取条目…")}</Text>
             </Group>
           ) : facetState.total ? (
             <VirtualGrid
@@ -416,7 +420,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               active={page === "discover"}
               getKey={(index) => facetState.items.get(index)?.name ?? `loading:${index}`}
               onRangeChange={changeRange}
-              label={`${dimension}列表`}
+              label={t("{0}列表", t(dimension))}
               renderItem={(index) => {
                 const item = facetState.items.get(index);
                 if (!item)
@@ -429,13 +433,18 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                 const favorite = !!savedFavorite;
                 const localReady =
                   libraryState.available && libraryState.ready && !libraryState.error;
-                const localCount = localReady ? count.toLocaleString() : "—";
+                const localCount = localReady ? count.toLocaleString(getLocale()) : "—";
                 return (
                   <Paper className="facet-card" withBorder radius="md">
                     <UnstyledButton
                       className="facet-open"
                       data-name={name}
-                      aria-label={`查看 ${name}，${videoCount == null ? "作品数量未知" : `作品 ${videoCount} 部`}，${localReady ? `本地已收录 ${count} 部` : "本地数量尚不可用"}`}
+                      aria-label={t(
+                        "查看 {0}，{1}，{2}",
+                        name,
+                        videoCount == null ? t("作品数量未知") : t("作品 {0} 部", t(videoCount)),
+                        localReady ? t("本地已收录 {0} 部", t(count)) : t("本地数量尚不可用"),
+                      )}
                       title={name}
                       onClick={() => {
                         returnTo.current = {
@@ -474,18 +483,20 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                           size="xs"
                           c="dimmed"
                           style={{ display: "block", fontVariantNumeric: "tabular-nums" }}
-                          title={`${videoCount == null ? "尚未取得作品总数" : `作品 ${videoCount.toLocaleString()} 部`} · ${localReady ? `本地已收录 ${localCount} 部` : "本地数量尚不可用"}`}
+                          title={t(
+                            `${videoCount == null ? "尚未取得作品总数" : `作品 ${videoCount.toLocaleString(getLocale())} 部`} · ${localReady ? `本地已收录 ${localCount} 部` : "本地数量尚不可用"}`,
+                          )}
                         >
                           {videoCount == null
-                            ? "数量未知"
-                            : `${videoCount.toLocaleString()} 部作品`}
-                          {" · "}本地 {localCount}
+                            ? t("数量未知")
+                            : t("{0} 部作品", t(videoCount.toLocaleString(getLocale())))}
+                          {t(" · 本地 {0}", localCount)}
                         </Text>
                       </span>
                     </UnstyledButton>
                     <ActionIcon
                       color={favorite ? "champagne" : "gray"}
-                      aria-label={`${favorite ? "取消收藏" : "收藏"}${dimension} ${name}`}
+                      aria-label={`${t(favorite ? "取消收藏" : "收藏")} ${t(dimension)} ${name}`}
                       aria-pressed={favorite}
                       loading={savingFavorites.has(favoriteKey(name))}
                       disabled={!libraryState.available || !libraryState.ready}
@@ -502,22 +513,22 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               icon={onlyFavorites && !query.trim() ? "star" : "search"}
               title={
                 query.trim()
-                  ? `未找到匹配的${dimension}`
+                  ? t("未找到匹配的{0}", t(dimension))
                   : onlyFavorites
-                    ? `暂无收藏${dimension}`
-                    : `暂无${dimension}`
+                    ? t("暂无收藏{0}", t(dimension))
+                    : t("暂无{0}", t(dimension))
               }
               description={
                 facetState.available
-                  ? "换个关键词，或显示全部条目。"
+                  ? t("换个关键词，或显示全部条目。")
                   : isActorDirectoryDimension(discoverDimensions[dimension])
-                    ? "演员名单更新后，条目会显示在这里。"
-                    : "名单更新或本地资料入库后，条目会显示在这里。"
+                    ? t("演员名单更新后，条目会显示在这里。")
+                    : t("名单更新或本地资料入库后，条目会显示在这里。")
               }
             >
               {(query.trim() || onlyFavorites) && (
                 <Button variant="subtle" size="xs" onClick={clearFilters}>
-                  显示全部
+                  {t("显示全部")}
                 </Button>
               )}
             </Empty>
@@ -536,11 +547,12 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                 pendingPosition.current = returnTo.current ?? { top: 0 };
               }}
             >
-              返回{selectedFacet ? "发现" : dimension}
+              {t("返回")}
+              {selectedFacet ? t("发现") : t(dimension)}
             </Button>
             {onlineWorks ? (
               <Text size="sm" c="dimmed">
-                {dimension}：{selected}
+                {t(dimension)}：{selected}
               </Text>
             ) : (
               <>
@@ -548,7 +560,11 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                   {selected}
                 </Title>
                 {selectedFacet && <Pill>{selectedFacet}</Pill>}
-                <Pill>本地 {works.total.toLocaleString()} 部</Pill>
+                <Pill>
+                  {t("本地 ")}
+                  {works.total.toLocaleString(getLocale())}
+                  {t(" 部")}
+                </Pill>
               </>
             )}
           </Group>
@@ -575,7 +591,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               />
               <div className="works-toolbar">
                 <CountTabs
-                  label="作品范围"
+                  label={t("作品范围")}
                   value={worksTab}
                   onChange={setWorksTab}
                   items={[
@@ -588,14 +604,14 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                   <TextInput
                     size="xs"
                     w={180}
-                    aria-label="过滤作品"
-                    placeholder="过滤番号/名字"
+                    aria-label={t("过滤作品")}
+                    placeholder={t("过滤番号/名字")}
                     leftSection={<Icon name="filter" size={14} />}
                     rightSection={
                       worksFilter ? (
                         <ActionIcon
                           size={22}
-                          aria-label="清除作品过滤"
+                          aria-label={t("清除作品过滤")}
                           onClick={() => setWorksFilter("")}
                         >
                           <Icon name="close" size={13} />
@@ -606,7 +622,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                     onChange={(event) => setWorksFilter(event.currentTarget.value)}
                   />
                   <Text size="xs" c="dimmed" component="label" htmlFor="discover-card-width">
-                    卡片
+                    {t("卡片")}
                   </Text>
                   <Slider
                     id="discover-card-width"
@@ -616,7 +632,7 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
                     max={CARD_WIDTH.max}
                     step={10}
                     label={null}
-                    aria-label="封面大小"
+                    aria-label={t("封面大小")}
                     value={cardWidth}
                     onChange={setPreviewCardWidth}
                     onChangeEnd={(value) => {
@@ -644,16 +660,16 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
             <>
               {works.error && (
                 <Alert color="red" role="alert" mb="md">
-                  {works.error}
+                  {t(works.error)}
                   <Button size="xs" variant="subtle" onClick={workView.retry}>
-                    重试
+                    {t("重试")}
                   </Button>
                 </Alert>
               )}
               {!works.ready && !works.total && !works.error && (
                 <Group component="output" justify="center" py="xl">
                   <Loader size="sm" />
-                  <Text size="sm">正在读取影片…</Text>
+                  <Text size="sm">{t("正在读取影片…")}</Text>
                 </Group>
               )}
               <FilmCollection
@@ -669,11 +685,11 @@ export function Discover({ ref }: { ref: Ref<DiscoverHandle> }) {
               />
               {works.ready && works.total === 0 && !works.error && (
                 <Empty
-                  title={worksSearch ? "无匹配作品" : "暂未收录"}
+                  title={worksSearch ? t("无匹配作品") : t("暂未收录")}
                   description={
                     worksSearch
-                      ? "换个番号或名字再试。"
-                      : "保存在线作品资料或导入本地视频后会显示在这里。"
+                      ? t("换个番号或名字再试。")
+                      : t("保存在线作品资料或导入本地视频后会显示在这里。")
                   }
                 />
               )}

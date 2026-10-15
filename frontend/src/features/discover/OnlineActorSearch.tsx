@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -24,6 +25,7 @@ export function OnlineActorSearch({
   active: boolean;
   select: (entity: OnlineEntity) => void;
 }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   useEffect(() => {
     if (active && query) {
@@ -36,29 +38,29 @@ export function OnlineActorSearch({
   return (
     <Stack gap="sm" my="md">
       <Text size="xs" c="dimmed">
-        在线查找演员 · 不受现有名单限制 · 按网站搜索结果顺序显示
+        {t("在线查找演员 · 不受现有名单限制 · 按网站搜索结果顺序显示")}
       </Text>
-      {!state.available && <Alert>请在桌面版使用在线搜索。</Alert>}
+      {!state.available && <Alert>{t("请在桌面版使用在线搜索。")}</Alert>}
       {state.loading && (
         <Group component="output" aria-live="polite">
           <Loader size="xs" />
-          <Text size="sm">正在查询 JavBus…</Text>
+          <Text size="sm">{t("正在查询 JavBus…")}</Text>
           <Button size="compact-xs" variant="subtle" onClick={service.cancel}>
-            取消
+            {t("取消")}
           </Button>
         </Group>
       )}
       {current &&
         Object.entries(state.errors).map(([lane, error]) => (
           <Alert key={lane} color="orange" role="alert">
-            {lane === "censored" ? "主分区" : "另一分区"}：{publicMessage(error)}
+            {lane === "censored" ? t("主分区") : t("另一分区")}：{t(publicMessage(error))}
             <Button
               size="compact-xs"
               variant="subtle"
               disabled={state.loading}
               onClick={service.retry}
             >
-              重试
+              {t("重试")}
             </Button>
           </Alert>
         ))}
@@ -71,7 +73,8 @@ export function OnlineActorSearch({
                   {entity.name}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  {entity.url.includes("/uncensored/") ? "另一分区" : "主分区"} · 查看作品
+                  {entity.url.includes("/uncensored/") ? t("另一分区") : t("主分区")}
+                  {t(" · 查看作品")}
                 </Text>
               </UnstyledButton>
             </Paper>
@@ -84,11 +87,11 @@ export function OnlineActorSearch({
         !state.loading &&
         !state.items.length &&
         !Object.keys(state.errors).length && (
-          <Text size="sm">未找到演员，可以尝试原名或其他别名。</Text>
+          <Text size="sm">{t("未找到演员，可以尝试原名或其他别名。")}</Text>
         )}
       {current && !!query && !state.loading && !state.ready && (
         <Button variant="subtle" onClick={service.retry}>
-          继续搜索
+          {t("继续搜索")}
         </Button>
       )}
       {current && (state.page > 1 || Object.values(state.next).some(Boolean)) && (
@@ -98,15 +101,15 @@ export function OnlineActorSearch({
             disabled={state.loading || state.page === 1}
             onClick={() => service.search(query, state.page - 1)}
           >
-            上一页
+            {t("上一页")}
           </Button>
-          <Text size="sm">第 {state.page} 页</Text>
+          <Text size="sm">{t("第 {0} 页", state.page)}</Text>
           <Button
             variant="default"
             disabled={state.loading || !Object.values(state.next).some(Boolean)}
             onClick={() => service.search(query, state.page + 1)}
           >
-            下一页
+            {t("下一页")}
           </Button>
         </Group>
       )}

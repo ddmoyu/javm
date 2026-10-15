@@ -1,3 +1,4 @@
+import { t, useLocale } from "../i18n/index";
 import type { KeyboardEvent, ReactElement, ReactNode } from "react";
 import { createContext, useContext, useState } from "react";
 import { ActionIcon, Menu } from "@mantine/core";
@@ -24,6 +25,7 @@ export function ObjectMenu({
   items: ReactNode;
   onOpen?: () => void;
 }) {
+  useLocale();
   const [activeMenu, setActiveMenu] = useState<MenuTrigger | null>(null);
   const changeMenu = (trigger: MenuTrigger, opened: boolean) =>
     setActiveMenu((current) => (opened ? trigger : current === trigger ? null : current));
@@ -59,6 +61,7 @@ export function ObjectMenu({
 }
 
 export function ObjectMenuButton({ label }: { label: string }) {
+  useLocale();
   const actions = useContext(ObjectActions);
   return (
     <Menu
@@ -79,8 +82,8 @@ export function ObjectMenuButton({ label }: { label: string }) {
         <ActionIcon
           variant="subtle"
           color="gray"
-          aria-label={label}
-          title={label}
+          aria-label={t(label)}
+          title={t(label)}
           data-menu-trigger
           onKeyDown={objectMenuKey}
         >

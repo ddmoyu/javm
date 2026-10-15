@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -18,6 +19,7 @@ import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
 import classes from "./Settings.module.css";
 
 export function AiSettingsPanel() {
+  useLocale();
   const { ai, notice } = useWorkspace();
   const current = useSyncExternalStore(ai.settings.subscribe, ai.settings.getSnapshot);
   const task = useSyncExternalStore(ai.subscribe, ai.getSnapshot);
@@ -67,35 +69,37 @@ export function AiSettingsPanel() {
       }}
     >
       <Stack gap="lg">
-        {!current.available && <SettingNote>请在桌面端保存配置和使用 AI 服务。</SettingNote>}
-        <SettingCard title="辅助识别与翻译" icon="sparkles">
+        {!current.available && <SettingNote>{t("请在桌面端保存配置和使用 AI 服务。")}</SettingNote>}
+        <SettingCard title={t("辅助识别与翻译")} icon="sparkles">
           <SettingRow
-            title="启用 AI 辅助"
-            hint="在影片编辑中识别番号、翻译标题与简介，结果由你确认。"
+            title={t("启用 AI 辅助")}
+            hint={t("在影片编辑中识别番号、翻译标题与简介，结果由你确认。")}
           >
             <Switch
-              aria-label="启用 AI 辅助"
+              aria-label={t("启用 AI 辅助")}
               checked={draft.enabled}
               disabled={busy}
               onChange={(event) => patch({ enabled: event.currentTarget.checked })}
             />
           </SettingRow>
           <SettingRow
-            title="批量刮削自动识别"
-            hint="规则无法识别时，将文件名和标题发送给下方启用的服务。只有查询结果返回相同番号时才保存资料。"
+            title={t("批量刮削自动识别")}
+            hint={t(
+              "规则无法识别时，将文件名和标题发送给下方启用的服务。只有查询结果返回相同番号时才保存资料。",
+            )}
           >
             <Switch
-              aria-label="批量刮削自动识别"
+              aria-label={t("批量刮削自动识别")}
               checked={draft.automaticRecognition ?? false}
               disabled={busy || !draft.enabled}
               onChange={(event) => patch({ automaticRecognition: event.currentTarget.checked })}
             />
           </SettingRow>
         </SettingCard>
-        <SettingCard title="服务顺序" icon="key">
+        <SettingCard title={t("服务顺序")} icon="key">
           <Stack className={classes.fields} gap="md">
             <Text size="xs" c="dimmed">
-              按从上到下的顺序请求，失败后使用下一项。最多 5 项，每次请求总时限为 90 秒。
+              {t("按从上到下的顺序请求，失败后使用下一项。最多 5 项，每次请求总时限为 90 秒。")}
             </Text>
             {providers.map((provider, index) => (
               <Paper key={provider.id} withBorder p="md" radius="md">
@@ -105,7 +109,7 @@ export function AiSettingsPanel() {
                       {index + 1}. {provider.name}
                     </Text>
                     <Switch
-                      aria-label={`启用 ${provider.name}`}
+                      aria-label={t("启用 {0}", provider.name)}
                       checked={provider.enabled}
                       disabled={busy}
                       onChange={(event) =>
@@ -114,7 +118,7 @@ export function AiSettingsPanel() {
                     />
                   </Group>
                   <TextInput
-                    label="服务名称"
+                    label={t("服务名称")}
                     value={provider.name}
                     disabled={busy}
                     maxLength={80}
@@ -123,8 +127,8 @@ export function AiSettingsPanel() {
                     }
                   />
                   <TextInput
-                    label="服务地址"
-                    description="OpenAI 兼容的 API 基础地址，通常以 /v1 结尾。"
+                    label={t("服务地址")}
+                    description={t("OpenAI 兼容的 API 基础地址，通常以 /v1 结尾。")}
                     value={provider.endpoint}
                     disabled={busy}
                     onChange={(event) =>
@@ -132,8 +136,8 @@ export function AiSettingsPanel() {
                     }
                   />
                   <TextInput
-                    label="模型名称"
-                    placeholder="填写服务提供的模型标识"
+                    label={t("模型名称")}
+                    placeholder={t("填写服务提供的模型标识")}
                     value={provider.model}
                     disabled={busy}
                     onChange={(event) =>
@@ -142,7 +146,7 @@ export function AiSettingsPanel() {
                   />
                   <PasswordInput
                     label="API Key"
-                    description="本机加密保存；无鉴权的本地模型可留空。"
+                    description={t("本机加密保存；无鉴权的本地模型可留空。")}
                     value={provider.apiKey}
                     autoComplete="off"
                     disabled={busy}
@@ -158,7 +162,7 @@ export function AiSettingsPanel() {
                         disabled={busy || index === 0}
                         onClick={() => reorder(index, -1)}
                       >
-                        上移
+                        {t("上移")}
                       </Button>
                       <Button
                         size="xs"
@@ -166,7 +170,7 @@ export function AiSettingsPanel() {
                         disabled={busy || index === providers.length - 1}
                         onClick={() => reorder(index, 1)}
                       >
-                        下移
+                        {t("下移")}
                       </Button>
                       <Button
                         size="xs"
@@ -177,7 +181,7 @@ export function AiSettingsPanel() {
                           changeProviders(providers.filter((item) => item.id !== provider.id))
                         }
                       >
-                        移除
+                        {t("移除")}
                       </Button>
                     </Group>
                     <Button
@@ -189,7 +193,7 @@ export function AiSettingsPanel() {
                       }
                       onClick={() => void perform(true, provider.id)}
                     >
-                      测试连接
+                      {t("测试连接")}
                     </Button>
                   </Group>
                 </Stack>
@@ -212,12 +216,12 @@ export function AiSettingsPanel() {
                 ])
               }
             >
-              添加供应商
+              {t("添加供应商")}
             </Button>
           </Stack>
         </SettingCard>
         <SettingNote>
-          识别仅发送文件名和标题，翻译仅发送标题和简介；不会自动上传视频或图片。
+          {t("识别仅发送文件名和标题，翻译仅发送标题和简介；不会自动上传视频或图片。")}
         </SettingNote>
         {task.busy && (
           <Group>
@@ -226,18 +230,18 @@ export function AiSettingsPanel() {
               {task.provider ? ` · ${task.provider}` : ""}…
             </Text>
             <Button variant="subtle" size="xs" onClick={ai.cancel}>
-              取消请求
+              {t("取消请求")}
             </Button>
           </Group>
         )}
         {(error || current.error) && (
           <Alert color="red" role="alert">
-            {error || current.error}
+            {t(error || current.error)}
           </Alert>
         )}
         <div className={classes.saveBar}>
           <Text size="xs" c="dimmed">
-            {dirty ? "有未保存的修改" : "修改后点击保存"}
+            {dirty ? t("有未保存的修改") : t("修改后点击保存")}
           </Text>
           <Group gap="xs">
             <Button
@@ -248,14 +252,14 @@ export function AiSettingsPanel() {
                 setError("");
               }}
             >
-              撤销修改
+              {t("撤销修改")}
             </Button>
             <Button
               type="submit"
               loading={current.saving}
               disabled={!current.available || busy || (!dirty && !current.error)}
             >
-              保存 AI 设置
+              {t("保存 AI 设置")}
             </Button>
           </Group>
         </div>

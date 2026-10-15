@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -31,6 +32,7 @@ export function FilmArtworkEditor({
   onClose: () => void;
   source?: string;
 }) {
+  useLocale();
   const { library } = useWorkspace();
   if (library.artwork && (mode === "pick-cover" || mode === "pick-previews"))
     return (
@@ -50,8 +52,8 @@ export function FilmArtworkEditor({
       onClose={onClose}
     />
   ) : (
-    <Modal opened onClose={onClose} title="图片管理">
-      <Text>请在桌面应用中处理图片。</Text>
+    <Modal opened onClose={onClose} title={t("图片管理")}>
+      <Text>{t("请在桌面应用中处理图片。")}</Text>
     </Modal>
   );
 }
@@ -68,6 +70,7 @@ function ArtworkEditor({
   source?: string;
   onClose(): void;
 }) {
+  useLocale();
   const task = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const [count, setCount] = useState<string | null>("6");
   const videos =
@@ -132,7 +135,7 @@ function ArtworkEditor({
     <Modal
       opened
       onClose={() => !task.busy && onClose()}
-      title={title}
+      title={t(title)}
       centered
       size="md"
       zIndex={400}
@@ -147,13 +150,13 @@ function ArtworkEditor({
         {mode === "fetch" ? (
           <>
             <Checkbox
-              label="获取封面"
+              label={t("获取封面")}
               checked={cover}
               disabled={task.busy}
               onChange={(event) => setCover(event.currentTarget.checked)}
             />
             <Checkbox
-              label="获取截图"
+              label={t("获取截图")}
               checked={screenshots}
               disabled={task.busy}
               onChange={(event) => setScreenshots(event.currentTarget.checked)}
@@ -166,9 +169,9 @@ function ArtworkEditor({
               disabled={task.busy}
               onClick={() => {
                 void os
-                  .showOpenDialog("选择封面图片", {
+                  .showOpenDialog(t("选择封面图片"), {
                     multiSelections: false,
-                    filters: [{ name: "图片", extensions: ["jpg", "jpeg", "png", "webp"] }],
+                    filters: [{ name: t("图片"), extensions: ["jpg", "jpeg", "png", "webp"] }],
                   })
                   .then((files) => {
                     if (files[0]) {
@@ -179,7 +182,7 @@ function ArtworkEditor({
                   .catch(() => setError("无法打开图片选择器。"));
               }}
             >
-              选择本地图片
+              {t("选择本地图片")}
             </Button>
             {path && (
               <Text size="xs" style={{ overflowWrap: "anywhere" }}>
@@ -188,7 +191,7 @@ function ArtworkEditor({
             )}
             {preview && (
               <div style={{ position: "relative" }}>
-                <Image src={preview} alt="封面裁剪预览" />
+                <Image src={preview} alt={t("封面裁剪预览")} data-private-image />
                 {cropEnabled && (
                   <div
                     aria-hidden
@@ -206,7 +209,7 @@ function ArtworkEditor({
               </div>
             )}
             <Checkbox
-              label="裁剪封面"
+              label={t("裁剪封面")}
               checked={cropEnabled}
               disabled={task.busy}
               onChange={(event) => setCropEnabled(event.currentTarget.checked)}
@@ -216,7 +219,7 @@ function ArtworkEditor({
                 {(["left", "top", "width", "height"] as const).map((key, index) => (
                   <NumberInput
                     key={key}
-                    label={`${["左侧", "顶部", "宽度", "高度"][index]}（%）`}
+                    label={t(`${["左侧", "顶部", "宽度", "高度"][index]}（%）`)}
                     value={crop[key]}
                     min={key === "width" || key === "height" ? 1 : 0}
                     max={100}
@@ -230,7 +233,7 @@ function ArtworkEditor({
         ) : (
           <>
             <Select
-              label="本地视频"
+              label={t("本地视频")}
               value={videoId}
               onChange={setVideoId}
               allowDeselect={false}
@@ -240,10 +243,10 @@ function ArtworkEditor({
                 .map((file) => ({ value: file.id!, label: file.name }))}
             />
             <Select
-              label="截图数量"
+              label={t("截图数量")}
               value={count}
               onChange={setCount}
-              data={["1", "6", "12", "24"]}
+              data={localizeOptions(["1", "6", "12", "24"])}
               allowDeselect={false}
               disabled={task.busy}
             />
@@ -259,16 +262,16 @@ function ArtworkEditor({
         )}
         {error && (
           <Alert color="red" role="alert">
-            {error}
+            {t(error)}
           </Alert>
         )}
-        {task.warning && <Alert color="yellow">{task.warning}</Alert>}
+        {task.warning && <Alert color="yellow">{t(task.warning)}</Alert>}
         <Group justify="flex-end">
           <Button variant="default" onClick={task.busy ? service.cancel : onClose}>
-            {task.busy ? "停止处理" : "关闭"}
+            {task.busy ? t("停止处理") : t("关闭")}
           </Button>
           <Button loading={task.busy} onClick={() => void start()}>
-            {mode === "cover" ? "保存封面" : "开始处理"}
+            {mode === "cover" ? t("保存封面") : t("开始处理")}
           </Button>
         </Group>
       </Stack>

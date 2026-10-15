@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState } from "react";
 import { Button, Popover, Stack, Text } from "@mantine/core";
 import type { FilmLayout } from "../../contracts/library";
@@ -18,6 +19,7 @@ export function LibraryViewMenu({
   layout: FilmLayout;
   onLayoutChange: (value: FilmLayout) => void;
 }) {
+  useLocale();
   const [opened, setOpened] = useState(false);
   return (
     <Popover
@@ -37,8 +39,8 @@ export function LibraryViewMenu({
           px={9}
           variant={opened ? "light" : "subtle"}
           color={opened ? "rouge" : "gray"}
-          aria-label="显示方式"
-          title={`显示方式 · 当前${layouts[layout].label}视图`}
+          aria-label={t("显示方式")}
+          title={t("显示方式 · 当前{0}视图", t(layouts[layout].label))}
           aria-expanded={opened}
           rightSection={<Icon name="down" size={12} />}
           onClick={() => setOpened(!opened)}
@@ -49,7 +51,7 @@ export function LibraryViewMenu({
       <Popover.Dropdown p="md">
         <Stack gap={8}>
           <Text size="xs" fw={600}>
-            显示方式
+            {t("显示方式")}
           </Text>
           <LibraryLayoutControl value={layout} onChange={onLayoutChange} />
         </Stack>

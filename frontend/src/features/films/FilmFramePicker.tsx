@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -45,6 +46,7 @@ export function FilmFramePicker({
   multiple: boolean;
   onClose: () => void;
 }) {
+  useLocale();
   const task = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const videos =
     film.files?.filter(
@@ -123,7 +125,7 @@ export function FilmFramePicker({
     <Modal
       opened
       onClose={() => !busy && onClose()}
-      title={multiple ? "从视频选择预览图" : "从视频选择封面"}
+      title={multiple ? t("从视频选择预览图") : t("从视频选择封面")}
       centered
       size="xl"
       zIndex={400}
@@ -135,7 +137,7 @@ export function FilmFramePicker({
         <Group align="flex-end">
           {videos.length > 1 && (
             <Select
-              label="本地视频"
+              label={t("本地视频")}
               value={videoId}
               onChange={setVideoId}
               allowDeselect={false}
@@ -145,7 +147,7 @@ export function FilmFramePicker({
             />
           )}
           <Button variant="default" disabled={busy} onClick={capture}>
-            重新截取
+            {t("重新截取")}
           </Button>
         </Group>
         {busy && (
@@ -164,7 +166,7 @@ export function FilmFramePicker({
                 <UnstyledButton
                   key={frame.index}
                   aria-pressed={active}
-                  aria-label={`画面 ${clock(frame.seconds)}`}
+                  aria-label={t("画面 {0}", t(clock(frame.seconds)))}
                   disabled={capturing && !multiple}
                   onClick={() => toggle(frame.index)}
                   style={{
@@ -177,7 +179,7 @@ export function FilmFramePicker({
                     outlineOffset: active ? -3 : -1,
                   }}
                 >
-                  <Image src={frame.url} alt="" />
+                  <Image src={frame.url} alt="" data-private-image />
                   <Text
                     size="xs"
                     style={{
@@ -199,24 +201,24 @@ export function FilmFramePicker({
         )}
         {error && (
           <Alert color="red" role="alert">
-            {error}
+            {t(error)}
           </Alert>
         )}
-        {task.warning && <Alert color="yellow">{task.warning}</Alert>}
+        {task.warning && <Alert color="yellow">{t(task.warning)}</Alert>}
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
             {multiple
-              ? `已选择 ${selected.size} 张`
+              ? t("已选择 {0} 张", t(selected.size))
               : selected.size
-                ? "已选择 1 张"
-                : "点击画面选择封面"}
+                ? t("已选择 1 张")
+                : t("点击画面选择封面")}
           </Text>
           <Group>
             <Button variant="default" onClick={busy ? service.cancel : onClose}>
-              {busy ? "停止" : "关闭"}
+              {busy ? t("停止") : t("关闭")}
             </Button>
             <Button disabled={busy || !video || !selected.size} onClick={() => void save()}>
-              {multiple ? "保存预览图" : "设为封面"}
+              {multiple ? t("保存预览图") : t("设为封面")}
             </Button>
           </Group>
         </Group>

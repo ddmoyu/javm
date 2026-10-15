@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState } from "react";
 import { Button, Menu } from "@mantine/core";
 import type { LibrarySort, SortDirection } from "../../contracts/library";
@@ -15,9 +16,14 @@ export function LibrarySortMenu({
   onSortChange: (value: LibrarySort) => void;
   onDirectionChange: (value: SortDirection) => void;
 }) {
+  useLocale();
   const [opened, setOpened] = useState(false);
   const current = librarySortOptions.find((option) => option.value === sort);
-  const description = `当前按${current?.label}排序，${direction === "desc" ? "降序" : "升序"}`;
+  const description = t(
+    "当前按{0}排序，{1}",
+    t(current?.label),
+    t(direction === "desc" ? "降序" : "升序"),
+  );
 
   return (
     <Menu
@@ -34,15 +40,15 @@ export function LibrarySortMenu({
           h={32}
           variant={opened ? "light" : "subtle"}
           color={opened ? "rouge" : "gray"}
-          aria-label={`排序影片，${description}`}
-          title={description}
+          aria-label={t("排序影片，{0}", t(description))}
+          title={t(description)}
           leftSection={<Icon name={direction === "desc" ? "sortDesc" : "sortAsc"} size={16} />}
         >
-          排序
+          {t("排序")}
         </Button>
       </Menu.Target>
-      <Menu.Dropdown aria-label="影片排序">
-        <Menu.Label>排序方式</Menu.Label>
+      <Menu.Dropdown aria-label={t("影片排序")}>
+        <Menu.Label>{t("排序方式")}</Menu.Label>
         <Menu.RadioGroup
           value={sort}
           onChange={(value) => {
@@ -55,12 +61,12 @@ export function LibrarySortMenu({
         >
           {librarySortOptions.map((option) => (
             <Menu.RadioItem key={option.value} value={option.value} closeMenuOnClick>
-              {option.label}
+              {t(option.label)}
             </Menu.RadioItem>
           ))}
         </Menu.RadioGroup>
         <Menu.Divider />
-        <Menu.Label>排列顺序</Menu.Label>
+        <Menu.Label>{t("排列顺序")}</Menu.Label>
         <Menu.RadioGroup
           value={direction}
           onChange={(value) => {
@@ -68,10 +74,10 @@ export function LibrarySortMenu({
           }}
         >
           <Menu.RadioItem value="asc" closeMenuOnClick>
-            升序
+            {t("升序")}
           </Menu.RadioItem>
           <Menu.RadioItem value="desc" closeMenuOnClick>
-            降序
+            {t("降序")}
           </Menu.RadioItem>
         </Menu.RadioGroup>
       </Menu.Dropdown>

@@ -1,3 +1,4 @@
+import { getLocale, t, useLocale } from "../../i18n/index";
 import { useRef, useState } from "react";
 import {
   ActionIcon,
@@ -26,6 +27,7 @@ import { FileOrganizationPanel } from "./FileOrganizationPanel";
 import { DirectoryScanStatus, scanLabels } from "./DirectoryScanStatus";
 
 export function Directories() {
+  useLocale();
   const { add, library, libraryState: state, notice, go } = useWorkspace();
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
@@ -83,13 +85,13 @@ export function Directories() {
             disabled={disabled}
             onClick={() => add("import")}
           >
-            添加目录
+            {t("添加目录")}
           </Button>
           <ActionIcon
             variant="default"
             size="input-xs"
-            aria-label="刷新列表"
-            title="刷新列表"
+            aria-label={t("刷新列表")}
+            title={t("刷新列表")}
             loading={pending}
             onClick={() => void perform(() => library.refresh())}
           >
@@ -103,7 +105,7 @@ export function Directories() {
                 rightSection={<Icon name="down" size={13} />}
                 disabled={disabled || !library.maintenance}
               >
-                目录工具
+                {t("目录工具")}
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
@@ -112,21 +114,21 @@ export function Directories() {
                 disabled={disabled}
                 onClick={() => openMaintenance("duplicates")}
               >
-                重复视频
+                {t("重复视频")}
               </Menu.Item>
               <Menu.Item
                 leftSection={<Icon name="filter" size={16} />}
                 disabled={disabled}
                 onClick={() => openMaintenance("ads")}
               >
-                广告视频
+                {t("广告视频")}
               </Menu.Item>
               <Menu.Item
                 leftSection={<Icon name="shield" size={16} />}
                 disabled={disabled}
                 onClick={() => openMaintenance("health")}
               >
-                健康检查
+                {t("健康检查")}
               </Menu.Item>
             </Menu.Dropdown>
           </Menu>
@@ -135,18 +137,18 @@ export function Directories() {
         <Group gap="md">
           {library.watcher && <DirectoryWatchControl service={library.watcher} />}
           <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-            {state.directories.length} 个目录 · {state.total} 部影片
+            {t("{0} 个目录 · {1} 部影片", state.directories.length, state.total)}
           </Text>
         </Group>
       </Group>
       {state.error && (
-        <Alert color="red" title="媒体库连接失败" role="alert">
-          {state.error}
+        <Alert color="red" title={t("媒体库连接失败")} role="alert">
+          {t(state.error)}
         </Alert>
       )}
       {!state.available && (
         <Text size="sm" c="dimmed">
-          请在桌面应用中添加和扫描本机目录。
+          {t("请在桌面应用中添加和扫描本机目录。")}
         </Text>
       )}
       {scan && (
@@ -162,12 +164,12 @@ export function Directories() {
           <Table highlightOnHover verticalSpacing="sm" layout="fixed">
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>路径</Table.Th>
+                <Table.Th>{t("路径")}</Table.Th>
                 <Table.Th w={100} ta="center">
-                  视频数量
+                  {t("视频数量")}
                 </Table.Th>
                 <Table.Th w={125} ta="center">
-                  操作
+                  {t("操作")}
                 </Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -182,14 +184,14 @@ export function Directories() {
                         disabled={!state.available || pending}
                         onClick={() => void perform(() => openMediaDirectory(directory.path))}
                       >
-                        打开目录
+                        {t("打开目录")}
                       </Menu.Item>
                       <Menu.Item
                         leftSection={<Icon name="refresh" />}
                         disabled={disabled}
                         onClick={() => void perform(() => library.scan(directory.id))}
                       >
-                        重新扫描
+                        {t("重新扫描")}
                       </Menu.Item>
                       <Menu.Divider />
                       <Menu.Item
@@ -198,7 +200,7 @@ export function Directories() {
                         disabled={disabled}
                         onClick={() => requestRemove(directory)}
                       >
-                        删除目录
+                        {t("删除目录")}
                       </Menu.Item>
                     </>
                   }
@@ -232,18 +234,25 @@ export function Directories() {
                           truncate
                           title={
                             directory.formats.length
-                              ? directory.formats.join(" / ")
-                              : "全部内置视频格式"
+                              ? t(directory.formats.join(" / "))
+                              : t("全部内置视频格式")
                           }
                         >
-                          {directory.recursive ? "包含子目录" : "仅当前目录"}
+                          {directory.recursive ? t("包含子目录") : t("仅当前目录")}
                           {directory.scanned_at &&
-                            ` · 最近扫描 ${new Date(`${directory.scanned_at.replace(" ", "T")}Z`).toLocaleString()}`}
+                            t(
+                              " · 最近扫描 {0}",
+                              t(
+                                new Date(
+                                  `${directory.scanned_at.replace(" ", "T")}Z`,
+                                ).toLocaleString(getLocale()),
+                              ),
+                            )}
                         </Text>
                       </Group>
                       {directory.error && (
                         <Text size="xs" c="red" style={{ overflowWrap: "anywhere" }}>
-                          {directory.error}
+                          {t(directory.error)}
                         </Text>
                       )}
                     </Table.Td>
@@ -255,8 +264,8 @@ export function Directories() {
                         <ActionIcon
                           variant="subtle"
                           color="gray"
-                          aria-label={`打开目录 ${directory.path}`}
-                          title="打开目录"
+                          aria-label={t("打开目录 {0}", directory.path)}
+                          title={t("打开目录")}
                           disabled={!state.available || pending}
                           onClick={() => void perform(() => openMediaDirectory(directory.path))}
                         >
@@ -265,8 +274,8 @@ export function Directories() {
                         <ActionIcon
                           variant="subtle"
                           color="gray"
-                          aria-label={`重新扫描 ${directory.path}`}
-                          title="重新扫描"
+                          aria-label={t("重新扫描 {0}", directory.path)}
+                          title={t("重新扫描")}
                           disabled={disabled}
                           onClick={() => void perform(() => library.scan(directory.id))}
                         >
@@ -275,8 +284,8 @@ export function Directories() {
                         <ActionIcon
                           variant="subtle"
                           color="red"
-                          aria-label={`删除目录 ${directory.path}`}
-                          title={scanning ? "请先停止扫描，再删除目录" : "删除目录"}
+                          aria-label={t("删除目录 {0}", directory.path)}
+                          title={scanning ? t("请先停止扫描，再删除目录") : t("删除目录")}
                           disabled={disabled}
                           onClick={() => requestRemove(directory)}
                         >
@@ -294,22 +303,22 @@ export function Directories() {
       {!state.directories.length && (
         <Empty
           icon="folder"
-          title={state.ready ? "还没有媒体目录" : "正在读取媒体目录"}
-          description="添加文件夹，自动读取视频参数与本地 NFO 资料。"
+          title={state.ready ? t("还没有媒体目录") : t("正在读取媒体目录")}
+          description={t("添加文件夹，自动读取视频参数与本地 NFO 资料。")}
         >
           <Button
             disabled={disabled}
             leftSection={<Icon name="plus" size={16} />}
             onClick={() => add("import")}
           >
-            添加媒体目录
+            {t("添加媒体目录")}
           </Button>
         </Empty>
       )}
       <Modal
         opened={!!removing}
         onClose={closeRemove}
-        title="删除目录"
+        title={t("删除目录")}
         centered
         closeOnClickOutside={!pending}
         closeOnEscape={!pending}
@@ -320,19 +329,19 @@ export function Directories() {
             {removing?.path}
           </Text>
           <Text size="sm">
-            停止管理和扫描此目录。已有作品、收藏、资源关联以及磁盘文件均会保留。
+            {t("停止管理和扫描此目录。已有作品、收藏、资源关联以及磁盘文件均会保留。")}
           </Text>
           {removeError && (
             <Alert color="red" role="alert">
-              {removeError}
+              {t(removeError)}
             </Alert>
           )}
           <Group justify="flex-end">
             <Button variant="default" disabled={pending} data-autofocus onClick={closeRemove}>
-              取消
+              {t("取消")}
             </Button>
             <Button color="red" loading={pending} disabled={disabled} onClick={removeDirectory}>
-              删除目录
+              {t("删除目录")}
             </Button>
           </Group>
         </Stack>

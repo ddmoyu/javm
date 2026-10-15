@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useSyncExternalStore } from "react";
 import { Button } from "@mantine/core";
 import { Icon } from "../../components/icons";
@@ -5,6 +6,7 @@ import type { LegacyImportService } from "../../services/library/LegacyImportSer
 import { SettingCard, SettingRow } from "./SettingsPrimitives";
 
 export function LegacyImportSettingsPanel({ service }: { service: LegacyImportService }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const hint =
     state.state === "running"
@@ -15,8 +17,8 @@ export function LegacyImportSettingsPanel({ service }: { service: LegacyImportSe
           ? "未发现待导入的旧数据库，可以重新检查。"
           : "稍后导入或取消后，可以从这里重新开始；合并时保留新版已有资料。";
   return (
-    <SettingCard title="旧版数据迁移" icon="upload">
-      <SettingRow title="导入旧版片库" hint={hint}>
+    <SettingCard title={t("旧版数据迁移")} icon="upload">
+      <SettingRow title={t("导入旧版片库")} hint={t(hint)}>
         <Button
           variant="default"
           size="xs"
@@ -24,7 +26,7 @@ export function LegacyImportSettingsPanel({ service }: { service: LegacyImportSe
           leftSection={<Icon name="upload" size={14} />}
           onClick={() => void service.open()}
         >
-          {state.state === "running" ? "查看导入进度" : "打开导入引导"}
+          {state.state === "running" ? t("查看导入进度") : t("打开导入引导")}
         </Button>
       </SettingRow>
     </SettingCard>

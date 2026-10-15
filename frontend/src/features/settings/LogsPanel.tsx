@@ -1,3 +1,4 @@
+import { getLocale, t, localizeOptions, useLocale } from "../../i18n/index";
 import { useRef, useState, useSyncExternalStore } from "react";
 import { Alert, Button, Code, Group, Modal, ScrollArea, Select, Stack, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
@@ -6,6 +7,7 @@ import { SettingCard, SettingRow } from "./SettingsPrimitives";
 
 const levels = { debug: "调试", info: "信息", warn: "警告", error: "错误" };
 export function LogsPanel() {
+  useLocale();
   const { logs, notice } = useWorkspace();
   const current = useSyncExternalStore(logs.subscribe, logs.getSnapshot);
   const [opened, setOpened] = useState(false);
@@ -32,10 +34,12 @@ export function LogsPanel() {
   const visible = entries.filter((entry) => level === "all" || entry.level === level);
   return (
     <>
-      <SettingCard title="日志与诊断" icon="list">
+      <SettingCard title={t("日志与诊断")} icon="list">
         <SettingRow
-          title="应用日志"
-          hint="统一记录应用、下载、扫描与播放日志；单文件最多 5 MB，最多 10 个文件，保留 7 天。"
+          title={t("应用日志")}
+          hint={t(
+            "统一记录应用、下载、扫描与播放日志；单文件最多 5 MB，最多 10 个文件，保留 7 天。",
+          )}
         >
           <Button
             variant="default"
@@ -48,36 +52,42 @@ export function LogsPanel() {
               void refresh();
             }}
           >
-            查看日志
+            {t("查看日志")}
           </Button>
         </SettingRow>
         {current.error && (
           <Alert color="red" mb="sm">
-            {current.error}
+            {t(current.error)}
           </Alert>
         )}
         {!current.available && (
           <Text size="xs" c="dimmed" pb="sm">
-            请在桌面端查看日志。
+            {t("请在桌面端查看日志。")}
           </Text>
         )}
       </SettingCard>
-      <Modal opened={opened} onClose={() => setOpened(false)} title="应用日志" size="xl" centered>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title={t("应用日志")}
+        size="xl"
+        centered
+      >
         <Stack>
           <Group justify="space-between" wrap="wrap">
             <Select
-              aria-label="日志级别"
+              aria-label={t("日志级别")}
               value={level}
               onChange={setLevel}
               allowDeselect={false}
-              data={[
+              data={localizeOptions([
                 { value: "all", label: "全部级别" },
                 ...Object.entries(levels).map(([value, label]) => ({ value, label })),
-              ]}
+              ])}
             />
             <Group gap="xs">
               <Button variant="default" onClick={() => void refresh()} loading={loading}>
-                刷新
+                {t("刷新")}
               </Button>
               <Button
                 variant="default"
@@ -87,23 +97,25 @@ export function LogsPanel() {
                     .catch(() => notice("无法打开日志目录，请检查访问权限。"));
                 }}
               >
-                打开日志目录
+                {t("打开日志目录")}
               </Button>
             </Group>
           </Group>
-          {(error || current.error) && <Alert color="red">{error || current.error}</Alert>}
+          {(error || current.error) && <Alert color="red">{t(error || current.error)}</Alert>}
           {current.dropped > 0 && (
-            <Alert color="yellow">日志写入繁忙，累计丢弃 {current.dropped} 条记录。</Alert>
+            <Alert color="yellow">
+              {t("日志写入繁忙，累计丢弃 {0} 条记录。", current.dropped)}
+            </Alert>
           )}
           <Text size="xs" c="dimmed">
-            最多显示近期 200 条，当前 {visible.length} 条；完整记录请打开日志目录。
+            {t("最多显示近期 200 条，当前 {0} 条；完整记录请打开日志目录。", visible.length)}
           </Text>
           <ScrollArea h={380}>
             <Code block style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>
               {visible
                 .map(
                   (entry) =>
-                    `${new Date(entry.time).toLocaleString("zh-CN", { hour12: false })} [${levels[entry.level]}] [${entry.module}] ${entry.message}${entry.context ? " " + JSON.stringify(entry.context) : ""}`,
+                    `${new Date(entry.time).toLocaleString(getLocale(), { hour12: false })} [${levels[entry.level]}] [${entry.module}] ${entry.message}${entry.context ? " " + JSON.stringify(entry.context) : ""}`,
                 )
                 .join("\n") || (loading ? "正在读取日志…" : "暂无符合条件的日志")}
             </Code>

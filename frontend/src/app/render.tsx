@@ -15,6 +15,54 @@ import type { UiPreferencesService } from "../services/settings/UiPreferencesSer
 import { createApplicationFeedback } from "../platform/neutralino/feedback";
 import { FeedbackBoundary } from "../features/feedback/FeedbackBoundary";
 import { FeedbackDialog } from "../features/feedback/FeedbackDialog";
+import { setLocale, translate } from "../i18n/core";
+import { useLocale } from "../i18n";
+import { useMemo } from "react";
+import type { ReactNode } from "react";
+
+function LocalizedTheme({
+  preferences,
+  children,
+}: {
+  preferences: UiPreferencesService;
+  children: ReactNode;
+}) {
+  const language = useLocale();
+  const localizedTheme = useMemo(
+    () => ({
+      ...theme,
+      components: {
+        ...theme.components,
+        Modal: {
+          ...theme.components?.Modal,
+          defaultProps: {
+            ...theme.components?.Modal?.defaultProps,
+            closeButtonProps: { "aria-label": translate("关闭对话框", language) },
+          },
+        },
+        Drawer: {
+          ...theme.components?.Drawer,
+          defaultProps: {
+            ...theme.components?.Drawer?.defaultProps,
+            closeButtonProps: { "aria-label": translate("关闭面板", language) },
+          },
+        },
+      },
+    }),
+    [language],
+  );
+  const colorSchemeManager = useMemo(() => uiColorSchemeManager(preferences), [preferences]);
+  return (
+    <MantineProvider
+      theme={localizedTheme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="dark"
+      colorSchemeManager={colorSchemeManager}
+    >
+      {children}
+    </MantineProvider>
+  );
+}
 
 let frontendLoadedAt = 0;
 let viewLoadedAt = 0;
@@ -54,6 +102,10 @@ export async function start() {
   const feedback = !id ? createApplicationFeedback(runtime) : undefined;
   const preferences = createUiPreferences(runtime);
   await preferences.initialize();
+  const synchronizeLanguage = () => setLocale(preferences.getSnapshot().value.language);
+  synchronizeLanguage();
+  const unsubscribeLanguage = preferences.subscribe(synchronizeLanguage);
+  window.addEventListener("pagehide", unsubscribeLanguage, { once: true });
   const scheme = preferences.getSnapshot().value.colorScheme;
   document.documentElement.dataset.mantineColorScheme =
     scheme === "auto"
@@ -73,18 +125,13 @@ export async function start() {
       : module.createMainView(runtime);
   createRoot(root, { onUncaughtError: failStartup }).render(
     <StrictMode>
-      <MantineProvider
-        theme={theme}
-        cssVariablesResolver={cssVariablesResolver}
-        defaultColorScheme="dark"
-        colorSchemeManager={uiColorSchemeManager(preferences)}
-      >
+      <LocalizedTheme preferences={preferences}>
         <FeedbackBoundary service={feedback}>
           {view}
           <StartupReady preferences={preferences} main={!id} />
         </FeedbackBoundary>
         {feedback && <FeedbackDialog service={feedback} />}
-      </MantineProvider>
+      </LocalizedTheme>
     </StrictMode>,
   );
 }

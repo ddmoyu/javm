@@ -1,3 +1,4 @@
+import { getLocale, t, useLocale } from "../../i18n/index";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useDebouncedValue } from "@mantine/hooks";
 import type { RefObject } from "react";
@@ -27,6 +28,7 @@ import { createLibraryLayoutSettings } from "../../platform/neutralino/libraryLa
 import classes from "./Library.module.css";
 
 export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement | null> }) {
+  useLocale();
   const { page, toggleFavorite, libraryState, library, openFilm, play, add, runtime } =
     useWorkspace();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -140,18 +142,18 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
   return (
     <div ref={rootRef} className="library-content">
       {layoutError && (
-        <Alert color="red" title="显示方式设置" mb="md" role="alert">
-          {layoutError}
+        <Alert color="red" title={t("显示方式设置")} mb="md" role="alert">
+          {t(layoutError)}
           <Button variant="subtle" size="xs" onClick={() => void layoutSettings.setLayout(layout)}>
-            保存当前选择
+            {t("保存当前选择")}
           </Button>
         </Alert>
       )}
       {libraryState.error && (
-        <Alert color="red" title="媒体库暂时无法读取" mb="md" role="alert">
-          {libraryState.error}
+        <Alert color="red" title={t("媒体库暂时无法读取")} mb="md" role="alert">
+          {t(libraryState.error)}
           <Button variant="subtle" size="xs" onClick={() => void library.refresh()}>
-            重试连接
+            {t("重试连接")}
           </Button>
         </Alert>
       )}
@@ -159,7 +161,7 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
         <div className={classes.toolbarRow}>
           <div className={classes.scope}>
             <CountTabs
-              label="媒体库筛选"
+              label={t("媒体库筛选")}
               value={scope}
               onChange={changeScope}
               items={[
@@ -172,10 +174,10 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
             <TextInput
               ref={searchRef}
               className={classes.search}
-              aria-label="搜索媒体库"
+              aria-label={t("搜索媒体库")}
               aria-keyshortcuts="Control+K Meta+K"
-              title="搜索媒体库 (Ctrl+K)"
-              placeholder="搜索影片…"
+              title={t("搜索媒体库 (Ctrl+K)")}
+              placeholder={t("搜索影片…")}
               size="sm"
               leftSection={<Icon name="search" size={16} />}
               value={query}
@@ -201,9 +203,10 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
           </div>
         </div>
         {(chips.length > 0 || query.trim()) && (
-          <Group gap={6} py={8} aria-label="已选筛选条件">
+          <Group gap={6} py={8} aria-label={t("已选筛选条件")}>
             <Text size="xs" c="dimmed" mr={4} aria-live="polite">
-              {results.total.toLocaleString()} 部
+              {results.total.toLocaleString(getLocale())}
+              {t(" 部")}
             </Text>
             {query.trim() && (
               <MantinePill
@@ -211,7 +214,8 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
                 onRemove={() => setQuery("")}
                 removeButtonProps={{ "aria-label": `清除搜索 ${query.trim()}` }}
               >
-                搜索：{query.trim()}
+                {t("搜索：")}
+                {query.trim()}
               </MantinePill>
             )}
             {chips.map((chip) => (
@@ -240,7 +244,7 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
               </MantinePill>
             ))}
             <Anchor component="button" type="button" size="xs" ml={4} onClick={clearFilters}>
-              清除全部
+              {t("清除全部")}
             </Anchor>
           </Group>
         )}
@@ -251,32 +255,32 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
         return (
           <div key={tab} hidden={scope !== tab}>
             {results.error && (
-              <Alert color="red" title="影片读取失败" mb="md" role="alert">
-                {results.error}
+              <Alert color="red" title={t("影片读取失败")} mb="md" role="alert">
+                {t(results.error)}
                 <Button variant="subtle" size="xs" onClick={view.retry}>
-                  重试
+                  {t("重试")}
                 </Button>
               </Alert>
             )}
             {!results.ready && !results.total && !results.error ? (
               <Group component="output" justify="center" py="xl">
                 <Loader size="sm" />
-                <Text size="sm">正在读取媒体库…</Text>
+                <Text size="sm">{t("正在读取媒体库…")}</Text>
               </Group>
             ) : results.total === 0 && !results.error ? (
               <Empty
                 icon="grid"
                 title={
                   !libraryState.total
-                    ? "还没有影片"
+                    ? t("还没有影片")
                     : tab === "favorites" && !chips.length && !query
-                      ? "还没有收藏"
-                      : "没有找到影片"
+                      ? t("还没有收藏")
+                      : t("没有找到影片")
                 }
                 description={
                   !libraryState.total
-                    ? "添加媒体目录，开始整理你的片库。"
-                    : "试试其他片名、番号或演员，或清除当前筛选。"
+                    ? t("添加媒体目录，开始整理你的片库。")
+                    : t("试试其他片名、番号或演员，或清除当前筛选。")
                 }
               >
                 {!libraryState.total ? (
@@ -284,11 +288,11 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
                     leftSection={<Icon name="plus" size={16} />}
                     onClick={() => add("import")}
                   >
-                    导入影片
+                    {t("导入影片")}
                   </Button>
                 ) : (
                   <Button variant="light" onClick={clearFilters}>
-                    清除筛选
+                    {t("清除筛选")}
                   </Button>
                 )}
               </Empty>
@@ -318,11 +322,11 @@ export function Library({ searchRef }: { searchRef: RefObject<HTMLInputElement |
             className="library-back-to-top"
             variant="default"
             size="xs"
-            aria-label="回到顶部"
+            aria-label={t("回到顶部")}
             onClick={scrollTop}
           >
             <span className="library-back-to-top-label" aria-hidden="true">
-              回到顶部
+              {t("回到顶部")}
             </span>
             <Icon name="arrowUp" size={14} />
           </Button>

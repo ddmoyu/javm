@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useSyncExternalStore } from "react";
 import { Alert } from "@mantine/core";
 import PlaybackWindow from "./PlaybackWindow";
@@ -25,6 +26,7 @@ export function createPlayerView(id: string, runtime: Runtime) {
   const getMessage = () => message;
   const close = connectPlayerWindow(id, service, notice);
   function PlayerView() {
+    useLocale();
     const snapshot = useSyncExternalStore(service.subscribe, service.getSnapshot);
     const error = useSyncExternalStore(subscribe, getMessage);
     return (
@@ -44,7 +46,7 @@ export function createPlayerView(id: string, runtime: Runtime) {
             onClose={() => notice("")}
             role="alert"
           >
-            {error}
+            {t(error)}
           </Alert>
         )}
       </>

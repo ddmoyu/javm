@@ -1,3 +1,4 @@
+import { t, useLocale } from "../i18n/index";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -28,6 +29,7 @@ export function VirtualGrid({
   label: string;
   overscan?: number;
 }) {
+  useLocale();
   const rootRef = useRef<HTMLUListElement>(null);
   const [geometry, setGeometry] = useState({ width: 900, margin: 0 });
   const columns = Math.max(1, columnsFor(geometry.width));
@@ -89,7 +91,7 @@ export function VirtualGrid({
     <ul
       ref={rootRef}
       className="virtual-canvas"
-      aria-label={label}
+      aria-label={t(label)}
       style={{ height: Math.max(0, virtualizer.getTotalSize() - gap) }}
     >
       {rows.flatMap((row) =>

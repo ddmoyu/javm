@@ -4,6 +4,7 @@ import type { BackgroundSettingsService } from "../../services/settings/Backgrou
 import { flushLogs, logEvent } from "../../services/logging/events";
 import { stopApplicationLaunches } from "./applicationInstance";
 import { prepareFeedbackExit, resumeFeedbackAfterFailedExit } from "./feedback";
+import { t, subscribeLocale } from "../../i18n/core";
 
 let trayReady = false;
 let traySetup: Promise<void> | undefined;
@@ -16,9 +17,9 @@ function setTrayMenu() {
   return os.setTray({
     icon: "/resources/icon.png",
     menuItems: [
-      { id: "show", text: "显示 JAVM", isDisabled: exiting },
+      { id: "show", text: t("显示 JAVM"), isDisabled: exiting },
       { text: "-" },
-      { id: "exit", text: exiting ? "正在退出…" : "退出 JAVM", isDisabled: exiting },
+      { id: "exit", text: t(exiting ? "正在退出…" : "退出 JAVM"), isDisabled: exiting },
     ],
   });
 }
@@ -32,11 +33,11 @@ function setMacMenu() {
       {
         text: "JAVM",
         menuItems: [
-          { id: "javm-show", text: "显示 JAVM", isDisabled: exiting },
+          { id: "javm-show", text: t("显示 JAVM"), isDisabled: exiting },
           { text: "-" },
           {
             id: "javm-quit",
-            text: exiting ? "正在退出…" : "退出 JAVM",
+            text: t(exiting ? "正在退出…" : "退出 JAVM"),
             shortcut: "q",
             isDisabled: exiting,
           },
@@ -97,8 +98,10 @@ export async function closeMainWindow() {
     if (exiting) return;
     void os
       .showNotification(
-        "JAVM 仍在后台运行",
-        "关闭窗口不会退出软件，后台任务将继续执行。如需彻底退出，请在托盘菜单中选择“退出 JAVM”。",
+        t("JAVM 仍在后台运行"),
+        t(
+          "关闭窗口不会退出软件，后台任务将继续执行。如需彻底退出，请在托盘菜单中选择“退出 JAVM”。",
+        ),
       )
       .catch(() => {
         logEvent("warn", "app", "background_notification_failed", "后台运行通知发送失败");
@@ -113,11 +116,13 @@ export function initializeLifecycle(
   service = downloads;
   backgroundSettings = settings;
   stopLibrary = shutdownLibrary;
+  const unsubscribeLanguage = subscribeLocale(refreshTrayMenu);
+  window.addEventListener("pagehide", unsubscribeLanguage, { once: true });
   const report = async () => {
     await nativeWindow.show();
     await os.showMessageBox(
-      "退出失败",
-      "尚未完成任务收尾，应用未退出。请检查任务状态后重试。",
+      t("退出失败"),
+      t("尚未完成任务收尾，应用未退出。请检查任务状态后重试。"),
       MessageBoxChoice.OK,
       Icon.ERROR,
     );
@@ -142,7 +147,7 @@ export function initializeLifecycle(
   traySetup = setTrayMenu()
     .then(() => {
       trayReady = true;
-      if (exiting) refreshTrayMenu();
+      refreshTrayMenu();
     })
     .catch(() => {
       trayReady = false;

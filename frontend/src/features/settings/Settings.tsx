@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -30,6 +31,8 @@ import { ApplicationUpdatePanel } from "./ApplicationUpdatePanel";
 import { LibraryBackupPanel } from "./LibraryBackupPanel";
 import { SystemIntegrationPanel } from "./SystemIntegrationPanel";
 import { FeedbackHistory } from "../feedback/FeedbackHistory";
+import { createUiPreferences } from "../../app/preferences";
+import { languages, isLocale } from "../../i18n";
 
 const contactLinks = [
   { title: "Telegram 群", label: "点击加入", url: "https://t.me/+5VEFnb2U_xgyNWY1" },
@@ -49,11 +52,14 @@ const sections = [
 type Section = (typeof sections)[number]["id"];
 
 function AppearanceSettings() {
+  const language = useLocale();
+  const { runtime } = useWorkspace();
+  const preferences = createUiPreferences(runtime);
   const { theme, setTheme, cardClickToPlay, setCardClickToPlay } = useWorkspace();
   return (
     <Stack gap="lg">
-      <SettingCard title="界面外观" icon="sun">
-        <fieldset className={classes.themeOptions} aria-label="界面主题">
+      <SettingCard title={t("界面外观")} icon="sun">
+        <fieldset className={classes.themeOptions} aria-label={t("界面主题")}>
           {(
             [
               ["light", "晨光", "明亮、清晰的浅色界面", "sun"],
@@ -64,7 +70,7 @@ function AppearanceSettings() {
               key={value}
               className={classes.themeOption}
               data-selected={theme === value || undefined}
-              aria-label={label + "主题"}
+              aria-label={t("{0}主题", t(label))}
               aria-pressed={theme === value}
               onClick={() => setTheme(value)}
             >
@@ -87,10 +93,10 @@ function AppearanceSettings() {
                 <Icon name={icon} size={18} />
                 <span className={classes.themeLabel}>
                   <Text span size="sm" fw={600}>
-                    {label}
+                    {t(label)}
                   </Text>
                   <Text span size="xs" c="dimmed">
-                    {description}
+                    {t(description)}
                   </Text>
                 </span>
                 <span className={classes.themeCheck}>
@@ -100,23 +106,31 @@ function AppearanceSettings() {
             </UnstyledButton>
           ))}
         </fieldset>
-        <SettingRow title="显示语言">
-          <Text size="sm">简体中文</Text>
-        </SettingRow>
-      </SettingCard>
-      <SettingCard title="浏览与交互" icon="sidebar">
-        <SettingRow title="单击影片卡片" hint="收藏与更多操作按钮保持独立">
-          <SegmentedControl
-            aria-label="单击影片卡片"
-            value={cardClickToPlay ? "play" : "details"}
-            onChange={(value) => setCardClickToPlay(value === "play")}
-            data={[
-              { value: "play", label: "播放影片" },
-              { value: "details", label: "打开详情" },
-            ]}
+        <SettingRow title={t("显示语言")}>
+          <Select
+            aria-label={t("显示语言")}
+            value={language}
+            data={languages.map((item) => ({ ...item }))}
+            allowDeselect={false}
+            onChange={(value) => {
+              if (isLocale(value)) void preferences.update({ language: value });
+            }}
           />
         </SettingRow>
-        <SettingRow title="展开或折叠导航">
+      </SettingCard>
+      <SettingCard title={t("浏览与交互")} icon="sidebar">
+        <SettingRow title={t("单击影片卡片")} hint={t("收藏与更多操作按钮保持独立")}>
+          <SegmentedControl
+            aria-label={t("单击影片卡片")}
+            value={cardClickToPlay ? "play" : "details"}
+            onChange={(value) => setCardClickToPlay(value === "play")}
+            data={localizeOptions([
+              { value: "play", label: "播放影片" },
+              { value: "details", label: "打开详情" },
+            ])}
+          />
+        </SettingRow>
+        <SettingRow title={t("展开或折叠导航")}>
           <Group gap={4}>
             <Kbd>Ctrl</Kbd>
             <Text size="xs" c="dimmed">
@@ -133,6 +147,7 @@ function AppearanceSettings() {
 }
 
 export function Settings() {
+  useLocale();
   const { runtime, notice, legacyImport, library } = useWorkspace();
   const [section, setSection] = useState<Section>("appearance");
   const contentRef = useRef<HTMLDivElement>(null);
@@ -165,24 +180,24 @@ export function Settings() {
               JAVM
             </Text>
             <Text size="sm" c="dimmed">
-              你的私人媒体库
+              {t("你的私人媒体库")}
             </Text>
           </div>
         </div>
-        <SettingCard title="应用信息" icon="info">
-          <SettingRow title="当前版本">
+        <SettingCard title={t("应用信息")} icon="info">
+          <SettingRow title={t("当前版本")}>
             <Text size="sm">{packageInfo.version}</Text>
           </SettingRow>
-          <SettingRow title="开源许可">
+          <SettingRow title={t("开源许可")}>
             <Text size="sm">{packageInfo.license}</Text>
           </SettingRow>
           <ApplicationUpdatePanel />
         </SettingCard>
         <LogsPanel />
         <FeedbackHistory />
-        <SettingCard title="联系方式" icon="link">
+        <SettingCard title={t("联系方式")} icon="link">
           {contactLinks.map((link) => (
-            <SettingRow key={link.url} title={link.title}>
+            <SettingRow key={link.url} title={t(link.title)}>
               <Button
                 component="a"
                 href={link.url}
@@ -191,7 +206,7 @@ export function Settings() {
                 variant="default"
                 size="xs"
                 rightSection={<Icon name="external" size={14} />}
-                aria-label={`${link.title}：${link.label}（在浏览器中打开）`}
+                aria-label={t("{0}：{1}（在浏览器中打开）", t(link.title), t(link.label))}
                 onClick={(event) => {
                   if (runtime !== "desktop") return;
                   event.preventDefault();
@@ -200,7 +215,7 @@ export function Settings() {
                   );
                 }}
               >
-                {link.label}
+                {t(link.label)}
               </Button>
             </SettingRow>
           ))}
@@ -213,12 +228,12 @@ export function Settings() {
     <div className={classes.layout}>
       <aside className={classes.sidebar}>
         <Text component="h1" className={classes.title}>
-          设置
+          {t("设置")}
         </Text>
-        <nav aria-label="设置分类" className={classes.navigation}>
+        <nav aria-label={t("设置分类")} className={classes.navigation}>
           {(["偏好设置", "服务配置", "应用"] as const).map((group) => (
             <div key={group} className={classes.navGroup}>
-              <Text className={classes.groupLabel}>{group}</Text>
+              <Text className={classes.groupLabel}>{t(group)}</Text>
               {sections
                 .filter((item) => item.group === group)
                 .map((item) => (
@@ -226,7 +241,7 @@ export function Settings() {
                     key={item.id}
                     component="button"
                     type="button"
-                    label={item.label}
+                    label={t(item.label)}
                     leftSection={<Icon name={item.icon} size={18} />}
                     active={section === item.id}
                     aria-current={section === item.id ? "page" : undefined}
@@ -241,22 +256,22 @@ export function Settings() {
         </nav>
         <Select
           className={classes.mobileNavigation}
-          aria-label="设置分类"
+          aria-label={t("设置分类")}
           value={section}
           onChange={selectSection}
           allowDeselect={false}
-          data={sections.map((item) => ({ value: item.id, label: item.label }))}
+          data={localizeOptions(sections.map((item) => ({ value: item.id, label: item.label })))}
         />
       </aside>
       <div className={classes.content} ref={contentRef}>
         <Group className={classes.pageHeading} justify="space-between" gap="sm">
           <Text component="h2" className={classes.sectionTitle}>
-            {current.label}
+            {t(current.label)}
           </Text>
           {section === "appearance" && (
             <Group gap={5} c="dimmed">
               <Icon name="check" size={14} />
-              <Text size="xs">即时生效</Text>
+              <Text size="xs">{t("即时生效")}</Text>
             </Group>
           )}
         </Group>
@@ -266,7 +281,7 @@ export function Settings() {
             key={item.id}
             id={"settings-" + item.id}
             hidden={section !== item.id}
-            aria-label={item.label + "选项"}
+            aria-label={t("{0}选项", t(item.label))}
           >
             {panels[item.id]}
           </section>

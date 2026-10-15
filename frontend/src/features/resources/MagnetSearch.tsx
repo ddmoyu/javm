@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -36,6 +37,7 @@ export function MagnetSearchPanel({
   query?: string;
   notice: (message: string) => void;
 }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const current = query === undefined || service.matches(query);
   const [sort, setSort] = useState("default");
@@ -82,7 +84,7 @@ export function MagnetSearchPanel({
     }
   };
   return (
-    <Stack gap="md" aria-label="磁力资源搜索">
+    <Stack gap="md" aria-label={t("磁力资源搜索")}>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -92,8 +94,8 @@ export function MagnetSearchPanel({
         <Group align="end">
           {query === undefined && (
             <TextInput
-              aria-label="磁力搜索关键词"
-              placeholder="输入番号或关键词搜索磁力"
+              aria-label={t("磁力搜索关键词")}
+              placeholder={t("输入番号或关键词搜索磁力")}
               value={state.input}
               maxLength={120}
               onChange={(event) => service.setInput(event.currentTarget.value)}
@@ -108,41 +110,45 @@ export function MagnetSearchPanel({
             leftSection={<Icon name="search" size={16} />}
             disabled={!state.available || state.cleanupPending || !(query ?? state.input).trim()}
           >
-            搜索磁力
+            {t("搜索磁力")}
           </Button>
           {state.searching && current && (
             <Button size="sm" variant="default" onClick={service.cancel}>
-              取消搜索
+              {t("取消搜索")}
             </Button>
           )}
         </Group>
       </form>
-      {!state.available && <Alert>请在桌面应用中搜索磁力资源。</Alert>}
+      {!state.available && <Alert>{t("请在桌面应用中搜索磁力资源。")}</Alert>}
       {current && state.searching && (
         <Stack gap={6}>
           <Text size="sm" component="output" aria-live="polite">
-            正在搜索磁力 · 已找到 {rows.length} 条 · {completed}/{state.sources.length}{" "}
-            个搜索服务已完成
+            {t(
+              "正在搜索磁力 · 已找到 {0} 条 · {1}/{2} 个搜索服务已完成",
+              rows.length,
+              completed,
+              state.sources.length,
+            )}
           </Text>
           <Progress
             value={state.sources.length ? (completed / state.sources.length) * 100 : 0}
-            aria-label="磁力搜索进度"
+            aria-label={t("磁力搜索进度")}
           />
         </Stack>
       )}
       {state.stopping && (
         <Text size="sm" c="dimmed" component="output" aria-live="polite">
-          正在停止上次请求…
+          {t("正在停止上次请求…")}
         </Text>
       )}
       {current && state.cancelled && (
         <Text size="sm" component="output" aria-live="polite">
-          已取消搜索，已找到的磁力仍可使用。
+          {t("已取消搜索，已找到的磁力仍可使用。")}
         </Text>
       )}
       {state.error && (current || state.cleanupPending || !state.query) && (
         <Alert color="red" role="alert">
-          {state.error}
+          {t(state.error)}
         </Alert>
       )}
       {state.cleanupPending && (
@@ -153,35 +159,35 @@ export function MagnetSearchPanel({
             void service.retryCleanup().catch(() => notice("清理仍未完成，请重试。"));
           }}
         >
-          重试清理
+          {t("重试清理")}
         </Button>
       )}
       {!!failures.length && (
         <Alert color="yellow" role="alert">
-          {failures.length} 个搜索服务未完成。
+          {t("{0} 个搜索服务未完成。", failures.length)}
           {[...new Set(failures.map((source) => source.error))].join(" ")}
           <Button ml="sm" size="xs" variant="default" disabled={busy} onClick={service.retryFailed}>
-            重试失败项
+            {t("重试失败项")}
           </Button>
         </Alert>
       )}
       {!!rows.length && (
         <Group justify="space-between">
           <Text size="sm" c="dimmed">
-            已找到 {rows.length} 条磁力
+            {t("已找到 {0} 条磁力", rows.length)}
           </Text>
           <SegmentedControl
             size="xs"
-            aria-label="磁力排序"
+            aria-label={t("磁力排序")}
             value={sort}
             onChange={(value) => {
               setSort(value);
               setPage(1);
             }}
-            data={[
+            data={localizeOptions([
               { value: "default", label: "默认" },
               { value: "size", label: "文件大小" },
-            ]}
+            ])}
           />
         </Group>
       )}
@@ -191,15 +197,15 @@ export function MagnetSearchPanel({
         !state.cleanupPending && (
           <Empty
             icon="magnet"
-            title={current && state.query ? "暂未找到磁力资源" : "搜索磁力资源"}
+            title={current && state.query ? t("暂未找到磁力资源") : t("搜索磁力资源")}
             description={
               current && state.query
-                ? "可换用更短的关键词或稍后重试。"
-                : "输入关键词或使用当前番号开始搜索。"
+                ? t("可换用更短的关键词或稍后重试。")
+                : t("输入关键词或使用当前番号开始搜索。")
             }
           />
         )}
-      <Stack gap="xs" aria-label="磁力结果">
+      <Stack gap="xs" aria-label={t("磁力结果")}>
         {rows.slice((shownPage - 1) * 20, shownPage * 20).map((row) => (
           <Paper key={row.id} withBorder p="sm" radius="md">
             <Stack gap="xs">
@@ -214,18 +220,19 @@ export function MagnetSearchPanel({
               </Text>
               <Group gap="xs">
                 <Badge size="sm" variant="light">
-                  磁力
+                  {t("磁力")}
                 </Badge>
                 <Text size="xs" c="dimmed">
                   {sizeLabel(row.sizeBytes)}
                 </Text>
                 {row.files !== undefined && (
                   <Text size="xs" c="dimmed">
-                    {row.files} 个文件
+                    {t("{0} 个文件", row.files)}
                   </Text>
                 )}
                 <Text size="xs" c="dimmed">
-                  做种：{row.seeders ?? "未知"}
+                  {t("做种：")}
+                  {row.seeders ?? t("未知")}
                 </Text>
                 {row.date && (
                   <Text size="xs" c="dimmed">
@@ -242,7 +249,7 @@ export function MagnetSearchPanel({
                   leftSection={<Icon name="copy" size={14} />}
                   onClick={() => void act(row.id, "copy")}
                 >
-                  复制磁力
+                  {t("复制磁力")}
                 </Button>
                 <Button
                   size="xs"
@@ -252,7 +259,7 @@ export function MagnetSearchPanel({
                   leftSection={<Icon name="download" size={14} />}
                   onClick={() => void act(row.id, "open")}
                 >
-                  {state.sent.includes(row.id) ? "再次打开下载器" : "打开外部下载器"}
+                  {state.sent.includes(row.id) ? t("再次打开下载器") : t("打开外部下载器")}
                 </Button>
               </Group>
             </Stack>
@@ -260,20 +267,25 @@ export function MagnetSearchPanel({
         ))}
       </Stack>
       {pages > 1 && (
-        <Pagination value={shownPage} onChange={setPage} total={pages} aria-label="磁力结果分页" />
+        <Pagination
+          value={shownPage}
+          onChange={setPage}
+          total={pages}
+          aria-label={t("磁力结果分页")}
+        />
       )}
       {current &&
         state.sources.some((source) => source.hasMore) &&
         rows.length < magnetLimits.rows && (
           <Button size="sm" variant="default" disabled={busy} onClick={service.loadMore}>
-            加载更多磁力
+            {t("加载更多磁力")}
           </Button>
         )}
       {current &&
         (rows.length >= magnetLimits.rows ||
           state.sources.some((source) => source.page >= magnetLimits.pages)) && (
           <Text size="xs" c="dimmed">
-            已达到本次搜索上限，可缩小关键词范围后重新搜索。
+            {t("已达到本次搜索上限，可缩小关键词范围后重新搜索。")}
           </Text>
         )}
     </Stack>

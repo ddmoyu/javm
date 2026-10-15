@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import {
   ActionIcon,
@@ -43,6 +44,7 @@ const emptyScrapes = {
 };
 
 export function Downloads() {
+  useLocale();
   const { downloads, scraping, add, notice, page, playSource, go, showScrapeQueue } =
     useWorkspace();
   const scrapeState = useSyncExternalStore(
@@ -107,7 +109,7 @@ export function Downloads() {
           loading={busy.has(task.id)}
           onClick={() => void perform(task.id, () => downloads.pause(task.id))}
         >
-          暂停
+          {t("暂停")}
         </Button>
       );
     if (canResume(task.status))
@@ -118,7 +120,7 @@ export function Downloads() {
           loading={busy.has(task.id)}
           onClick={() => void perform(task.id, () => downloads.resume(task.id))}
         >
-          {task.status === "failed" ? (task.phase === "merge" ? "重试合并" : "重试") : "继续"}
+          {task.status === "failed" ? t(task.phase === "merge" ? "重试合并" : "重试") : t("继续")}
         </Button>
       );
     if (task.status === "completed")
@@ -128,7 +130,7 @@ export function Downloads() {
           variant="subtle"
           onClick={() => playSource(task.output, { title: task.name })}
         >
-          播放
+          {t("播放")}
         </Button>
       );
     return null;
@@ -140,7 +142,7 @@ export function Downloads() {
           leftSection={<Icon name="alert" />}
           onClick={() => reportDownloadFailure(task, true)}
         >
-          反馈此问题
+          {t("反馈此问题")}
         </Menu.Item>
       )}
       <Menu.Item
@@ -148,16 +150,16 @@ export function Downloads() {
         leftSection={<Icon name="edit" />}
         onClick={() => setEditId(task.id)}
       >
-        修改名称
+        {t("修改名称")}
       </Menu.Item>
       <Menu.Item leftSection={<Icon name="info" />} onClick={() => setDetailId(task.id)}>
-        任务详情
+        {t("任务详情")}
       </Menu.Item>
       <Menu.Item
         leftSection={<Icon name="folder" />}
         onClick={() => void perform(task.id, () => downloads.open(task.id, true))}
       >
-        打开目录
+        {t("打开目录")}
       </Menu.Item>
       {task.status === "completed" && scraping && (
         <Menu.Item
@@ -176,7 +178,7 @@ export function Downloads() {
             })
           }
         >
-          {findScrape(task)?.status === "needsInput" ? "确认刮削资料" : "重试刮削"}
+          {findScrape(task)?.status === "needsInput" ? t("确认刮削资料") : t("重试刮削")}
         </Menu.Item>
       )}
       {task.status !== "completed" && task.status !== "cancelled" && (
@@ -185,7 +187,7 @@ export function Downloads() {
           leftSection={<Icon name="stop" />}
           onClick={() => void perform(task.id, () => downloads.cancel(task.id))}
         >
-          停止任务
+          {t("停止任务")}
         </Menu.Item>
       )}
       <Menu.Divider />
@@ -193,7 +195,7 @@ export function Downloads() {
         leftSection={<Icon name="trash" />}
         onClick={() => setRemoval({ id: task.id, files: false })}
       >
-        移除任务（保留文件）
+        {t("移除任务（保留文件）")}
       </Menu.Item>
       {task.status !== "completed" && (
         <Menu.Item
@@ -201,7 +203,7 @@ export function Downloads() {
           leftSection={<Icon name="trash" />}
           onClick={() => setRemoval({ id: task.id, files: true })}
         >
-          删除任务和文件
+          {t("删除任务和文件")}
         </Menu.Item>
       )}
     </>
@@ -243,7 +245,7 @@ export function Downloads() {
                     void perform(contextTask.id, () => downloads.pause(contextTask.id))
                   }
                 >
-                  暂停
+                  {t("暂停")}
                 </Menu.Item>
               ) : canResume(contextTask.status) ? (
                 <Menu.Item
@@ -253,14 +255,14 @@ export function Downloads() {
                     void perform(contextTask.id, () => downloads.resume(contextTask.id))
                   }
                 >
-                  {contextTask.status === "failed" ? "重试" : "继续"}
+                  {contextTask.status === "failed" ? t("重试") : t("继续")}
                 </Menu.Item>
               ) : contextTask.status === "completed" ? (
                 <Menu.Item
                   leftSection={<Icon name="play" />}
                   onClick={() => playSource(contextTask.output, { title: contextTask.name })}
                 >
-                  播放
+                  {t("播放")}
                 </Menu.Item>
               ) : null}
               {menuItems(contextTask)}
@@ -278,7 +280,7 @@ export function Downloads() {
       <div className="page-toolbar">
         <Group justify="space-between" wrap="wrap" align="flex-end">
           <CountTabs
-            label="下载任务筛选"
+            label={t("下载任务筛选")}
             value={filter}
             onChange={(value) => {
               setFilter(value);
@@ -298,14 +300,16 @@ export function Downloads() {
           />
           <Group gap={8} pb={8}>
             <Select
-              aria-label="同时下载数"
+              aria-label={t("同时下载数")}
               size="xs"
               w={132}
               value={String(state.settings.concurrency)}
-              data={[1, 2, 3, 4, 5].map((count) => ({
-                value: String(count),
-                label: `${count} 个同时下载`,
-              }))}
+              data={localizeOptions(
+                [1, 2, 3, 4, 5].map((count) => ({
+                  value: String(count),
+                  label: `${count} 个同时下载`,
+                })),
+              )}
               allowDeselect={false}
               disabled={
                 busy.has("concurrency") || !state.available || !state.ready || !!state.error
@@ -328,20 +332,20 @@ export function Downloads() {
               leftSection={<Icon name="pause" size={15} />}
               onClick={() => void perform("all", () => downloads.pauseAll())}
             >
-              全部暂停
+              {t("全部暂停")}
             </Button>
             <Button
               size="xs"
               leftSection={<Icon name="plus" size={15} />}
               onClick={() => add("download")}
             >
-              新建下载
+              {t("新建下载")}
             </Button>
           </Group>
         </Group>
         {state.error && (
-          <Alert color="red" title="下载服务不可用" role="alert">
-            <Text size="sm">{state.error}</Text>
+          <Alert color="red" title={t("下载服务不可用")} role="alert">
+            <Text size="sm">{t(state.error)}</Text>
             <Button
               mt="xs"
               size="xs"
@@ -355,22 +359,22 @@ export function Downloads() {
                 })
               }
             >
-              恢复下载服务
+              {t("恢复下载服务")}
             </Button>
           </Alert>
         )}
         {scrapeState.error && (
-          <Alert color="red" title="刮削服务不可用" role="alert">
-            {scrapeState.error}
+          <Alert color="red" title={t("刮削服务不可用")} role="alert">
+            {t(scrapeState.error)}
           </Alert>
         )}
         {!state.available && (
           <Text size="xs" c="dimmed">
-            下载需在 Windows 桌面应用中进行。
+            {t("下载需在 Windows 桌面应用中进行。")}
           </Text>
         )}
       </div>
-      <div className="table-panel" aria-label="下载任务列表">
+      <div className="table-panel" aria-label={t("下载任务列表")}>
         <Table
           stickyHeader
           highlightOnHover
@@ -381,11 +385,11 @@ export function Downloads() {
         >
           <Table.Thead>
             <Table.Tr>
-              <Table.Th w="30%">影片 / 任务</Table.Th>
-              <Table.Th w="13%">状态</Table.Th>
-              <Table.Th w="22%">进度 / 文件大小</Table.Th>
-              <Table.Th w="17%">速度 / 剩余</Table.Th>
-              <Table.Th w="18%">操作</Table.Th>
+              <Table.Th w="30%">{t("影片 / 任务")}</Table.Th>
+              <Table.Th w="13%">{t("状态")}</Table.Th>
+              <Table.Th w="22%">{t("进度 / 文件大小")}</Table.Th>
+              <Table.Th w="17%">{t("速度 / 剩余")}</Table.Th>
+              <Table.Th w="18%">{t("操作")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -409,43 +413,43 @@ export function Downloads() {
                   <Pill>
                     {task.status === "failed"
                       ? task.phase === "merge"
-                        ? "合并失败"
-                        : "下载失败"
-                      : downloadLabels[task.status]}
+                        ? t("合并失败")
+                        : t("下载失败")
+                      : t(downloadLabels[task.status])}
                   </Pill>
                   {task.status === "completed" && (
                     <Text size="xs" c={needsScrape(task) ? "red" : "dimmed"} mt={4}>
                       {findScrape(task)
                         ? findScrape(task)!.status === "running"
-                          ? scrapePhaseLabels[findScrape(task)!.phase]
-                          : scrapeLabels[findScrape(task)!.status]
+                          ? t(scrapePhaseLabels[findScrape(task)!.phase])
+                          : t(scrapeLabels[findScrape(task)!.status])
                         : task.scrapeHandoffError
-                          ? "刮削未入队"
+                          ? t("刮削未入队")
                           : task.scrapeAfterDownload && !task.scrapeTaskId
-                            ? "等待刮削"
+                            ? t("等待刮削")
                             : ""}
                     </Text>
                   )}
                 </Table.Td>
                 <Table.Td>
                   <Progress
-                    aria-label={`${task.name}进度`}
+                    aria-label={t("{0}进度", task.name)}
                     value={task.progress ?? 0}
                     animated={isRunning(task.status) && task.progress === null}
                     size={4}
                   />
                   <Text size="xs" c="dimmed" mt={4}>
-                    {task.progress === null ? "等待进度" : `${task.progress.toFixed(1)}%`}
+                    {task.progress === null ? t("等待进度") : t(`${task.progress.toFixed(1)}%`)}
                   </Text>
                   <Text size="xs" c="dimmed" style={{ fontVariantNumeric: "tabular-nums" }}>
-                    {formatDownloadSize(task)}
+                    {t(formatDownloadSize(task))}
                   </Text>
                 </Table.Td>
                 <Table.Td>
                   <Text size="xs">{task.speed ? `${formatBytes(task.speed)}/s` : "—"}</Text>
                   <Text size="xs" c="dimmed">
                     {task.speed > 0 && task.total > task.downloaded
-                      ? formatRemaining((task.total - task.downloaded) / task.speed)
+                      ? t(formatRemaining((task.total - task.downloaded) / task.speed))
                       : "—"}
                   </Text>
                 </Table.Td>
@@ -457,7 +461,7 @@ export function Downloads() {
                         <ActionIcon
                           variant="subtle"
                           color="gray"
-                          aria-label={`${task.name}更多操作`}
+                          aria-label={t("{0}更多操作", task.name)}
                         >
                           <Icon name="dots" />
                         </ActionIcon>
@@ -475,20 +479,20 @@ export function Downloads() {
             icon="download"
             title={
               !state.ready
-                ? "正在读取下载任务"
+                ? t("正在读取下载任务")
                 : filter === "all"
-                  ? "还没有下载任务"
-                  : "暂无此类任务"
+                  ? t("还没有下载任务")
+                  : t("暂无此类任务")
             }
             description={
               filter === "all"
-                ? "添加 MP4 或 m3u8 链接，在这里管理下载与合并。"
-                : "任务状态发生变化后会显示在这里。"
+                ? t("添加 MP4 或 m3u8 链接，在这里管理下载与合并。")
+                : t("任务状态发生变化后会显示在这里。")
             }
           >
             {filter === "all" && (
               <Button variant="light" onClick={() => add("download")}>
-                新建下载
+                {t("新建下载")}
               </Button>
             )}
           </Empty>
@@ -497,10 +501,10 @@ export function Downloads() {
       {totalPages > 1 && (
         <Group justify="space-between" py="xs" px="md">
           <Text size="xs" c="dimmed">
-            共 {shown.length} 个任务，每页 {pageSize} 个
+            {t("共 {0} 个任务，每页 {1} 个", shown.length, pageSize)}
           </Text>
           <Pagination
-            aria-label="下载任务分页"
+            aria-label={t("下载任务分页")}
             size="sm"
             total={totalPages}
             value={currentPage}
@@ -511,7 +515,7 @@ export function Downloads() {
       <Drawer
         opened={!!detail}
         onClose={() => setDetailId(null)}
-        title="任务详情"
+        title={t("任务详情")}
         position="right"
         size={500}
       >
@@ -520,16 +524,16 @@ export function Downloads() {
             <Text fw={600}>{detail.name}</Text>
             <Group>
               <Pill>
-                {detail.status === "completed" ? "视频已保存" : downloadLabels[detail.status]}
+                {detail.status === "completed" ? t("视频已保存") : t(downloadLabels[detail.status])}
               </Pill>
               <Text size="xs" c="dimmed">
-                {detail.kind === "hls" ? "m3u8 / HLS" : "MP4 直链"}
+                {detail.kind === "hls" ? "m3u8 / HLS" : t("MP4 直链")}
               </Text>
             </Group>
             <DownloadTimeline task={detail} scrape={detailScrape} queue={scrapeState} />
             <Text size="sm">
-              {detail.status === "completed" ? "文件大小" : "已下载 / 总大小"}：
-              {formatDownloadSize(detail)}
+              {detail.status === "completed" ? t("文件大小") : t("已下载 / 总大小")}：
+              {t(formatDownloadSize(detail))}
             </Text>
             <Text size="sm" style={{ overflowWrap: "anywhere" }}>
               {detail.output}
@@ -540,7 +544,7 @@ export function Downloads() {
                 variant="default"
                 onClick={() => void perform(detail.id, () => downloads.open(detail.id, true))}
               >
-                打开目录
+                {t("打开目录")}
               </Button>
             </Group>
           </Stack>
@@ -549,7 +553,7 @@ export function Downloads() {
       <Modal
         opened={!!removalTask}
         onClose={() => setRemoval(null)}
-        title={removal?.files ? "删除任务和文件" : "移除下载任务"}
+        title={removal?.files ? t("删除任务和文件") : t("移除下载任务")}
         centered
       >
         {removal && removalTask && (
@@ -559,12 +563,14 @@ export function Downloads() {
             </Text>
             <Text size="sm">
               {removal.files
-                ? "将停止任务并删除未完成的下载数据和临时文件，任务目录为空时一并删除。此操作无法撤销。"
-                : "已下载的视频和临时文件会保留；正在运行的任务会先停止。"}
+                ? t(
+                    "将停止任务并删除未完成的下载数据和临时文件，任务目录为空时一并删除。此操作无法撤销。",
+                  )
+                : t("已下载的视频和临时文件会保留；正在运行的任务会先停止。")}
             </Text>
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setRemoval(null)}>
-                取消
+                {t("取消")}
               </Button>
               <Button
                 color="red"
@@ -576,7 +582,7 @@ export function Downloads() {
                   })
                 }
               >
-                {removal.files ? "删除任务和文件" : "移除任务"}
+                {removal.files ? t("删除任务和文件") : t("移除任务")}
               </Button>
             </Group>
           </Stack>

@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -22,6 +23,7 @@ const fileLabels = { video: "视频", nfo: "NFO", image: "图片", backup: "NFO 
 const pageSize = 20;
 
 export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () => void }) {
+  useLocale();
   const { library, notice } = useWorkspace();
   const videos = film.files?.filter((file) => file.kind === "video" && file.id && file.path) ?? [];
   const [videoId, setVideoId] = useState<string | null>(videos[0]?.id ?? null);
@@ -86,11 +88,11 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
     ? [
         ...preview.files.map((file) => ({
           path: file.path,
-          label: `${fileLabels[file.kind]} · ${file.exists ? "将删除" : "文件已缺失"}`,
+          label: `${t(fileLabels[file.kind])} · ${t(file.exists ? "将删除" : "文件已缺失")}`,
         })),
         ...preview.preservedFiles.map((file) => ({
           path: file.path,
-          label: `保留 · ${file.reason}`,
+          label: `${t("保留")} · ${t(file.reason)}`,
         })),
       ]
     : [];
@@ -99,7 +101,7 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
     <Modal
       opened
       onClose={() => !busy && onClose()}
-      title="删除"
+      title={t("删除")}
       centered
       withCloseButton={!busy}
       closeOnClickOutside={!busy}
@@ -111,8 +113,10 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
           {film.title}
         </Text>
         <Checkbox
-          label="彻底删除影片"
-          description="删除全部关联视频、NFO、封面、截图及 NFO 备份，同时移除媒体库记录和收藏。"
+          label={t("彻底删除影片")}
+          description={t(
+            "删除全部关联视频、NFO、封面、截图及 NFO 备份，同时移除媒体库记录和收藏。",
+          )}
           checked={deleteAll}
           disabled={busy}
           onChange={(event) => {
@@ -126,12 +130,12 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
         {!deleteAll && (
           <>
             <Text size="sm" fw={600}>
-              仅删除选中的视频，不删除影片资料。
+              {t("仅删除选中的视频，不删除影片资料。")}
             </Text>
             {videos.length > 1 && (
               <Select
-                label="选择要删除的视频"
-                description="每次只删除选中的一个文件"
+                label={t("选择要删除的视频")}
+                description={t("每次只删除选中的一个文件")}
                 data={videos.map((file) => ({ value: file.id!, label: file.name }))}
                 value={videoId}
                 onChange={(value) => {
@@ -143,10 +147,12 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
               />
             )}
             <Text size="sm" style={{ overflowWrap: "anywhere" }}>
-              {video?.path ?? "没有本地视频。若要移除这张卡片及其资料，请勾选“彻底删除影片”。"}
+              {video?.path ?? t("没有本地视频。若要移除这张卡片及其资料，请勾选“彻底删除影片”。")}
             </Text>
             <Text size="sm" c="dimmed">
-              NFO、封面、截图和收藏会保留，卡片仍显示在媒体库中。最后一个视频删除后显示“未下载”。
+              {t(
+                "NFO、封面、截图和收藏会保留，卡片仍显示在媒体库中。最后一个视频删除后显示“未下载”。",
+              )}
             </Text>
           </>
         )}
@@ -155,26 +161,29 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
             {reading && (
               <Group gap="xs" component="output">
                 <Loader size="xs" />
-                <Text size="sm">正在读取关联文件…</Text>
+                <Text size="sm">{t("正在读取关联文件…")}</Text>
               </Group>
             )}
             {preview && (
               <>
                 <Text size="sm">
-                  将删除 {preview.files.filter((file) => file.exists).length}{" "}
-                  个文件，并移除影片卡片和收藏。
+                  {t("将删除 ")}
+                  {preview.files.filter((file) => file.exists).length}
+                  {t(" 个文件，并移除影片卡片和收藏。")}
                 </Text>
                 {preview.preservedFiles.length > 0 && (
-                  <Alert color="yellow" title="部分文件会保留">
-                    {preview.preservedFiles.length}{" "}
-                    个文件仍被其他影片使用或不支持安全删除，具体原因见清单。
+                  <Alert color="yellow" title={t("部分文件会保留")}>
+                    {t(
+                      "{0} 个文件仍被其他影片使用或不支持安全删除，具体原因见清单。",
+                      preview.preservedFiles.length,
+                    )}
                   </Alert>
                 )}
-                <Stack gap="xs" aria-label="删除文件清单">
+                <Stack gap="xs" aria-label={t("删除文件清单")}>
                   {entries.slice((listPage - 1) * pageSize, listPage * pageSize).map((entry) => (
                     <div key={entry.path}>
                       <Text size="xs" c="dimmed">
-                        {entry.label}
+                        {t(entry.label)}
                       </Text>
                       <Text size="sm" style={{ overflowWrap: "anywhere" }}>
                         {entry.path}
@@ -195,18 +204,18 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
           </>
         )}
         <Text size="sm" c="red">
-          文件会被永久删除，无法撤销。
+          {t("文件会被永久删除，无法撤销。")}
         </Text>
         {busy && (
           <Text size="sm" component="output">
             {progress?.cancelling
-              ? "正在停止…"
-              : `正在删除 ${progress?.processed ?? 0} / ${progress?.removalTotal ?? 0}…`}
+              ? t("正在停止…")
+              : t("正在删除 {0} / {1}…", progress?.processed ?? 0, progress?.removalTotal ?? 0)}
           </Text>
         )}
         {error && (
-          <Alert color="red" title="未完成删除" role="alert">
-            {error}
+          <Alert color="red" title={t("未完成删除")} role="alert">
+            {t(error)}
           </Alert>
         )}
         <Group justify="flex-end">
@@ -222,7 +231,7 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
                 setReload((value) => value + 1);
               }}
             >
-              重新读取清单
+              {t("重新读取清单")}
             </Button>
           )}
           <Button
@@ -231,7 +240,7 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
             disabled={busy && progress?.cancelling}
             onClick={() => (busy ? service?.cancel() : onClose())}
           >
-            {busy ? "停止删除" : "取消"}
+            {busy ? t("停止删除") : t("取消")}
           </Button>
           <Button
             color="red"
@@ -239,7 +248,7 @@ export function FilmDeleteDialog({ film, onClose }: { film: Film; onClose: () =>
             disabled={!service || (deleteAll ? !preview || reading : !video)}
             onClick={() => void remove()}
           >
-            {deleteAll ? "彻底删除影片" : "仅删除视频"}
+            {deleteAll ? t("彻底删除影片") : t("仅删除视频")}
           </Button>
         </Group>
       </Stack>

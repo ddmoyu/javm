@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Alert,
@@ -48,6 +49,7 @@ export function MetaTubeSearch({
   onLookupResources?: (code: string, trigger: HTMLButtonElement) => void;
   allowResourceLookup?: boolean;
 }) {
+  useLocale();
   const { metatube, notice } = useWorkspace();
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
   const [query, setQuery] = useState(initialQuery),
@@ -192,8 +194,8 @@ export function MetaTubeSearch({
     <Stack gap="md">
       <Group align="flex-start" wrap="nowrap">
         <TextInput
-          aria-label="搜索番号或片名"
-          placeholder="输入番号或片名"
+          aria-label={t("搜索番号或片名")}
+          placeholder={t("输入番号或片名")}
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
           onKeyDown={(event) => {
@@ -211,7 +213,7 @@ export function MetaTubeSearch({
           disabled={pending || state.querying || !query.trim() || state.busy}
           onClick={() => void search()}
         >
-          搜索
+          {t("搜索")}
         </Button>
         {(pending || state.querying) && (
           <Button
@@ -222,45 +224,45 @@ export function MetaTubeSearch({
               metatube.cancel();
             }}
           >
-            取消
+            {t("取消")}
           </Button>
         )}
       </Group>
       {error && (
         <Alert color="red" role="alert">
-          {error}
+          {t(error)}
         </Alert>
       )}
       {(pending || state.querying) && (
         <Text size="sm" component="output" aria-live="polite">
           {state.status === "starting"
-            ? "正在准备资料服务…"
+            ? t("正在准备资料服务…")
             : opening
-              ? "正在获取影片详情…"
-              : "正在搜索…"}
+              ? t("正在获取影片详情…")
+              : t("正在搜索…")}
         </Text>
       )}
       {/* 出错时只显示上方的错误提示，不再重复一行说明。 */}
       {!pending && !state.querying && searched && !results.length && !error && (
-        <Text size="sm">没有找到匹配结果。</Text>
+        <Text size="sm">{t("没有找到匹配结果。")}</Text>
       )}
       {!pending && resourceCode && onLookupResources && (
         <Group>
           <Text size="sm" c="dimmed">
-            尚未取得影片资料，可仅按番号查找资源链接。
+            {t("尚未取得影片资料，可仅按番号查找资源链接。")}
           </Text>
           <Button
             variant="default"
             size="xs"
             onClick={(event) => onLookupResources(resourceCode, event.currentTarget)}
           >
-            按番号查找资源
+            {t("按番号查找资源")}
           </Button>
         </Group>
       )}
       {searched && !!results.length && (
         <Text size="xs" c="dimmed">
-          {results.length} 条结果
+          {t("{0} 条结果", results.length)}
         </Text>
       )}
       {results.slice((page - 1) * 10, page * 10).map((group) => {
@@ -271,7 +273,11 @@ export function MetaTubeSearch({
               style={{ flex: 1, minWidth: 0 }}
               type="button"
               className="metadata-result"
-              aria-label={`打开详情 ${item.code || "未提供番号"} ${item.title || "未提供标题"}`}
+              aria-label={t(
+                "打开详情 {0} {1}",
+                item.code || t("未提供番号"),
+                item.title || t("未提供标题"),
+              )}
               aria-disabled={pending || state.querying || state.busy}
               aria-busy={opening === group}
               data-loading={opening === group || undefined}
@@ -279,7 +285,7 @@ export function MetaTubeSearch({
             >
               <span style={{ minWidth: 0, flex: 1 }}>
                 <Text span display="block" size="sm" fw={600} style={{ overflowWrap: "anywhere" }}>
-                  {item.code || "未提供番号"} · {item.title || "未提供标题"}
+                  {item.code || t("未提供番号")} · {item.title || t("未提供标题")}
                 </Text>
                 {item.provider && (
                   <Text span display="block" size="xs" c="dimmed">
@@ -309,7 +315,7 @@ export function MetaTubeSearch({
                     .finally(() => setSaving(null));
                 }}
               >
-                {onApply ? "采用并刮削" : "收藏并保存资料"}
+                {onApply ? t("采用并刮削") : t("收藏并保存资料")}
               </Button>
             )}
           </Group>

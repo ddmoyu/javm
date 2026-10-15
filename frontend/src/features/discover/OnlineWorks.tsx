@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import {
   useCallback,
   useEffect,
@@ -71,6 +72,7 @@ export function OnlineWorks({
   localCodes: ReadonlySet<string> | null;
   cardWidth: number;
 }) {
+  useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
   const { library, libraryState, openFilm, resourceSearch, notice } = useWorkspace();
   const artwork = library.artwork;
@@ -134,13 +136,13 @@ export function OnlineWorks({
     <div aria-busy={state.loading}>
       {matches && state.entities.length > 1 && (
         <Select
-          label={choices.label}
-          description={choices.description}
+          label={t(choices.label)}
+          description={t(choices.description)}
           mb="md"
           value={state.entity?.id ?? null}
-          placeholder={choices.placeholder}
+          placeholder={t(choices.placeholder)}
           allowDeselect={false}
-          data={choices.data}
+          data={localizeOptions(choices.data)}
           onChange={(id) => {
             if (id) service.choose(id);
           }}
@@ -148,23 +150,23 @@ export function OnlineWorks({
       )}
       {matches && state.error && !result?.items.length && (
         <Alert color="red" role="alert" mb="md">
-          {publicMessage(state.error)}
+          {t(publicMessage(state.error))}
           <Button size="xs" variant="subtle" onClick={service.retry}>
-            重试
+            {t("重试")}
           </Button>
         </Alert>
       )}
       {state.loading && !result?.items.length && (
         <Group component="output" justify="center" py="md" aria-live="polite">
           <Loader size="sm" />
-          <Text size="sm">{state.entity ? "正在读取作品…" : "正在查找条目…"}</Text>
+          <Text size="sm">{state.entity ? t("正在读取作品…") : t("正在查找条目…")}</Text>
         </Group>
       )}
       {scope === "missing" && !localCodes && !!result?.items.length && (
         <Group component="output" justify="center" py="md">
           <Loader size="xs" />
           <Text size="sm" c="dimmed">
-            正在核对本地已收录作品…
+            {t("正在核对本地已收录作品…")}
           </Text>
         </Group>
       )}
@@ -177,7 +179,7 @@ export function OnlineWorks({
           active={active}
           getKey={(index) => items[index]!.url}
           onEndReached={service.loadMore}
-          label="在线作品列表"
+          label={t("在线作品列表")}
           renderItem={(index) => {
             const work = items[index]!;
             const local = localCodes ? isLocal(work) : null;
@@ -186,7 +188,11 @@ export function OnlineWorks({
                 <UnstyledButton
                   className="online-work-open"
                   disabled={state.loading}
-                  aria-label={`查看作品 ${work.code}${local === null ? "" : local ? "，本地已收录" : "，本地缺失"}`}
+                  aria-label={t(
+                    "查看作品 {0}{1}",
+                    work.code,
+                    local === null ? "" : local ? t("，本地已收录") : t("，本地缺失"),
+                  )}
                   onClick={(event) => openWork(work, "info", event.currentTarget)}
                 >
                   <span className="online-work-cover">
@@ -199,7 +205,7 @@ export function OnlineWorks({
                         variant="filled"
                         color={local ? "teal.7" : "dark.6"}
                       >
-                        {local ? "本地" : "缺失"}
+                        {local ? t("本地") : t("缺失")}
                       </Badge>
                     )}
                   </span>
@@ -235,31 +241,31 @@ export function OnlineWorks({
         />
       )}
       {result && !result.items.length && !state.loading && !state.error && (
-        <Empty title="暂无在线作品" description="暂未找到该条目的作品。" />
+        <Empty title={t("暂无在线作品")} description={t("暂未找到该条目的作品。")} />
       )}
       {!!result?.items.length &&
         !items.length &&
         (scope === "all" || !!localCodes) &&
         !state.loading && (
           <Empty
-            title={keyword ? "无匹配作品" : "已加载的作品均已收录"}
+            title={keyword ? t("无匹配作品") : t("已加载的作品均已收录")}
             description={
               result.nextPage === null
-                ? "已加载全部作品。"
-                : "只过滤已加载的作品，可继续加载更多后再查看。"
+                ? t("已加载全部作品。")
+                : t("只过滤已加载的作品，可继续加载更多后再查看。")
             }
           >
             {result.nextPage !== null && !state.error && (
               <Button size="xs" variant="subtle" onClick={service.loadMore}>
-                加载更多作品
+                {t("加载更多作品")}
               </Button>
             )}
           </Empty>
         )}
       {!result && !state.loading && !state.error && state.entities.length <= 1 && (
-        <Empty title="尚未读取作品" description="点击重新抓取，获取作品列表。">
+        <Empty title={t("尚未读取作品")} description={t("点击重新抓取，获取作品列表。")}>
           <Button size="xs" onClick={service.retry}>
-            读取作品
+            {t("读取作品")}
           </Button>
         </Empty>
       )}
@@ -269,19 +275,19 @@ export function OnlineWorks({
             <>
               <Loader size="xs" />
               <Text size="sm" c="dimmed">
-                正在加载更多作品…
+                {t("正在加载更多作品…")}
               </Text>
             </>
           ) : state.error ? (
             <Alert color="red" role="alert">
-              {publicMessage(state.error)}
+              {t(publicMessage(state.error))}
               <Button size="xs" variant="subtle" onClick={service.retryMore}>
-                重试
+                {t("重试")}
               </Button>
             </Alert>
           ) : result.nextPage === null && items.length ? (
             <Text size="sm" c="dimmed">
-              已加载全部作品
+              {t("已加载全部作品")}
             </Text>
           ) : null}
         </Group>
@@ -314,21 +320,21 @@ export function OnlineWorks({
           collecting && artworkState?.busy ? (
             <Group justify="space-between">
               <Text size="sm" component="output" aria-live="polite">
-                正在保存图片 · {artworkState.processed} / {artworkState.total}
+                {t("正在保存图片 · {0} / {1}", artworkState.processed, artworkState.total)}
               </Text>
               <Button size="xs" variant="default" onClick={artwork?.cancel}>
-                停止获取图片
+                {t("停止获取图片")}
               </Button>
             </Group>
           ) : detail?.loading ? (
             <Text size="sm" component="output">
-              正在读取完整资料…
+              {t("正在读取完整资料…")}
             </Text>
           ) : detail?.error ? (
             <Alert color="yellow" role="alert">
-              {publicMessage(detail.error)}
+              {t(publicMessage(detail.error))}
               <Button size="xs" variant="subtle" onClick={() => service.open(detail.work)}>
-                重试详情
+                {t("重试详情")}
               </Button>
             </Alert>
           ) : undefined

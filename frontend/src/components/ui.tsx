@@ -1,3 +1,4 @@
+import { getLocale, t, useLocale } from "../i18n/index";
 import type { ReactNode } from "react";
 import { ActionIcon, Badge, EmptyState, Tabs, Text, Tooltip } from "@mantine/core";
 import { Icon } from "./icons";
@@ -16,10 +17,11 @@ export function IconButton({
   active?: boolean;
   disabled?: boolean;
 }) {
+  useLocale();
   return (
-    <Tooltip label={label}>
+    <Tooltip label={t(label)}>
       <ActionIcon
-        aria-label={label}
+        aria-label={t(label)}
         aria-pressed={active}
         onClick={onClick}
         variant={active ? "light" : "subtle"}
@@ -44,6 +46,7 @@ const toneColor: Record<Tone, string> = {
 
 /** 状态标签统一走 Mantine Badge，只按语义换色。 */
 export function Pill({ children, tone = "neutral" }: { children: ReactNode; tone?: Tone }) {
+  useLocale();
   return (
     <Badge
       variant="light"
@@ -70,13 +73,14 @@ export function Empty({
   icon?: IconName;
   children?: ReactNode;
 }) {
+  useLocale();
   return (
     <EmptyState
       py={56}
       icon={<Icon name={icon} size={28} />}
       withIndicatorBackground
-      title={title}
-      description={description}
+      title={t(title)}
+      description={t(description)}
     >
       {children && <EmptyState.Actions>{children}</EmptyState.Actions>}
     </EmptyState>
@@ -95,6 +99,7 @@ export function CountTabs<T extends string>({
   items: readonly (readonly [T, string, number])[];
   label: string;
 }) {
+  useLocale();
   return (
     <Tabs
       value={value}
@@ -102,12 +107,12 @@ export function CountTabs<T extends string>({
       className="count-tabs"
       activateTabWithKeyboard
     >
-      <Tabs.List aria-label={label}>
+      <Tabs.List aria-label={t(label)}>
         {items.map(([key, text, count]) => (
           <Tabs.Tab key={key} value={key}>
-            {text}
+            {t(text)}
             <Text span fz={12} lh="inherit" c={value === key ? "rouge.4" : "dimmed"}>
-              {count.toLocaleString()}
+              {count.toLocaleString(getLocale())}
             </Text>
           </Tabs.Tab>
         ))}

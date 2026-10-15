@@ -1,7 +1,8 @@
 import { filesystem, os } from "@neutralinojs/lib";
+import { t } from "../../i18n/core";
 
 export function selectMediaDirectory(currentPath = "") {
-  return os.showFolderDialog("选择媒体目录", currentPath ? { defaultPath: currentPath } : {});
+  return os.showFolderDialog(t("选择媒体目录"), currentPath ? { defaultPath: currentPath } : {});
 }
 
 export async function openMediaDirectory(path: string) {

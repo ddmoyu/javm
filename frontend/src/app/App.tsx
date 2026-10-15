@@ -1,3 +1,4 @@
+import { t, useLocale } from "../i18n/index";
 import {
   lazy,
   Suspense,
@@ -111,6 +112,7 @@ export function App({
   resolution?: ResolutionService;
   resourceSearch?: ResourceSearchService;
 }) {
+  useLocale();
   const [page, setPageState] = useState<Page>("library");
   const [visited, setVisited] = useState(() => new Set<Page>(["library"]));
   // 各页共用 .page-content 滚动容器；切页时记住离开页的位置，返回时恢复。
@@ -251,7 +253,7 @@ export function App({
         onClick={() => setPage(item.id)}
       >
         <Icon name={item.icon} size={20} />
-        <span>{item.id === "settings" && updateAvailable ? "有更新" : item.short}</span>
+        <span>{item.id === "settings" && updateAvailable ? t("有更新") : t(item.short)}</span>
       </UnstyledButton>
     ) : (
       <NavLink
@@ -260,7 +262,7 @@ export function App({
         type="button"
         active={page === item.id}
         aria-current={page === item.id ? "page" : undefined}
-        label={item.id === "settings" && updateAvailable ? "系统设置 · 有更新" : item.title}
+        label={item.id === "settings" && updateAvailable ? t("系统设置 · 有更新") : t(item.title)}
         leftSection={<Icon name={item.icon} size={18} />}
         onClick={() => setPage(item.id)}
         variant="light"
@@ -268,7 +270,7 @@ export function App({
       />
     );
   const groupLabel = (text: string) =>
-    collapsed ? <Divider className="rail-divider" /> : <Text className="nav-label">{text}</Text>;
+    collapsed ? <Divider className="rail-divider" /> : <Text className="nav-label">{t(text)}</Text>;
   return (
     <WorkspaceContext.Provider
       value={{
@@ -346,10 +348,13 @@ export function App({
         className="app-window"
       >
         <AppShell.Header className="titlebar">
-          <Tooltip label={`${collapsed ? "展开" : "折叠"}导航 (Ctrl+B)`} position="bottom-start">
+          <Tooltip
+            label={t("{0}导航 (Ctrl+B)", collapsed ? t("展开") : t("折叠"))}
+            position="bottom-start"
+          >
             <UnstyledButton
               className="window-button nav-toggle"
-              aria-label={collapsed ? "展开导航" : "折叠导航"}
+              aria-label={collapsed ? t("展开导航") : t("折叠导航")}
               aria-expanded={!collapsed}
               aria-controls="main-navigation"
               onClick={() => changePreference({ navCollapsed: !collapsed })}
@@ -363,16 +368,16 @@ export function App({
               JAVM
             </Text>
             <Text span fz={11} c="dimmed">
-              我的片库
+              {t("我的片库")}
             </Text>
           </WindowDragRegion>
           <WindowControls runtime={runtime} notice={notice} />
         </AppShell.Header>
         <AppShell.Navbar className="sidebar" data-collapsed={collapsed || undefined}>
-          <AppShell.Section grow component="nav" id="main-navigation" aria-label="主导航">
-            {groupLabel("浏览")}
+          <AppShell.Section grow component="nav" id="main-navigation" aria-label={t("主导航")}>
+            {t(groupLabel("浏览"))}
             {pages.slice(0, 2).map(navItem)}
-            {groupLabel("工作台")}
+            {t(groupLabel("工作台"))}
             {pages.slice(2, 5).map(navItem)}
           </AppShell.Section>
           <AppShell.Section>{navItem(pages[5]!)}</AppShell.Section>
@@ -383,7 +388,7 @@ export function App({
             ref={mainRef}
             id="main-content"
             tabIndex={-1}
-            aria-label={`${current.title}内容`}
+            aria-label={t("{0}内容", t(current.title))}
           >
             <section hidden={page !== "library"}>
               <Library searchRef={searchRef} />
@@ -439,10 +444,10 @@ export function App({
               withBorder
               icon={<Icon name="info" size={16} />}
               onClose={() => setToast(null)}
-              closeButtonProps={{ "aria-label": "关闭提示" }}
+              closeButtonProps={{ "aria-label": t("关闭提示") }}
               aria-live="polite"
             >
-              {toast?.message}
+              {t(toast?.message)}
             </Notification>
           )}
         </Transition>

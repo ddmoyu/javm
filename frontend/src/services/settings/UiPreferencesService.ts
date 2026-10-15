@@ -1,7 +1,10 @@
 import { migrateSettings, Observable } from "../metadata/shared";
 import type { Store } from "../metadata/shared";
+import { isLocale } from "../../i18n/core";
+import type { Locale } from "../../i18n/core";
 
 export interface UiPreferences {
+  language?: Locale;
   colorScheme: "light" | "dark" | "auto";
   cardClickToPlay: boolean;
   navCollapsed: boolean;
@@ -24,6 +27,7 @@ function validate(value: unknown): UiPreferences {
   )
     throw new Error("界面偏好格式无效");
   return {
+    ...(isLocale(data.language) ? { language: data.language } : {}),
     colorScheme: data.colorScheme!,
     cardClickToPlay: data.cardClickToPlay,
     navCollapsed: data.navCollapsed,

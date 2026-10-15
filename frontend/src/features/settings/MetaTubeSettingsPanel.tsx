@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Stack, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
@@ -7,6 +8,7 @@ import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
 import { MetadataPipelinePanel } from "./MetadataPipelinePanel";
 
 export function MetaTubeSettingsPanel() {
+  useLocale();
   const { metatube, scraping } = useWorkspace();
   const current = useSyncExternalStore(metatube.settings.subscribe, metatube.settings.getSnapshot);
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
@@ -17,23 +19,23 @@ export function MetaTubeSettingsPanel() {
   return (
     <Stack gap="lg">
       {scraping?.pipeline && <MetadataPipelinePanel service={scraping.pipeline} />}
-      {!current.available && <SettingNote>请在桌面端管理影片资料服务。</SettingNote>}
-      <SettingCard title="影片资料服务" icon="radar" extra={<Pill>{status}</Pill>}>
-        <SettingRow title="内置版本" hint="随 JAVM 提供和更新，无需单独下载安装。">
+      {!current.available && <SettingNote>{t("请在桌面端管理影片资料服务。")}</SettingNote>}
+      <SettingCard title={t("影片资料服务")} icon="radar" extra={<Pill>{t(status)}</Pill>}>
+        <SettingRow title={t("内置版本")} hint={t("随 JAVM 提供和更新，无需单独下载安装。")}>
           <Text size="sm">
             {publicMessage(state.version) ||
-              (!current.available ? "桌面端可用" : state.bundleChecked ? "组件缺失" : "检查中…")}
+              t(!current.available ? "桌面端可用" : state.bundleChecked ? "组件缺失" : "检查中…")}
           </Text>
         </SettingRow>
       </SettingCard>
       {state.busy && (
         <Text size="sm" component="output" aria-live="polite">
-          {publicMessage(state.progress)}…
+          {t(publicMessage(state.progress))}…
         </Text>
       )}
       {(error || current.error || state.error) && (
         <Alert color="red" role="alert">
-          {publicMessage(error || current.error || state.error)}
+          {t(publicMessage(error || current.error || state.error))}
         </Alert>
       )}
       {current.error && current.available && (
@@ -47,12 +49,13 @@ export function MetaTubeSettingsPanel() {
             });
           }}
         >
-          恢复资料设置
+          {t("恢复资料设置")}
         </Button>
       )}
       <SettingNote>
-        首次查询资料时自动启动内置服务，启动后持续运行，退出 JAVM
-        时停止。关闭窗口到托盘不会停止服务。
+        {t(
+          "首次查询资料时自动启动内置服务，启动后持续运行，退出 JAVM 时停止。关闭窗口到托盘不会停止服务。",
+        )}
       </SettingNote>
     </Stack>
   );

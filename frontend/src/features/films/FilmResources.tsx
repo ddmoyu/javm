@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import type { Film } from "../../contracts/media";
 import { useState } from "react";
 import { SegmentedControl, Stack } from "@mantine/core";
@@ -7,19 +8,20 @@ import { ResourceSearchPanel } from "../resources/ResourceSearch";
 import { MagnetSearchPanel } from "../resources/MagnetSearch";
 
 export function FilmResources({ film, preview = false }: { film: Film; preview?: boolean }) {
+  useLocale();
   const { resourceSearch, library, notice } = useWorkspace();
   const [kind, setKind] = useState("video");
   return resourceSearch ? (
     <Stack gap="md">
       {resourceSearch.magnets && (
         <SegmentedControl
-          aria-label="资源类型"
+          aria-label={t("资源类型")}
           value={kind}
           onChange={setKind}
-          data={[
+          data={localizeOptions([
             { value: "video", label: "在线视频" },
             { value: "magnet", label: "磁力资源" },
-          ]}
+          ])}
         />
       )}
       {kind === "magnet" && resourceSearch.magnets ? (
@@ -40,6 +42,6 @@ export function FilmResources({ film, preview = false }: { film: Film; preview?:
       )}
     </Stack>
   ) : (
-    <Empty icon="link" title="暂无资源链接" description="请在桌面应用中获取资源链接。" />
+    <Empty icon="link" title={t("暂无资源链接")} description={t("请在桌面应用中获取资源链接。")} />
   );
 }

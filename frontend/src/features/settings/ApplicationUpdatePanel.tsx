@@ -1,9 +1,11 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Progress, Select, Stack, Switch, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
 import { createApplicationUpdater } from "../../platform/neutralino/applicationUpdates";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
 export function ApplicationUpdatePanel() {
+  useLocale();
   const { runtime, network, notice } = useWorkspace(),
     service = createApplicationUpdater(runtime, network),
     state = useSyncExternalStore(service.subscribe, service.getSnapshot);
@@ -43,15 +45,15 @@ export function ApplicationUpdatePanel() {
   };
   return (
     <Stack gap="xs">
-      <Text size="sm">当前版本 {service.current}</Text>
+      <Text size="sm">{t("当前版本 {0}", service.current)}</Text>
       <Group align="end">
         <Select
-          label="更新通道"
+          label={t("更新通道")}
           value={state.channel}
-          data={[
+          data={localizeOptions([
             { value: "stable", label: "正式版" },
             { value: "beta", label: "测试版（Beta）" },
-          ]}
+          ])}
           allowDeselect={false}
           disabled={busy || !state.available}
           onChange={(value) => {
@@ -60,7 +62,7 @@ export function ApplicationUpdatePanel() {
           }}
         />
         <Switch
-          label="自动检查更新"
+          label={t("自动检查更新")}
           checked={state.automatic}
           disabled={busy || !state.available}
           onChange={(event) =>
@@ -69,31 +71,31 @@ export function ApplicationUpdatePanel() {
         />
       </Group>
       <Text size="xs" c="dimmed">
-        {state.channel === "beta" ? "接收 Beta 和更新的正式版。" : "仅接收正式版。"}
-        切换通道不会降级。发现更新后由你下载并确认重启安装。
+        {state.channel === "beta" ? t("接收 Beta 和更新的正式版。") : t("仅接收正式版。")}
+        {t("切换通道不会降级。发现更新后由你下载并确认重启安装。")}
       </Text>
       {!state.available && state.initialized && (
         <Text size="sm" c="dimmed">
-          {state.reason || "更新服务暂不可用。"}
+          {state.reason || t("更新服务暂不可用。")}
         </Text>
       )}
       {(state.error || state.status.error) && (
         <Alert color={phase === "rolled-back" ? "yellow" : "red"}>
-          {state.error || state.status.error}
+          {t(state.error || state.status.error)}
         </Alert>
       )}
       {phase !== "idle" && (
         <Text size="sm" role="status">
-          {labels[phase]}
+          {t(labels[phase])}
           {version ? ` · ${version}` : ""}
         </Text>
       )}
-      {phase === "downloading" && <Progress value={progress} aria-label="更新下载进度" />}
+      {phase === "downloading" && <Progress value={progress} aria-label={t("更新下载进度")} />}
       {state.release && phase === "idle" && (
-        <Text size="sm">发现新版本 {state.release.version}</Text>
+        <Text size="sm">{t("发现新版本 {0}", state.release.version)}</Text>
       )}
       {state.checked && !state.checking && !state.error && !state.release && phase === "idle" && (
-        <Text size="sm">当前通道暂无可安装的更高版本。</Text>
+        <Text size="sm">{t("当前通道暂无可安装的更高版本。")}</Text>
       )}
       <Group>
         <Button
@@ -105,21 +107,21 @@ export function ApplicationUpdatePanel() {
             void service.check().catch(report);
           }}
         >
-          检查更新
+          {t("检查更新")}
         </Button>
         {state.release && !busy && phase !== "ready" && (
           <Button size="xs" onClick={() => void service.download().catch(report)}>
-            下载 {state.release.version}
+            {t("下载 {0}", state.release.version)}
           </Button>
         )}
         {["downloading", "verifying"].includes(phase) && (
           <Button size="xs" variant="default" onClick={() => void service.cancel().catch(report)}>
-            取消更新
+            {t("取消更新")}
           </Button>
         )}
         {phase === "ready" && (
           <Button size="xs" disabled={state.restartRequired} onClick={() => setConfirming(true)}>
-            重启并安装 {version}
+            {t("重启并安装 {0}", version)}
           </Button>
         )}
         {state.release && (
@@ -132,26 +134,31 @@ export function ApplicationUpdatePanel() {
               )
             }
           >
-            查看更新日志
+            {t("查看更新日志")}
           </Button>
         )}
       </Group>
       <Modal
         opened={confirming}
         onClose={() => setConfirming(false)}
-        title="重启并安装更新"
+        title={t("重启并安装更新")}
         centered
       >
         <Stack>
           <Text size="sm">
-            将安装 {version}。下载、扫描和刮削等后台任务会先停止并保存进度，应用退出后开始安装。
+            {t(
+              "将安装 {0}。下载、扫描和刮削等后台任务会先停止并保存进度，应用退出后开始安装。",
+              version,
+            )}
           </Text>
           <Text size="sm">
-            更新前会备份程序、片库、下载记录和设置。安装或首次启动失败时恢复旧版及对应数据。系统安装包可能需要确认管理员授权。
+            {t(
+              "更新前会备份程序、片库、下载记录和设置。安装或首次启动失败时恢复旧版及对应数据。系统安装包可能需要确认管理员授权。",
+            )}
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setConfirming(false)}>
-              稍后安装
+              {t("稍后安装")}
             </Button>
             <Button
               onClick={() => {
@@ -159,7 +166,7 @@ export function ApplicationUpdatePanel() {
                 void service.install().catch(report);
               }}
             >
-              停止任务并重启安装
+              {t("停止任务并重启安装")}
             </Button>
           </Group>
         </Stack>

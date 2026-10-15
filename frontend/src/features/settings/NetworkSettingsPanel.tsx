@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Code, Group, Stack, Switch, Text, TextInput } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
@@ -13,6 +14,7 @@ const recommendedProxyUrl = "https://mojie.app/register?aff=6U9kDSoZ";
 const proxyInvitationCode = "6U9kDSoZ";
 
 export function NetworkSettingsPanel() {
+  useLocale();
   const { network, notice, runtime } = useWorkspace();
   const current = useSyncExternalStore(network.subscribe, network.getSnapshot);
   const [edited, setEdited] = useState<NetworkSettings | null>(null);
@@ -61,7 +63,7 @@ export function NetworkSettingsPanel() {
   };
   return (
     <form
-      aria-label="网络设置"
+      aria-label={t("网络设置")}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -69,13 +71,15 @@ export function NetworkSettingsPanel() {
     >
       <Stack gap="lg">
         {!current.available && (
-          <SettingNote>浏览器中可预览和编辑表单；测试代理和保存网络设置请使用桌面端。</SettingNote>
+          <SettingNote>
+            {t("浏览器中可预览和编辑表单；测试代理和保存网络设置请使用桌面端。")}
+          </SettingNote>
         )}
-        {!current.ready && <SettingNote>正在读取网络设置，请稍候。</SettingNote>}
-        <SettingCard title="网络代理" icon="globe">
-          <SettingRow title="启用代理" hint="统一管理代理地址，连接失败时自动使用">
+        {!current.ready && <SettingNote>{t("正在读取网络设置，请稍候。")}</SettingNote>}
+        <SettingCard title={t("网络代理")} icon="globe">
+          <SettingRow title={t("启用代理")} hint={t("统一管理代理地址，连接失败时自动使用")}>
             <Switch
-              aria-label="启用代理"
+              aria-label={t("启用代理")}
               checked={draft.proxyEnabled}
               disabled={busy || !current.ready}
               onChange={(event) => update({ proxyEnabled: event.currentTarget.checked })}
@@ -83,8 +87,8 @@ export function NetworkSettingsPanel() {
           </SettingRow>
           <div className={classes.fields}>
             <TextInput
-              label="代理地址"
-              description="支持 HTTP、HTTPS 和 SOCKS5。"
+              label={t("代理地址")}
+              description={t("支持 HTTP、HTTPS 和 SOCKS5。")}
               placeholder="http://127.0.0.1:7890"
               value={draft.proxy}
               autoComplete="off"
@@ -107,17 +111,17 @@ export function NetworkSettingsPanel() {
                 }
                 onClick={() => void test()}
               >
-                测试代理
+                {t("测试代理")}
               </Button>
               {current.testing && (
                 <Button type="button" variant="subtle" onClick={network.cancelTest}>
-                  取消测试
+                  {t("取消测试")}
                 </Button>
               )}
               <Text component="output" size="xs" c="dimmed" aria-live="polite">
                 {current.testing
-                  ? "正在测试 HTTPS 连通性…"
-                  : "使用当前地址测试 HTTPS 连通性，无需先保存。"}
+                  ? t("正在测试 HTTPS 连通性…")
+                  : t("使用当前地址测试 HTTPS 连通性，无需先保存。")}
               </Text>
             </Group>
             {testResult && (
@@ -132,24 +136,24 @@ export function NetworkSettingsPanel() {
                 }
                 title={
                   testResult.status === "success"
-                    ? "代理可用"
+                    ? t("代理可用")
                     : testResult.status === "failed"
-                      ? "代理测试失败"
-                      : "测试已取消"
+                      ? t("代理测试失败")
+                      : t("测试已取消")
                 }
                 role={testResult.status === "failed" ? "alert" : "status"}
               >
-                {testResult.message}
+                {t(testResult.message)}
               </Alert>
             )}
           </div>
         </SettingCard>
-        <SettingCard title="推荐科学上网" icon="globe">
+        <SettingCard title={t("推荐科学上网")} icon="globe">
           <div className={classes.proxyRecommendation}>
             <Stack gap={8} className={classes.proxyProvider}>
               <Group gap="xs">
                 <Text component="h4" size="sm" fw={600} m={0}>
-                  魔戒
+                  {t("魔戒")}
                 </Text>
                 <Text size="xs" c="dimmed">
                   mojie.app
@@ -157,7 +161,7 @@ export function NetworkSettingsPanel() {
               </Group>
               <Group gap={6}>
                 <Text size="xs" c="dimmed">
-                  邀请码
+                  {t("邀请码")}
                 </Text>
                 <Code>{proxyInvitationCode}</Code>
                 <Button
@@ -165,10 +169,10 @@ export function NetworkSettingsPanel() {
                   variant="subtle"
                   size="compact-xs"
                   leftSection={<Icon name="copy" size={13} />}
-                  aria-label="复制魔戒邀请码"
+                  aria-label={t("复制魔戒邀请码")}
                   onClick={() => void copyInvitationCode()}
                 >
-                  复制
+                  {t("复制")}
                 </Button>
               </Group>
             </Stack>
@@ -180,7 +184,7 @@ export function NetworkSettingsPanel() {
               variant="default"
               size="xs"
               rightSection={<Icon name="external" size={14} />}
-              aria-label="访问魔戒官网（在浏览器中打开）"
+              aria-label={t("访问魔戒官网（在浏览器中打开）")}
               onClick={(event) => {
                 if (runtime !== "desktop") return;
                 event.preventDefault();
@@ -189,18 +193,18 @@ export function NetworkSettingsPanel() {
                 );
               }}
             >
-              访问官网
+              {t("访问官网")}
             </Button>
           </div>
         </SettingCard>
         {(error || current.error) && (
-          <Alert color="red" title="网络设置未完成" icon={<Icon name="alert" />} role="alert">
-            {error || current.error}
+          <Alert color="red" title={t("网络设置未完成")} icon={<Icon name="alert" />} role="alert">
+            {t(error || current.error)}
           </Alert>
         )}
         <div className={classes.saveBar}>
           <Text component="output" size="xs" c={dirty ? undefined : "dimmed"}>
-            {saving ? "正在保存…" : dirty ? "有未保存的修改" : "修改后点击保存"}
+            {saving ? t("正在保存…") : dirty ? t("有未保存的修改") : t("修改后点击保存")}
           </Text>
           <Group gap="xs">
             <Button
@@ -213,7 +217,7 @@ export function NetworkSettingsPanel() {
                 network.clearTestResult();
               }}
             >
-              撤销修改
+              {t("撤销修改")}
             </Button>
             <Button
               type="submit"
@@ -221,7 +225,7 @@ export function NetworkSettingsPanel() {
               loading={saving}
               disabled={(!dirty && !current.error) || busy || !current.available || !current.ready}
             >
-              保存网络设置
+              {t("保存网络设置")}
             </Button>
           </Group>
         </div>

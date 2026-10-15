@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { useEffect, useEffectEvent, useRef, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { Group, UnstyledButton } from "@mantine/core";
@@ -17,6 +18,7 @@ export function WindowDragRegion({
   notice: (message: string) => void;
   children: ReactNode;
 }) {
+  useLocale();
   const region = useRef<HTMLDivElement>(null);
   const report = useEffectEvent(notice);
   useEffect(() => {
@@ -37,6 +39,7 @@ export function WindowControls({
   runtime: Runtime;
   notice: (message: string) => void;
 }) {
+  useLocale();
   const { maximized } = useSyncExternalStore(subscribeWindowState, getWindowState);
   const perform = async (action: "minimize" | "maximize" | "close") => {
     if (runtime !== "desktop") return;
@@ -56,7 +59,7 @@ export function WindowControls({
     <Group gap={0} wrap="nowrap">
       <UnstyledButton
         className="window-button"
-        aria-label="最小化窗口"
+        aria-label={t("最小化窗口")}
         disabled={runtime !== "desktop"}
         onClick={() => void perform("minimize")}
       >
@@ -64,7 +67,7 @@ export function WindowControls({
       </UnstyledButton>
       <UnstyledButton
         className="window-button"
-        aria-label={maximized ? "还原窗口" : "最大化窗口"}
+        aria-label={maximized ? t("还原窗口") : t("最大化窗口")}
         disabled={runtime !== "desktop"}
         onClick={() => void perform("maximize")}
       >
@@ -72,7 +75,7 @@ export function WindowControls({
       </UnstyledButton>
       <UnstyledButton
         className="window-button close"
-        aria-label="关闭窗口"
+        aria-label={t("关闭窗口")}
         disabled={runtime !== "desktop"}
         onClick={() => void perform("close")}
       >

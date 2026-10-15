@@ -1,5 +1,6 @@
 import { logEvent } from "../services/logging/events";
 import { initializeContextMenu } from "./contextMenu";
+import { t, setLocale, subscribeLocale } from "../i18n/core";
 
 const splash = document.getElementById("startup");
 const status = document.getElementById("startup-status");
@@ -8,6 +9,18 @@ const feedback = document.getElementById("startup-feedback") as HTMLButtonElemen
 let startupError: unknown;
 let completed = false;
 let slowTimer: ReturnType<typeof setTimeout> | undefined;
+let statusMessage = "正在启动…";
+
+function setStatus(message: string) {
+  statusMessage = message;
+  if (status) status.textContent = t(message);
+}
+function localizeStartup() {
+  splash?.setAttribute("aria-label", t("应用启动"));
+  if (retry) retry.textContent = t("重新加载");
+  if (feedback) feedback.textContent = t("复制反馈并打开 GitHub");
+  setStatus(statusMessage);
+}
 
 function moduleError(event: Event) {
   if (event instanceof ErrorEvent || event.target instanceof HTMLScriptElement)
@@ -16,13 +29,20 @@ function moduleError(event: Event) {
 
 export function initializeStartup() {
   initializeContextMenu();
+  localizeStartup();
+  const unsubscribeLanguage = subscribeLocale(localizeStartup);
+  window.addEventListener("pagehide", unsubscribeLanguage, { once: true });
   try {
     // 桌面端在官方 API 初始化后读取主题；此处只为浏览器预览预着色。
+    const browserPreferences =
+      "NL_PORT" in window
+        ? null
+        : JSON.parse(localStorage.getItem("javm-ui-preferences-v1") ?? "null");
+    if (browserPreferences) setLocale(browserPreferences.language);
     const saved =
       "NL_PORT" in window
         ? null
-        : (JSON.parse(localStorage.getItem("javm-ui-preferences-v1") ?? "null")?.colorScheme ??
-          localStorage.getItem("javm:color-scheme"));
+        : (browserPreferences?.colorScheme ?? localStorage.getItem("javm:color-scheme"));
     document.documentElement.dataset.mantineColorScheme =
       saved === "light" || (saved === "auto" && matchMedia("(prefers-color-scheme: light)").matches)
         ? "light"
@@ -54,10 +74,10 @@ export function initializeStartup() {
         });
         await new Promise((resolve) => setTimeout(resolve, 3000));
         const message = await service.submit(id);
-        if (status) status.textContent = message;
+        setStatus(message);
       })
       .catch(() => {
-        if (status) status.textContent = "反馈信息未能复制，请重新加载，或保留应用日志手动反馈。";
+        setStatus("反馈信息未能复制，请重新加载，或保留应用日志手动反馈。");
       })
       .finally(() => {
         feedback.disabled = false;
@@ -65,7 +85,7 @@ export function initializeStartup() {
   });
   window.addEventListener("error", moduleError, true);
   slowTimer = setTimeout(() => {
-    if (status) status.textContent = "启动耗时较长，仍在加载界面…";
+    setStatus("启动耗时较长，仍在加载界面…");
     if (retry) retry.hidden = false;
   }, 8000);
 }
@@ -84,7 +104,7 @@ export function failStartup(error: unknown) {
   clearTimeout(slowTimer);
   window.removeEventListener("error", moduleError, true);
   if (splash) splash.hidden = false;
-  if (status) status.textContent = "界面加载失败，请重试。";
+  setStatus("界面加载失败，请重试。");
   if (retry) retry.hidden = false;
   if (feedback) feedback.hidden = false;
   logEvent(

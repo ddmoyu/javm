@@ -1,3 +1,4 @@
+import { t, useLocale } from "../../i18n/index";
 import { Menu } from "@mantine/core";
 import type { Film } from "../../contracts/media";
 import { useWorkspace } from "../../app/state";
@@ -7,6 +8,7 @@ import { parentDirectory } from "../../services/library/maintenanceRules";
 import { libraryError } from "../../services/library/LibraryService";
 
 export function FilmMenuItems({ film, deleteVideo }: { film: Film; deleteVideo: () => void }) {
+  useLocale();
   const { play, openFilm, toggleFavorite, library, notice, runtime } = useWorkspace();
   const videos = film.files?.filter((file) => file.kind === "video") ?? [];
   const localFile =
@@ -22,17 +24,17 @@ export function FilmMenuItems({ film, deleteVideo }: { film: Film; deleteVideo: 
         leftSection={<Icon name="play" />}
         onClick={() => play(film)}
       >
-        播放影片
+        {t("播放影片")}
       </Menu.Item>
       <Menu.Item leftSection={<Icon name="list" />} onClick={() => openFilm(film)}>
-        影片详情
+        {t("影片详情")}
       </Menu.Item>
       <Menu.Divider />
       <Menu.Item leftSection={<Icon name="heart" />} onClick={() => toggleFavorite(film)}>
-        {film.favorite ? "取消收藏" : "加入收藏"}
+        {film.favorite ? t("取消收藏") : t("加入收藏")}
       </Menu.Item>
       <Menu.Item leftSection={<Icon name="edit" />} onClick={() => openFilm(film, "edit")}>
-        编辑资料
+        {t("编辑资料")}
       </Menu.Item>
       <Menu.Item
         leftSection={<Icon name="folder" />}
@@ -47,7 +49,7 @@ export function FilmMenuItems({ film, deleteVideo }: { film: Film; deleteVideo: 
           }
         }}
       >
-        打开目录
+        {t("打开目录")}
       </Menu.Item>
       <Menu.Divider />
       <Menu.Item
@@ -56,7 +58,7 @@ export function FilmMenuItems({ film, deleteVideo }: { film: Film; deleteVideo: 
         leftSection={<Icon name="trash" />}
         onClick={deleteVideo}
       >
-        删除
+        {t("删除")}
       </Menu.Item>
     </>
   );

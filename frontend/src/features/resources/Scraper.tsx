@@ -1,3 +1,4 @@
+import { t, localizeOptions, useLocale } from "../../i18n/index";
 import {
   useImperativeHandle,
   useLayoutEffect,
@@ -25,6 +26,7 @@ export interface ScraperHandle {
 }
 const noSubscribe = () => () => {};
 export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
+  useLocale();
   const { openFilm, scraping, notice, library, resourceSearch } = useWorkspace();
   const [matching, setMatching] = useState<ScrapeTask | null>(null);
   const [searchKind, setSearchKind] = useState("metadata");
@@ -92,10 +94,10 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
     <Tabs value={tab} onChange={setTab} className="fill-column">
       <Tabs.List mb="md">
         <Tabs.Tab value="search" leftSection={<Icon name="search" size={16} />}>
-          搜索资源
+          {t("搜索资源")}
         </Tabs.Tab>
         <Tabs.Tab value="batch" leftSection={<Icon name="layers" size={16} />}>
-          批量刮削
+          {t("批量刮削")}
         </Tabs.Tab>
       </Tabs.List>
       <Tabs.Panel value="search" className="fill-column">
@@ -103,13 +105,13 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
           <Group mb="md">
             <SegmentedControl
               size="sm"
-              aria-label="资源搜索类型"
+              aria-label={t("资源搜索类型")}
               value={searchKind}
               onChange={setSearchKind}
-              data={[
+              data={localizeOptions([
                 { value: "metadata", label: "影片资料" },
                 { value: "magnet", label: "磁力资源" },
-              ]}
+              ])}
             />
           </Group>
         )}
@@ -134,18 +136,18 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
           {collecting && !preview && artworkState?.busy && (
             <Group justify="space-between" mb="sm">
               <Text size="sm" component="output" aria-live="polite">
-                正在保存图片 · {artworkState.processed} / {artworkState.total}
+                {t("正在保存图片 · {0} / {1}", artworkState.processed, artworkState.total)}
               </Text>
               <Button size="xs" variant="default" onClick={artwork?.cancel}>
-                停止获取图片
+                {t("停止获取图片")}
               </Button>
             </Group>
           )}
           {selected && (
             <Group mb="md" justify="space-between">
-              <Text size="sm">当前影片：{selected.title}</Text>
+              <Text size="sm">{t("当前影片：{0}", selected.title)}</Text>
               <Button variant="default" size="xs" onClick={() => openFilm(selected, "edit")}>
-                编辑并补全资料
+                {t("编辑并补全资料")}
               </Button>
             </Group>
           )}
@@ -216,14 +218,14 @@ export function Scraper({ ref }: { ref: Ref<ScraperHandle> }) {
           collecting && artworkState?.busy ? (
             <Group justify="space-between">
               <Text size="sm" component="output" aria-live="polite">
-                正在保存图片 · {artworkState.processed} / {artworkState.total}
+                {t("正在保存图片 · {0} / {1}", artworkState.processed, artworkState.total)}
               </Text>
               <Button size="xs" variant="default" onClick={artwork?.cancel}>
-                停止获取图片
+                {t("停止获取图片")}
               </Button>
             </Group>
           ) : !previewDetails ? (
-            <Alert color="yellow">尚未获取影片资料，此处仅按番号查找资源链接。</Alert>
+            <Alert color="yellow">{t("尚未获取影片资料，此处仅按番号查找资源链接。")}</Alert>
           ) : undefined
         }
         onClose={() => setPreview(null)}
