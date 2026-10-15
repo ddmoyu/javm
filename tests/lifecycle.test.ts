@@ -30,7 +30,7 @@ vi.mock("@neutralinojs/lib", () => ({
 }));
 
 beforeEach(() => {
-  vi.stubGlobal("window", { NL_OS: "Windows" });
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { NL_OS: "Windows" }));
   vi.resetModules();
   vi.resetAllMocks();
   native.handlers.clear();
@@ -45,7 +45,10 @@ beforeEach(() => {
   ])
     mock.mockResolvedValue(undefined);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  window.dispatchEvent(new Event("pagehide"));
+  vi.unstubAllGlobals();
+});
 
 async function fixture(runInBackground = true) {
   const lifecycle = await import("../frontend/src/platform/neutralino/lifecycle");
@@ -62,6 +65,25 @@ async function fixture(runInBackground = true) {
 }
 
 describe("关闭主窗口与显式退出", () => {
+  it("语言切换更新托盘，页面卸载后停止订阅", async () => {
+    await fixture();
+    const { setLocale } = await import("../frontend/src/i18n/core");
+    setLocale("en");
+    await vi.waitFor(() =>
+      expect(native.setTray).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          menuItems: expect.arrayContaining([
+            expect.objectContaining({ id: "exit", text: "Quit JAVM" }),
+          ]),
+        }),
+      ),
+    );
+    window.dispatchEvent(new Event("pagehide"));
+    native.setTray.mockClear();
+    setLocale("ja");
+    expect(native.setTray).not.toHaveBeenCalled();
+  });
+
   it("默认关闭只隐藏主窗口，不中断任务；系统关闭事件使用相同规则", async () => {
     const app = await fixture();
     await app.closeMainWindow();

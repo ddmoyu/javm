@@ -37,10 +37,13 @@ beforeEach(() => {
   mocks.show.mockResolvedValue(undefined);
   mocks.exit.mockResolvedValue(undefined);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  window.dispatchEvent(new Event("pagehide"));
+  vi.unstubAllGlobals();
+});
 
 it("macOS 菜单退出等待后台任务收尾，再退出官方宿主", async () => {
-  vi.stubGlobal("window", { NL_OS: "Darwin" });
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { NL_OS: "Darwin" }));
   const lifecycle = await import("../frontend/src/platform/neutralino/lifecycle");
   let complete!: () => void;
   const shutdown = vi.fn(
@@ -72,7 +75,7 @@ it("macOS 菜单退出等待后台任务收尾，再退出官方宿主", async (
 });
 
 it("Linux 托盘不可用时关窗也会等待下载关闭，而不是留下不可见进程", async () => {
-  vi.stubGlobal("window", { NL_OS: "Linux" });
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { NL_OS: "Linux" }));
   mocks.tray.mockRejectedValue(new Error("safe missing tray"));
   const lifecycle = await import("../frontend/src/platform/neutralino/lifecycle");
   const shutdown = vi.fn().mockResolvedValue(undefined);

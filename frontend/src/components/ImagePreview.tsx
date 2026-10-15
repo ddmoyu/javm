@@ -59,9 +59,13 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
     failed?: boolean;
   }>();
   const returnTarget = useRef<HTMLElement | undefined>(undefined);
-  useEffect(() => subscribePrivacySession(() => {
-    if (getPrivacySession().protected) setGallery(null);
-  }), []);
+  useEffect(
+    () =>
+      subscribePrivacySession(() => {
+        if (getPrivacySession().protected) setGallery(null);
+      }),
+    [],
+  );
   const value = useMemo(
     () => ({
       opened: gallery !== null,
@@ -87,7 +91,8 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
       // Mantine 重新启用焦点约束会先聚焦关闭按钮，随后再返回图片入口。
       const trigger = returnTarget.current;
       const timer = window.setTimeout(() => {
-        if (trigger?.isConnected && !getPrivacySession().protected) trigger.focus({ preventScroll: true });
+        if (trigger?.isConnected && !getPrivacySession().protected)
+          trigger.focus({ preventScroll: true });
         returnTarget.current = undefined;
       });
       return () => window.clearTimeout(timer);

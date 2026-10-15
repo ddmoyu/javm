@@ -34,7 +34,7 @@ vi.mock("../frontend/src/services/logging/events", () => ({
 }));
 
 beforeEach(() => {
-  vi.stubGlobal("window", { NL_OS: "Windows" });
+  vi.stubGlobal("window", Object.assign(new EventTarget(), { NL_OS: "Windows" }));
   vi.resetModules();
   vi.resetAllMocks();
   native.handlers.clear();
@@ -48,7 +48,10 @@ beforeEach(() => {
   ])
     fn.mockResolvedValue(undefined);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  window.dispatchEvent(new Event("pagehide"));
+  vi.unstubAllGlobals();
+});
 
 async function fixture() {
   let closed = false;
