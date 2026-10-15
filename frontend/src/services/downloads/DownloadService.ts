@@ -8,6 +8,7 @@ import { DownloadAdditionCancelledError, DuplicateDownloadError } from "./duplic
 import type { DuplicateDownloadConfirmation } from "./duplicates";
 import { reportDownloadFailure } from "../feedback/downloads";
 import { reportFailure } from "../feedback/events";
+import { recordUsage } from "../analytics/events";
 
 interface Snapshot {
   tasks: DownloadTask[];
@@ -234,7 +235,11 @@ export class DownloadService {
         ? { ...this.find(task.id), revision: saved.revision, updatedAt: saved.updatedAt }
         : saved,
     );
-    if (saved.status === "completed" && previous?.status !== "completed") void this.handoff(saved);
+    if (saved.status === "completed" && previous?.status !== "completed") {
+      recordUsage("download_video_count");
+      void this.handoff(saved);
+    }
+    if (failed) recordUsage("download_video_failed_count");
   }
   initialize() {
     this.starting ??= this.exclusive(async () => {

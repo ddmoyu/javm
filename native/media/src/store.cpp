@@ -149,7 +149,7 @@ void Store::open() {
         db_=nullptr;ready_=false;throw;
     }
 }
-Store::~Store() { if(db_) sqlite3_close(db_); }
+Store::~Store() { if(analyticsDb_) sqlite3_close(analyticsDb_); if(db_) sqlite3_close(db_); }
 void Store::migrate() {
     const auto version=rows(db_,"PRAGMA user_version")[0]["user_version"];
     const auto application=rows(db_,"PRAGMA application_id")[0]["application_id"];
@@ -174,6 +174,7 @@ void Store::migrate() {
 #include "store_library.inc"
 #include "store_scrape.inc"
 #include "store_import.inc"
+#include "store_analytics.inc"
 #include "store_resources.inc"
 #include "store_documents.inc"
 #include "store_artwork.inc"

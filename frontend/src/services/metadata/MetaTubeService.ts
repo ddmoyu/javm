@@ -2,6 +2,7 @@ import { JsonHttpError, Observable, Settings, list, record, serviceError, text }
 import type { JsonHttp, Store } from "./shared";
 import type { EditableMetadata } from "../../contracts/metadata";
 import { StopUnconfirmedError } from "../downloads/ports";
+import { recordUsage } from "../analytics/events";
 
 export interface MetaTubeSettings {
   providers: string[];
@@ -393,7 +394,9 @@ export class MetaTubeService extends Observable<{
   async search(query: string, signal?: AbortSignal) {
     const q = text(query, 200);
     if (!q) throw new Error("请输入番号或片名。");
+    signal?.throwIfAborted();
     return this.query(async (connection, signal) => {
+      recordUsage("search_designation_count");
       const data: unknown[] = [];
       let failed = false;
       // v1.4.0 的 provider 只接受单个名称；按用户配置顺序查询，限制放大请求。

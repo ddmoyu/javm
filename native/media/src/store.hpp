@@ -9,6 +9,7 @@
 namespace media {
 class Store {
     sqlite3* db_ = nullptr;
+    sqlite3* analyticsDb_ = nullptr;
     fs::path path_;
     fs::path catalogSeedPath_;
     std::mutex mutex_;
@@ -18,6 +19,7 @@ class Store {
     std::string recoveryError_;
     void setRecoveryError(std::string value) { std::lock_guard lock(recoveryMutex_); recoveryError_=std::move(value); }
     void open();
+    void openAnalytics();
     void migrate();
     void prepareCatalog();
     std::string matchWork(const Json& nfo, const std::string& requested = "");
@@ -51,6 +53,7 @@ public:
     Json catalogSeed(const Json& params);
     Json catalogEntries(const Json& params);
     Json summary();
+    Json analytics(const std::string& method, const Json& params);
     Json video(const std::string& id);
     bool duplicateCode(const std::string& code, const std::string& except);
     void favorite(const std::string& id, bool value);

@@ -12,7 +12,7 @@ export interface HttpRequest {
   connectTimeoutMs?: number;
   maxRedirects?: number;
   cacheTtlMs?: number;
-  purpose: "catalog" | "portrait" | "metadata" | "artwork" | "resolution" | "proxy";
+  purpose: "catalog" | "portrait" | "metadata" | "artwork" | "resolution" | "proxy" | "analytics";
 }
 export interface HttpResponse {
   status: number;

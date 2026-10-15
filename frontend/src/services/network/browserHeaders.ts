@@ -13,6 +13,7 @@ export function browserHeaders(
     portrait: "image/avif,image/webp,image/jpeg,image/*;q=0.9,*/*;q=0.8",
     artwork: "image/avif,image/webp,image/jpeg,image/*;q=0.9,*/*;q=0.8",
     metadata: "application/json",
+    analytics: "application/json",
     resolution: "*/*",
     proxy: "*/*",
   };

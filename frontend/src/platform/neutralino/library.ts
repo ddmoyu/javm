@@ -17,7 +17,10 @@ import { normalizedPath, pathComparisonKey, pathRelativeTo } from "../../service
 import { waitForUpdateStartup } from "./updateGate";
 
 export class NativeLibraryPort implements LibraryPort {
-  constructor(private startup = false) {}
+  constructor(
+    private startup = false,
+    private quietErrors = false,
+  ) {}
   private listening?: Promise<unknown>;
   private pending = new Map<
     string,
@@ -37,9 +40,10 @@ export class NativeLibraryPort implements LibraryPort {
     clearTimeout(pending.timer);
     if (reply.ok) pending.resolve(reply.result);
     else {
-      logEvent("error", "database", "request_failed", reply.error || "媒体库操作失败", {
-        requestId: reply.requestId,
-      });
+      if (!this.quietErrors)
+        logEvent("error", "database", "request_failed", reply.error || "媒体库操作失败", {
+          requestId: reply.requestId,
+        });
       pending.reject(new Error(reply.error || "媒体库操作失败"));
     }
   };
@@ -52,7 +56,11 @@ export class NativeLibraryPort implements LibraryPort {
       const timer = setTimeout(
         () => {
           this.pending.delete(requestId);
-          logEvent("error", "database", "request_timeout", "媒体库请求超时", { method, requestId });
+          if (!this.quietErrors)
+            logEvent("error", "database", "request_timeout", "媒体库请求超时", {
+              method,
+              requestId,
+            });
           reject(
             new LibraryRequestTimeoutError(
               "媒体库未响应，请先刷新查看状态；若仍无法连接，请重启桌面应用。",

@@ -2,6 +2,7 @@ import type { PlaybackController } from "./PlaybackService";
 import type { PlaybackSettingsService } from "./PlaybackSettingsService";
 import { playbackRequest } from "./source";
 import type { PlaybackOptions, PlaybackRequest } from "./source";
+import { recordUsage } from "../analytics/events";
 
 /** 所有业务播放入口共用偏好；子窗口只负责实际内置播放。 */
 export class PreferredPlaybackController implements PlaybackController {
@@ -34,8 +35,12 @@ export class PreferredPlaybackController implements PlaybackController {
       if (error) throw new Error(error);
       if (settings.defaultPlayer === "external") {
         await this.external(request, settings.externalPlayerPath, abort.signal);
+        if (!abort.signal.aborted) recordUsage("play_video_count");
         await this.internal.close();
-      } else await this.internal.play(source, options);
+      } else {
+        const result = await this.internal.play(source, options);
+        if (!abort.signal.aborted && result?.started !== false) recordUsage("play_video_count");
+      }
     })();
     this.operation = operation;
     try {

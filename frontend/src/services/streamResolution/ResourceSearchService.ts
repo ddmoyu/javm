@@ -1,5 +1,6 @@
 import type { NewDownload } from "../../contracts/downloads";
 import { DownloadAdditionCancelledError } from "../downloads/duplicates";
+import { recordUsage } from "../analytics/events";
 import type { MagnetSearchService } from "../magnets/MagnetSearchService";
 import type {
   ResolutionHandle,
@@ -379,6 +380,7 @@ export class ResourceSearchService {
       };
       this.pendingSources = sources;
       this.startNextSource();
+      recordUsage("search_resource_link_count");
       this.publish();
       this.savePreferences();
     } catch (error) {
@@ -498,6 +500,7 @@ export class ResourceSearchService {
     const source = this.sources.find((item) => item.id === sourceId);
     if (!source || !this.snapshot.code) return;
     this.startSource(source);
+    recordUsage("search_resource_link_count");
     this.publish();
   };
   /** 详情页挂载期间持有对应番号；最后一个详情关闭后取消该番号仍在进行的查找。 */

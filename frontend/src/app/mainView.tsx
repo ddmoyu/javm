@@ -32,6 +32,7 @@ import { activeScrape } from "../contracts/scraping";
 import { createLibraryLayoutSettings } from "../platform/neutralino/libraryLayout";
 import { createUiPreferences } from "./preferences";
 import { createApplicationFeedback } from "../platform/neutralino/feedback";
+import { createApplicationAnalytics, shutdownAnalytics } from "../platform/neutralino/analytics";
 
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
@@ -47,6 +48,7 @@ export function createMainView(runtime: Runtime) {
   }));
   if (runtime === "desktop") void initializeMainWindowSize();
   const network = createNetworkSettings(runtime);
+  createApplicationAnalytics(runtime, network);
   const updater = createApplicationUpdater(runtime, network);
   const backgroundSettings = createBackgroundSettings(runtime);
   const downloads = createDownloadService(runtime, network);
@@ -277,10 +279,11 @@ export function createMainView(runtime: Runtime) {
       await scraping.shutdown();
       await legacyImport.shutdown();
       await catalog.shutdown();
-      await network.shutdown();
       await playback.shutdown();
       await metadata.ai.shutdown();
       await metadata.metatube.shutdown();
+      await shutdownAnalytics();
+      await network.shutdown();
       await shutdownHttp();
       await library.shutdown();
     });

@@ -1,5 +1,7 @@
 # JAVM 桌面应用重构计划
 
+2026-10-15 统计更新：按用户授权迁移并优化旧版 Supabase 统计，沿用原配置、14 个字段和次日上报，使用 TypeScript 应用级服务及独立原生 SQLite 持久化；服务端按日归档和权限收紧已部署并回读核验，客户端尚未发布，详见 [ADR 0038](decisions/0038-supabase-analytics.md)。
+
 2026-10-14 更新范围：用户确认正式/Beta 双通道和现有全部桌面平台，自动检查、手动下载与确认重启，包含整包安装和程序/数据回退；另授权旧 Tauri 密钥签名兼容包。原生验签、快照、安装/恢复助手纳入 C++ 范围，通道与业务状态仍由 TypeScript 管理，详见 [ADR 0035](decisions/0035-automatic-updates.md)。
 
 本文规定 JAVM 从 Vue 与 Tauri Rust 迁移到 React、TypeScript、Mantine、Vite+ 和 Neutralinojs 的实施范围、模块边界、技术选型与验收标准。普通业务优先使用 TypeScript、Web 标准和 Neutralino 官方能力；SQLite 由独立 C++ 数据库扩展访问，使用 Neutralino 官方 Extension 协议通信。

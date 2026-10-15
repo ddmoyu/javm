@@ -178,6 +178,6 @@ export function createPlaybackService(runtime: Runtime) {
 }
 
 /** 业务函数入口：本地绝对路径与网络直链共用，不创建额外的输入界面。 */
-export function play(source: string, options?: PlaybackOptions): Promise<void> {
-  return createPlaybackService("NL_PORT" in window ? "desktop" : "browser").play(source, options);
+export async function play(source: string, options?: PlaybackOptions): Promise<void> {
+  await createPlaybackService("NL_PORT" in window ? "desktop" : "browser").play(source, options);
 }

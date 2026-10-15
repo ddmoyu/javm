@@ -36,8 +36,10 @@ export interface PlaybackSnapshot {
 /** 业务调用方不依赖视频在当前页面还是独立窗口内渲染。 */
 export type PlaybackController = Pick<
   PlaybackService,
-  "getSnapshot" | "subscribe" | "play" | "close" | "shutdown"
->;
+  "getSnapshot" | "subscribe" | "close" | "shutdown"
+> & {
+  play(source: string, options?: PlaybackOptions): Promise<{ started: boolean } | void>;
+};
 
 /** 单个应用级播放会话；页面切换和 React StrictMode 不会创建第二个播放服务。 */
 export class PlaybackService {
@@ -114,6 +116,7 @@ export class PlaybackService {
     this.operation = operation;
     try {
       await operation;
+      return { started: !controller.signal.aborted };
     } finally {
       if (this.operation === operation) this.operation = undefined;
     }

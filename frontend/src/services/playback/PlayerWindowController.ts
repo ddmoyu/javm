@@ -217,14 +217,18 @@ export class PlayerWindowController implements PlaybackController {
     };
     const session = existing ?? ((reuse && this.latest()) || this.createSession(snapshot));
     if (!focusOnly) this.updateSession(session, snapshot);
+    let started = false;
     const operation = (async () => {
       await session.ready;
-      if (!this.closing)
+      if (!this.closing) {
         await this.command(session, focusOnly ? { action: "focus" } : { action: "play", request });
+        started = !focusOnly;
+      }
     })();
     this.operation = operation;
     try {
       await operation;
+      return { started };
     } catch (error) {
       if (!focusOnly && !this.closing && this.sessions.has(session))
         this.updateSession(session, {

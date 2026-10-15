@@ -113,6 +113,7 @@ Json LibraryService::start(const Json& directory, unsigned concurrency) {
 }
 #include "backup.inc"
 Json LibraryService::handle(const std::string& method, const Json& params) {
+    if(method.starts_with("library.analytics.")) return store_.analytics(method,params);
     if(method.starts_with("library.backup.")) return backup(method,params);
     if(!store_.healthy()) {
         if(method.starts_with("library.instance.")) return store_.applicationInstance(method,params);
