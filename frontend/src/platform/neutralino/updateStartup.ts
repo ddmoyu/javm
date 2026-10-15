@@ -40,6 +40,8 @@ export function confirmUpdateStartup() {
       keys = [];
     }
     for (const key of keys) {
+      // 旧版诊断不是业务设置；新版已移到 diagnostics，损坏诊断不阻断更新恢复。
+      if (key === "failure-feedback-v1") continue;
       const value = await storage.getData(key);
       if (value.length > 4 * 1024 * 1024) throw new Error("设置文件过大，更新验证失败。");
       JSON.parse(value);

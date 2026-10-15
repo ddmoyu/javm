@@ -29,6 +29,7 @@ import { openExternalLink } from "../../platform/neutralino/externalLinks";
 import { ApplicationUpdatePanel } from "./ApplicationUpdatePanel";
 import { LibraryBackupPanel } from "./LibraryBackupPanel";
 import { SystemIntegrationPanel } from "./SystemIntegrationPanel";
+import { FeedbackHistory } from "../feedback/FeedbackHistory";
 
 const contactLinks = [
   { title: "Telegram 群", label: "点击加入", url: "https://t.me/+5VEFnb2U_xgyNWY1" },
@@ -178,6 +179,7 @@ export function Settings() {
           <ApplicationUpdatePanel />
         </SettingCard>
         <LogsPanel />
+        <FeedbackHistory />
         <SettingCard title="联系方式" icon="link">
           {contactLinks.map((link) => (
             <SettingRow key={link.url} title={link.title}>

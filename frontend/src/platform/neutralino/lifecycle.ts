@@ -3,6 +3,7 @@ import type { DownloadService } from "../../services/downloads/DownloadService";
 import type { BackgroundSettingsService } from "../../services/settings/BackgroundSettingsService";
 import { flushLogs, logEvent } from "../../services/logging/events";
 import { stopApplicationLaunches } from "./applicationInstance";
+import { prepareFeedbackExit, resumeFeedbackAfterFailedExit } from "./feedback";
 
 let trayReady = false;
 let traySetup: Promise<void> | undefined;
@@ -69,8 +70,10 @@ export async function exitApplication(beforeExit?: () => Promise<void>) {
     logEvent("info", "app", "stopped", "任务收尾完成，应用即将退出");
     await flushLogs();
     await beforeExit?.();
+    await prepareFeedbackExit();
     await app.exit();
   } catch (error) {
+    await resumeFeedbackAfterFailedExit();
     logEvent(
       "error",
       "app",

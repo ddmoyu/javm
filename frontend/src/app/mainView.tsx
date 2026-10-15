@@ -31,10 +31,20 @@ import { isRunning } from "../contracts/downloads";
 import { activeScrape } from "../contracts/scraping";
 import { createLibraryLayoutSettings } from "../platform/neutralino/libraryLayout";
 import { createUiPreferences } from "./preferences";
+import { createApplicationFeedback } from "../platform/neutralino/feedback";
 
 export function createMainView(runtime: Runtime) {
   const logs = createApplicationLogs(runtime);
   const layoutSettings = createLibraryLayoutSettings(runtime);
+  observeLogState("settings", layoutSettings, (value) => ({
+    state: "片库显示设置",
+    error: value.error,
+  }));
+  const playbackSettings = createPlaybackSettings(runtime);
+  observeLogState("settings", playbackSettings, (value) => ({
+    state: "播放设置",
+    error: value.error,
+  }));
   if (runtime === "desktop") void initializeMainWindowSize();
   const network = createNetworkSettings(runtime);
   const updater = createApplicationUpdater(runtime, network);
@@ -73,6 +83,10 @@ export function createMainView(runtime: Runtime) {
     error: value.error || value.warning,
   }));
   const playback = createPlaybackService(runtime);
+  observeLogState("playback", playback, (value) => ({
+    state: value.preparing ? "准备播放" : value.opened ? "播放中" : "播放已关闭",
+    error: value.error,
+  }));
   // 首次资料请求启动 MetaTube 前，先等待旧进程回收完成。
   const metadata = createMetadataServices(runtime, network, () => downloads.initialize());
   library.artwork = createArtworkService(
@@ -152,10 +166,12 @@ export function createMainView(runtime: Runtime) {
     state: value.scan ? `扫描 ${value.scan.state}` : value.ready ? "媒体库就绪" : "正在读取媒体库",
     error:
       value.error ||
-      value.scan?.issues
-        .slice(-3)
-        .map((issue) => issue.message)
-        .join("；"),
+      (value.scan && ["failed", "partial"].includes(value.scan.state)
+        ? value.scan.issues
+            .slice(-3)
+            .map((issue) => issue.message)
+            .join("；") || `扫描结束，${value.scan.errors} 项处理失败。`
+        : ""),
     context: value.scan
       ? { taskId: value.scan.id, processed: value.scan.processed, errors: value.scan.errors }
       : undefined,
@@ -180,6 +196,75 @@ export function createMainView(runtime: Runtime) {
     state: value.runInBackground ? "关闭窗口后后台运行" : "关闭窗口后退出",
     error: value.error,
   }));
+  observeLogState("updates", updater, (value) => ({
+    state: value.checking ? "检查更新中" : value.status.phase,
+    error:
+      value.error ||
+      (["failed", "rolled-back"].includes(value.status.phase) ? value.status.error : ""),
+  }));
+  observeLogState("backup", library.backups, (value) => ({
+    state: `${value.operation ?? ""} ${value.state}`,
+    error: value.state === "failed" ? value.error || "备份或恢复失败" : "",
+    context: value.id ? { taskId: value.id } : undefined,
+  }));
+  observeLogState("scraping", scraping, (value) => ({
+    state: value.paused ? "刮削队列已暂停" : "刮削队列就绪",
+    error: value.error,
+  }));
+  if (library.documents)
+    observeLogState("library", library.documents, (value) => ({
+      state: value.running ? `资料文件 ${value.mode} 中` : "资料文件处理结束",
+      error:
+        !value.running && !value.cancelled
+          ? value.error || value.failures.slice(-3).join("；")
+          : "",
+      context: { failed: value.failed, processed: value.processed },
+    }));
+  if (library.maintenance)
+    observeLogState("library", library.maintenance, (value) => ({
+      state: `片库检查清理 ${value.phase}`,
+      error:
+        value.phase !== "cleaning" && !value.cancelling ? value.failures.slice(-3).join("；") : "",
+    }));
+  if (library.watcher)
+    observeLogState("library", library.watcher, (value) => ({
+      state: value.enabled ? "目录监视启用" : "目录监视关闭",
+      error: value.error,
+    }));
+  observeLogState("resolution", resourceSearch, (value) => ({
+    state: value.searching ? "资源搜索中" : "资源搜索结束",
+    error: value.storageError || (!value.searching && !value.cancelled ? value.error : ""),
+  }));
+  observeLogState("resolution", resolution, (value) => ({
+    state: value.cleanupPending ? "资源解析等待清理" : "资源解析就绪",
+    error: value.tasks
+      .filter(
+        (task) =>
+          task.state === "failed" &&
+          task.error &&
+          ![
+            "not_found",
+            "invalid_input",
+            "interaction_required",
+            "session_required",
+            "cancelled",
+          ].includes(task.error.code),
+      )
+      .slice(-3)
+      .map((task) => task.error!.message)
+      .join("；"),
+  }));
+  if (resourceSearch.magnets)
+    observeLogState("magnets", resourceSearch.magnets, (value) => ({
+      state: value.searching ? "磁力搜索中" : "磁力搜索结束",
+      error:
+        !value.searching && !value.cancelled
+          ? value.sources
+              .filter((source) => source.state === "failed")
+              .map((source) => source.error)
+              .join("；")
+          : "",
+    }));
   if (runtime === "desktop")
     initializeLifecycle(downloads, backgroundSettings, async () => {
       await createUiPreferences(runtime).flush();
@@ -212,9 +297,10 @@ export function createMainView(runtime: Runtime) {
           legacyImport={legacyImport}
           playback={playback}
           network={network}
-          playbackSettings={createPlaybackSettings(runtime)}
+          playbackSettings={playbackSettings}
           backgroundSettings={backgroundSettings}
           logs={logs}
+          feedback={createApplicationFeedback(runtime)}
           {...metadata}
         />
       </ImagePreviewProvider>

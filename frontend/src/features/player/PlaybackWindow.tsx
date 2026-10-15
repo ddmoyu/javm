@@ -18,6 +18,7 @@ import { Icon } from "../../components/icons";
 import { window as nativeWindow } from "@neutralinojs/lib";
 import { startPlayerDrag } from "../../platform/neutralino/playerFrame";
 import { bindToolbarVisibility } from "./toolbarVisibility";
+import { logEvent } from "../../services/logging/events";
 import {
   getWindowState,
   refreshWindowState,
@@ -89,11 +90,13 @@ function Media({ media }: { media: PreparedPlayback }) {
     },
     onError: () => {
       const code = video.current?.error?.code;
-      setError(
+      const message =
         code === 3 || code === 4
           ? "当前环境无法解码此视频，或视频源格式无效。可在播放设置中选择外部播放器后重新播放。"
-          : "视频加载失败，请检查文件、网络、链接有效期及访问权限后重试。",
-      );
+          : "视频加载失败，请检查文件、网络、链接有效期及访问权限后重试。";
+      setError(message);
+      if (code !== 1)
+        logEvent("error", "playback", "media_failed", message, { mediaErrorCode: code ?? 0 });
     },
   };
   return (

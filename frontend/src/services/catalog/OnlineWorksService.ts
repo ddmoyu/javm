@@ -8,6 +8,9 @@ import { javbusEntityUrl, javbusSearchUrl, entityOf } from "./javbusWorks";
 import type { WorksDimension } from "./javbusWorks";
 import { javbusEntryFromEntity } from "./javbusCatalog";
 import type { JavbusCatalogEntry } from "./javbusCatalog";
+import { logEvent } from "../logging/events";
+
+class NoMatchingEntity extends Error {}
 
 interface Snapshot {
   available: boolean;
@@ -70,7 +73,13 @@ export class OnlineWorksService extends Observable<Snapshot> {
           await operation(abort.signal);
         })
         .catch((error: unknown) => {
-          if (error instanceof StopUnconfirmedError) this.cleanup = error.retry;
+          if (error instanceof StopUnconfirmedError) {
+            this.cleanup = error.retry;
+            if (generation !== this.generation || this.stopping)
+              logEvent("error", "catalog", "works_cleanup_failed", error.message, {
+                action: "online_works",
+              });
+          }
           if (generation !== this.generation || this.stopping) return;
           const cause = abort.signal.aborted ? abort.signal.reason : error;
           const message =
@@ -82,6 +91,12 @@ export class OnlineWorksService extends Observable<Snapshot> {
           if (detail && this.snapshot.detail)
             this.publish({ detail: { ...this.snapshot.detail, error: message, loading: false } });
           else this.publish({ error: message, ready: true });
+          if (!(error instanceof NoMatchingEntity))
+            logEvent("error", "catalog", "works_failed", message, {
+              action: detail ? "work_detail" : "online_works",
+              page: this.snapshot.page,
+              dimension: this.snapshot.selection?.dimension ?? "",
+            });
         })
         .finally(() => {
           clearTimeout(timer);
@@ -131,7 +146,9 @@ export class OnlineWorksService extends Observable<Snapshot> {
       signal.throwIfAborted();
       this.publish({ entities, ready: true });
       if (!entities.length)
-        throw new Error("未找到与该名称或明确别名匹配的 JavBus 条目，可查看本地已收录作品。");
+        throw new NoMatchingEntity(
+          "未找到与该名称或明确别名匹配的 JavBus 条目，可查看本地已收录作品。",
+        );
       if (entities.length === 1) {
         this.publish({ entity: entities[0]! });
         await this.readPage(entities[0]!, 1, signal);

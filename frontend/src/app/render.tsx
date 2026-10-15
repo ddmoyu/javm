@@ -12,6 +12,9 @@ import { failStartup, finishStartup } from "./startup";
 import { confirmUpdateStartup, prepareUpdateStartup } from "../platform/neutralino/updateStartup";
 import { createUiPreferences, uiColorSchemeManager } from "./preferences";
 import type { UiPreferencesService } from "../services/settings/UiPreferencesService";
+import { createApplicationFeedback } from "../platform/neutralino/feedback";
+import { FeedbackBoundary } from "../features/feedback/FeedbackBoundary";
+import { FeedbackDialog } from "../features/feedback/FeedbackDialog";
 
 let frontendLoadedAt = 0;
 let viewLoadedAt = 0;
@@ -48,6 +51,7 @@ export async function start() {
     if (!(await claimApplicationInstance())) return;
   }
   if (!id) createApplicationLogs(runtime);
+  const feedback = !id ? createApplicationFeedback(runtime) : undefined;
   const preferences = createUiPreferences(runtime);
   await preferences.initialize();
   const scheme = preferences.getSnapshot().value.colorScheme;
@@ -75,8 +79,11 @@ export async function start() {
         defaultColorScheme="dark"
         colorSchemeManager={uiColorSchemeManager(preferences)}
       >
-        {view}
-        <StartupReady preferences={preferences} main={!id} />
+        <FeedbackBoundary service={feedback}>
+          {view}
+          <StartupReady preferences={preferences} main={!id} />
+        </FeedbackBoundary>
+        {feedback && <FeedbackDialog service={feedback} />}
       </MantineProvider>
     </StrictMode>,
   );

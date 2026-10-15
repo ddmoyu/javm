@@ -1,5 +1,6 @@
 import type { LibraryPort } from "./LibraryService";
 import { Observable, serviceError } from "../metadata/shared";
+import { logEvent } from "../logging/events";
 export interface FileOperation {
   id: string;
   media_id: string;
@@ -63,6 +64,8 @@ export class FileOrganizationService extends Observable<{
     const done = Promise.resolve()
       .then(() => work(abort.signal))
       .catch((error: unknown) => {
+        if (!abort.signal.aborted)
+          logEvent("error", "library", "file_operation_failed", serviceError(error), { action });
         this.publish({
           error: abort.signal.aborted ? "已暂停，文件与恢复记录已保留。" : serviceError(error),
         });

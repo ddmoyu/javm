@@ -11,6 +11,7 @@ import type {
 } from "../../contracts/maintenance";
 import type { LibraryPort } from "./LibraryService";
 import { normalizeKeywords } from "./maintenanceRules";
+import { logEvent } from "../logging/events";
 
 const emptyPage: MaintenancePage = {
   rows: [],
@@ -115,6 +116,7 @@ export class LibraryMaintenanceService {
           });
         }
       } catch (error) {
+        logEvent("error", "settings", "maintenance_rules_failed", message(error));
         this.publish({ error: message(error) });
       } finally {
         this.publish({ settingsReady: true });
@@ -165,6 +167,7 @@ export class LibraryMaintenanceService {
     };
     worker.onerror = () => {
       this.terminate();
+      logEvent("error", "library", "maintenance_worker_failed", "后台检查失败，请重新检查");
       this.publish({ phase: "idle", error: "后台检查失败，请重新检查", changing: false });
     };
   }
@@ -218,8 +221,10 @@ export class LibraryMaintenanceService {
       if (generation === this.generation && !this.stopped)
         this.publish({ ...result, phase: "ready" });
     } catch (error) {
-      if (generation === this.generation && !this.stopped)
+      if (generation === this.generation && !this.stopped) {
+        logEvent("error", "library", "maintenance_scan_failed", message(error));
         this.publish({ phase: "idle", error: message(error) });
+      }
     }
   }
   cancel() {
@@ -238,6 +243,7 @@ export class LibraryMaintenanceService {
     try {
       this.publish(await this.call<MaintenancePage>(command));
     } catch (error) {
+      logEvent("error", "library", "maintenance_change_failed", message(error));
       this.publish({ error: message(error) });
     } finally {
       this.publish({ changing: false });
@@ -391,9 +397,11 @@ export class LibraryMaintenanceService {
         this.publish(await this.call<MaintenancePage>({ type: "removed", ids: removed }));
       }
     } catch (error) {
+      if (!this.cancelled) logEvent("error", "library", "maintenance_failed", message(error));
       this.publish({ error: message(error) });
     } finally {
       await this.refreshLibrary().catch((error: unknown) => {
+        logEvent("error", "library", "maintenance_refresh_failed", message(error));
         this.publish({ error: message(error) });
       });
       const operationError = this.snapshot.error;

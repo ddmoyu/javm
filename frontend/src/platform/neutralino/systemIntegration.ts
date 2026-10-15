@@ -5,8 +5,9 @@ import { Observable, serviceError } from "../../services/metadata/shared";
 import { protocolScript } from "../../services/settings/systemProtocol";
 import type { ProtocolOperation, ProtocolState } from "../../services/settings/systemProtocol";
 import { NativeLibraryPort } from "./library";
+import { logEvent } from "../../services/logging/events";
 
-class SystemIntegrationService extends Observable<{
+export class SystemIntegrationService extends Observable<{
   available: boolean;
   busy: boolean;
   error: string;
@@ -39,6 +40,7 @@ class SystemIntegrationService extends Observable<{
       if (reply.exitCode || result.error) throw new Error(result.error || "链接设置失败，请重试。");
       this.publish({ result });
     } catch (error) {
+      logEvent("error", "settings", "protocol_failed", serviceError(error), { action: operation });
       this.publish({ error: serviceError(error) });
     } finally {
       this.publish({ busy: false });

@@ -8,6 +8,8 @@ export class LogService {
   private pending: LogEntry[] = [];
   private sequence = 0;
   private session = crypto.randomUUID();
+  private recentEntries: LogEntry[] = [];
+  private entryListeners = new Set<(entry: LogEntry) => void>();
   private timer?: ReturnType<typeof setTimeout>;
   private writing?: Promise<void>;
   private maintenance?: ReturnType<typeof setInterval>;
@@ -23,6 +25,14 @@ export class LogService {
     };
   }
   getSnapshot = () => this.snapshot;
+  getSession = () => this.session;
+  getRecentEntries = () => this.recentEntries.slice();
+  observeEntries(listener: (entry: LogEntry) => void) {
+    this.entryListeners.add(listener);
+    return () => {
+      this.entryListeners.delete(listener);
+    };
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -44,13 +54,23 @@ export class LogService {
     this.maintenance = setInterval(maintain, 3600000);
   }
   record = (input: LogInput) => {
-    if (!this.store || this.stopped || input.level === "debug") return;
+    if (this.stopped || input.level === "debug") return;
     const entry = {
       ...cleanLog(input),
       time: new Date().toISOString(),
       session: this.session,
       sequence: ++this.sequence,
     };
+    this.recentEntries.push(entry);
+    if (this.recentEntries.length > 400) this.recentEntries.shift();
+    for (const listener of this.entryListeners) {
+      try {
+        listener(entry);
+      } catch {
+        /* 诊断订阅者不能影响日志写入。 */
+      }
+    }
+    if (!this.store) return;
     if (this.pending.length >= 500) {
       ++this.dropped;
       if (!this.snapshot.dropped) this.publish({ dropped: this.dropped });

@@ -6,6 +6,8 @@ import { StopUnconfirmedError } from "./ports";
 import { logEvent } from "../logging/events";
 import { DownloadAdditionCancelledError, DuplicateDownloadError } from "./duplicates";
 import type { DuplicateDownloadConfirmation } from "./duplicates";
+import { reportDownloadFailure } from "../feedback/downloads";
+import { reportFailure } from "../feedback/events";
 
 interface Snapshot {
   tasks: DownloadTask[];
@@ -118,6 +120,14 @@ export class DownloadService {
           });
         },
         async (error: unknown) => {
+          reportFailure({
+            module: "downloads",
+            title: "下载完成后添加刮削任务失败",
+            message: describeError(error),
+            taskId: task.id,
+            url: task.url,
+            details: { action: "scrape_handoff", phase: task.phase },
+          });
           await this.exclusive(async () => {
             const current = this.snapshot.tasks.find((item) => item.id === task.id);
             if (current) await this.save({ ...current, scrapeHandoffError: describeError(error) });
@@ -194,6 +204,15 @@ export class DownloadService {
       revision: task.revision + 1,
       updatedAt: new Date().toISOString(),
     };
+    const failed = task.status === "failed" && previous?.status !== "failed";
+    if (failed) {
+      // 下载失败已发生，不能让随后数据库写入失败吞掉原始原因、链接与日志。
+      logEvent("error", "downloads", "state_changed", redactLog(task.error, task), {
+        taskId: task.id,
+        phase: task.phase,
+      });
+      reportDownloadFailure(saved);
+    }
     try {
       await this.repository.save(saved, task.revision);
     } catch (error) {
@@ -201,7 +220,7 @@ export class DownloadService {
       this.publish({ error: describeError(error) });
       throw error;
     }
-    if (previous?.status !== task.status)
+    if (!failed && previous?.status !== task.status)
       logEvent(
         task.status === "failed" ? "error" : "info",
         "downloads",

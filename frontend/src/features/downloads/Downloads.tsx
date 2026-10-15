@@ -30,6 +30,7 @@ import type { ScrapeTask } from "../../contracts/scraping";
 import { DownloadTimeline } from "./DownloadTimeline";
 import { createDownloadScrapeLookup } from "./downloadScrapes";
 import { EditDownloadModal } from "./EditDownloadModal";
+import { reportDownloadFailure } from "../../services/feedback/downloads";
 
 const ignoreDownloadUpdates = () => () => {};
 const pageSize = 50;
@@ -134,6 +135,14 @@ export function Downloads() {
   };
   const menuItems = (task: DownloadTask) => (
     <>
+      {task.status === "failed" && (
+        <Menu.Item
+          leftSection={<Icon name="alert" />}
+          onClick={() => reportDownloadFailure(task, true)}
+        >
+          反馈此问题
+        </Menu.Item>
+      )}
       <Menu.Item
         disabled={active(task) || busy.has(task.id)}
         leftSection={<Icon name="edit" />}

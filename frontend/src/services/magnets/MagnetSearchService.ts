@@ -3,6 +3,8 @@ import { ResolutionError } from "../streamResolution/shared";
 import { normalizeMagnet } from "./magnet";
 import { magnetLimits, magnetQuery, magnetSources } from "./types";
 import type { MagnetPage, MagnetResource, MagnetSourceId } from "./types";
+import { logEvent } from "../logging/events";
+import { serviceError } from "../metadata/shared";
 
 interface SourceState {
   id: MagnetSourceId;
@@ -217,6 +219,10 @@ export class MagnetSearchService {
         } catch (error) {
           if (error instanceof StopUnconfirmedError) {
             this.cleanup.add(error.retry);
+            logEvent("error", "magnets", "cleanup_failed", serviceError(error), {
+              action: "search_cleanup",
+              source,
+            });
             // 旧查询的清理失败同样保留所有权，不能由代次过滤掉。
             this.stopRequests();
             this.publish({
@@ -307,6 +313,9 @@ export class MagnetSearchService {
             this.cleanup.delete(retry);
             this.cleanup.add(error.retry);
           }
+          logEvent("error", "magnets", "cleanup_failed", serviceError(error), {
+            action: "retry_cleanup",
+          });
           throw new Error("搜索清理仍未完成，请重试或退出应用。");
         } finally {
           this.publish();
@@ -336,7 +345,11 @@ export class MagnetSearchService {
       await handoff;
       if (this.revision === revision)
         this.publish({ sent: [...new Set([...this.snapshot.sent, id])] });
-    } catch {
+    } catch (error) {
+      logEvent("error", "magnets", "handoff_failed", serviceError(error), {
+        action: "open_downloader",
+        taskId: id,
+      });
       throw new Error("无法打开外部下载器，请确认已安装并关联磁力协议，或复制磁力链接。");
     } finally {
       this.handoff = undefined;

@@ -93,13 +93,21 @@ export async function flushLogs() {
   }
 }
 export function captureUnhandledErrors() {
-  const error = (event: ErrorEvent) => logEvent("error", "frontend", "uncaught", event.message);
+  const error = (event: ErrorEvent) =>
+    logEvent(
+      "error",
+      "frontend",
+      "uncaught",
+      event.error instanceof Error ? (event.error.stack ?? event.message) : event.message,
+    );
   const rejection = (event: PromiseRejectionEvent) =>
     logEvent(
       "error",
       "frontend",
       "unhandled_rejection",
-      event.reason instanceof Error ? event.reason.message : String(event.reason),
+      event.reason instanceof Error
+        ? (event.reason.stack ?? event.reason.message)
+        : String(event.reason),
     );
   window.addEventListener("error", error);
   window.addEventListener("unhandledrejection", rejection);

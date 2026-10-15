@@ -4,6 +4,7 @@ import type { LibraryPort } from "./LibraryService";
 import { StopUnconfirmedError } from "../downloads/ports";
 import { normalizeCode } from "../scraping/identity";
 import { imageCandidates } from "../images/ImageSourceService";
+import { logEvent } from "../logging/events";
 
 export function artworkSources(details: MovieDetails) {
   return {
@@ -78,10 +79,8 @@ export class ArtworkService extends Observable<{
   private run(action: string, operation: (signal: AbortSignal) => Promise<void>) {
     if (this.stopped || this.active) return Promise.reject(new Error("请等待当前图片任务结束。"));
     const abort = new AbortController();
-    const timeout = setTimeout(
-      () => abort.abort(new Error("图片任务超过 10 分钟，已停止。")),
-      600_000,
-    );
+    const timeoutError = new Error("图片任务超过 10 分钟，已停止。");
+    const timeout = setTimeout(() => abort.abort(timeoutError), 600_000);
     this.publish({ busy: true, action, processed: 0, total: 0, error: "", warning: "" });
     const done = Promise.resolve()
       .then(async () => {
@@ -93,13 +92,27 @@ export class ArtworkService extends Observable<{
         await operation(abort.signal);
       })
       .catch((error: unknown) => {
+        const cancelled =
+          abort.signal.aborted &&
+          abort.signal.reason !== timeoutError &&
+          !(error instanceof StopUnconfirmedError);
+        const message = cancelled
+          ? "图片处理已取消。"
+          : serviceError(
+              error instanceof StopUnconfirmedError ? error : (abort.signal.reason ?? error),
+            );
+        if (!cancelled) logEvent("error", "artwork", "operation_failed", message, { action });
         if (error instanceof StopUnconfirmedError) this.cleanup = error;
-        this.publish({ error: abort.signal.aborted ? "图片处理已取消。" : serviceError(error) });
+        this.publish({ error: message });
         throw error;
       })
       .finally(async () => {
         clearTimeout(timeout);
-        await this.refresh().catch(() => {});
+        if (this.snapshot.warning && !this.snapshot.error)
+          logEvent("error", "artwork", "operation_partial", this.snapshot.warning, { action });
+        await this.refresh().catch((error: unknown) => {
+          logEvent("error", "artwork", "refresh_failed", serviceError(error), { action });
+        });
         this.active = undefined;
         this.publish({ busy: false });
       });

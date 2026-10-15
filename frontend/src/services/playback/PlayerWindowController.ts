@@ -15,6 +15,7 @@ interface Pending {
   timer: ReturnType<typeof setTimeout>;
 }
 interface Session {
+  id: string;
   channel: BroadcastChannel;
   ready: Promise<void>;
   failed: (error: Error) => void;
@@ -87,6 +88,7 @@ export class PlayerWindowController implements PlaybackController {
     let lastContact = performance.now();
     let lastTick = lastContact;
     const session: Session = {
+      id,
       channel,
       pending: new Map(),
       ready: new Promise<void>((resolve, reject) => {
@@ -103,6 +105,13 @@ export class PlayerWindowController implements PlaybackController {
         if (now - lastTick > 15000) lastContact = now;
         lastTick = now;
         if (now - lastContact > 120000) {
+          logEvent(
+            "error",
+            "playback",
+            "window_disconnected",
+            "播放器窗口超过 120 秒未响应，连接已断开。可能是子窗口异常退出或长时间无响应。",
+            { windowId: id },
+          );
           this.disconnect(session);
           return;
         }
@@ -111,6 +120,9 @@ export class PlayerWindowController implements PlaybackController {
     };
     this.sessions.add(session);
     session.startup = setTimeout(() => {
+      logEvent("error", "playback", "window_startup_failed", "播放器窗口启动超时，请重试。", {
+        windowId: id,
+      });
       failed(new Error("播放器窗口启动超时，请重试。"));
       this.disconnect(session);
     }, 20000);
@@ -153,6 +165,10 @@ export class PlayerWindowController implements PlaybackController {
     void Promise.resolve()
       .then(() => this.launch(id))
       .catch((error: unknown) => {
+        if (this.sessions.has(session))
+          logEvent("error", "playback", "window_startup_failed", playbackError(error), {
+            windowId: id,
+          });
         failed(new Error(playbackError(error)));
         this.disconnect(session);
       });
@@ -166,6 +182,13 @@ export class PlayerWindowController implements PlaybackController {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         session.pending.delete(id);
+        logEvent(
+          "error",
+          "playback",
+          "window_command_failed",
+          "播放器窗口没有响应，请关闭播放器后重试。",
+          { windowId: session.id, action: command.action },
+        );
         reject(new Error("播放器窗口没有响应，请关闭播放器后重试。"));
       }, 45000);
       session.pending.set(id, { resolve, reject, timer });

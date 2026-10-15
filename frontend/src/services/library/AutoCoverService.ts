@@ -39,6 +39,7 @@ export class AutoCoverService extends Observable<AutoCoverState> {
   private active?: { abort: AbortController; done: Promise<void> };
   private again = false;
   private stopped = false;
+  private failures: string[] = [];
   constructor(
     private port: Pick<LibraryPort, "request">,
     private tools: Pick<
@@ -60,7 +61,8 @@ export class AutoCoverService extends Observable<AutoCoverState> {
     const abort = new AbortController();
     const done = this.run(abort.signal)
       .catch((error: unknown) => {
-        if (!abort.signal.aborted) this.publish({ error: serviceError(error) });
+        if (!abort.signal.aborted || error instanceof StopUnconfirmedError)
+          this.publish({ error: serviceError(error) });
       })
       .finally(() => {
         this.active = undefined;
@@ -73,6 +75,7 @@ export class AutoCoverService extends Observable<AutoCoverState> {
     this.active = { abort, done };
   }
   private async run(signal: AbortSignal) {
+    this.failures = [];
     this.publish({ running: true, processed: 0, created: 0, failed: 0, error: "" });
     let after = "",
       created = 0,
@@ -109,6 +112,8 @@ export class AutoCoverService extends Observable<AutoCoverState> {
       if (sinceRefresh) await this.refresh().catch(() => {});
       if (created || failed)
         this.log(`自动封面：生成 ${created} 张${failed ? `，${failed} 个视频截帧失败` : ""}。`);
+      if (failed)
+        this.publish({ error: `自动封面有 ${failed} 项失败：${this.failures.join("；")}` });
     }
   }
   private async cover(item: PendingCover, signal: AbortSignal) {
@@ -145,6 +150,7 @@ export class AutoCoverService extends Observable<AutoCoverState> {
       if (error instanceof StopUnconfirmedError || signal.aborted) throw error;
       // 片库正在扫描时停止本轮，扫描结束后会重新安排。
       if (/片库操作完成后/.test(serviceError(error))) throw error;
+      if (this.failures.length < 3) this.failures.push(serviceError(error).slice(0, 300));
       await this.port
         .request("library.artwork.failed", { id: item.id, fileStamp: item.file_stamp })
         .catch(() => {});

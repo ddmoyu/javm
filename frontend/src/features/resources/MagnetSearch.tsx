@@ -17,6 +17,7 @@ import { Empty } from "../../components/ui";
 import type { MagnetSearchService } from "../../services/magnets/MagnetSearchService";
 import { magnetLimits } from "../../services/magnets/types";
 import { copyText } from "../../platform/neutralino/clipboard";
+import { logEvent } from "../../services/logging/events";
 
 function sizeLabel(bytes?: number) {
   if (bytes === undefined) return "大小未知";
@@ -67,6 +68,14 @@ export function MagnetSearchPanel({
         notice("已发送到系统关联的下载器，请在下载器中查看任务。");
       }
     } catch (error) {
+      if (action === "copy")
+        logEvent(
+          "error",
+          "magnets",
+          "copy_failed",
+          error instanceof Error ? error.message : "磁力链接复制失败",
+          { action: "copy", taskId: id },
+        );
       notice(error instanceof Error ? error.message : "操作失败，请重试。");
     } finally {
       setCopying("");

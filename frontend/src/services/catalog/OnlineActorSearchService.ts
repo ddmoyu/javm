@@ -5,6 +5,7 @@ import type { GenreLane } from "./catalogData";
 import { javbusSearchUrl } from "./javbusWorks";
 import { StopUnconfirmedError } from "../downloads/ports";
 import { CatalogReadCancellation } from "./readCancellation";
+import { logEvent } from "../logging/events";
 interface Result {
   items: OnlineEntity[];
   next: Partial<Record<GenreLane, number | null>>;
@@ -116,7 +117,15 @@ export class OnlineActorSearchService extends Observable<
         this.publish({ ...result, ready: true });
       })()
         .catch((error: unknown) => {
-          if (error instanceof StopUnconfirmedError) this.cleanup = error.retry;
+          if (error instanceof StopUnconfirmedError) {
+            this.cleanup = error.retry;
+            // 取消不等于清理成功；即使请求已被替换，清理失败仍需要反馈。
+            if (generation !== this.generation)
+              logEvent("error", "catalog", "actor_cleanup_failed", error.message, {
+                action: "actor_search",
+                page,
+              });
+          }
           if (generation === this.generation) {
             const reason = abort.signal.aborted ? abort.signal.reason : error;
             this.publish({
@@ -127,7 +136,15 @@ export class OnlineActorSearchService extends Observable<
         })
         .finally(() => {
           clearTimeout(timer);
-          if (generation === this.generation) this.publish({ loading: false });
+          if (generation === this.generation) {
+            this.publish({ loading: false });
+            const errors = Object.values(this.snapshot.errors);
+            if (errors.length)
+              logEvent("error", "catalog", "actor_search_failed", errors.join("；"), {
+                action: "actor_search",
+                page,
+              });
+          }
           this.active = undefined;
           this.abort = undefined;
           const next = this.pending;

@@ -137,6 +137,7 @@ export class ScrapeService extends Observable<{
     return task;
   }
   private async write(task: ScrapeTask) {
+    const previous = this.snapshot.tasks.find((item) => item.id === task.id);
     const next = { ...task, revision: task.revision + 1, updatedAt: new Date().toISOString() };
     await this.port.save(next, task.revision);
     const exists = this.snapshot.tasks.some((item) => item.id === task.id);
@@ -145,6 +146,11 @@ export class ScrapeService extends Observable<{
         ? this.snapshot.tasks.map((item) => (item.id === task.id ? next : item))
         : [...this.snapshot.tasks, next],
     });
+    if (previous?.status !== task.status && ["failed", "partial"].includes(task.status))
+      logEvent("error", "scraping", task.status, task.error || "刮削未能完整完成", {
+        taskId: task.id,
+        phase: task.phase,
+      });
   }
   private async discard(task: ScrapeTask) {
     await this.port.remove(task);
@@ -421,7 +427,8 @@ export class ScrapeService extends Observable<{
             ? "刮削已停止，已下载的视频及已保存资料保留。"
             : serviceError(error);
       await this.exclusive(() => this.write({ ...this.find(id), status, error: message }));
-      if (!signal.aborted) logEvent("warn", "scraping", status, message, { taskId: id });
+      if (!signal.aborted && status === "needsInput")
+        logEvent("warn", "scraping", status, message, { taskId: id });
     } finally {
       await image?.dispose().catch(() => {});
       await this.port.refresh().catch(() => {});

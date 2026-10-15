@@ -15,6 +15,7 @@ import type { LegacyImportService } from "../services/library/LegacyImportServic
 import type { ScrapeService } from "../services/scraping/ScrapeService";
 import type { ResolutionService } from "../services/streamResolution/ResolutionService";
 import type { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
+import type { FeedbackService } from "../services/feedback/FeedbackService";
 
 export type Page = "library" | "discover" | "directories" | "downloads" | "scraper" | "settings";
 export type FilmDetailView = "info" | "edit" | "links";
@@ -34,6 +35,7 @@ export interface WorkspaceState {
   playbackSettings: PlaybackSettingsService;
   backgroundSettings: BackgroundSettingsService;
   logs: LogService;
+  feedback?: FeedbackService;
   ai: AiService;
   metatube: MetaTubeService;
   openFilm: (film: Film, view?: FilmDetailView) => void;

@@ -65,6 +65,7 @@ import type { Film } from "../contracts/media";
 import { LegacyImportModal } from "../features/library/LegacyImportModal";
 import { listenApplicationLaunches } from "../platform/neutralino/applicationInstance";
 import { createApplicationUpdater } from "../platform/neutralino/applicationUpdates";
+import type { FeedbackService } from "../services/feedback/FeedbackService";
 
 const PlaybackWindow = lazy(() => import("../features/player/PlaybackWindow"));
 
@@ -87,6 +88,7 @@ export function App({
   playbackSettings,
   backgroundSettings,
   logs,
+  feedback,
   ai,
   metatube,
   scraping,
@@ -102,6 +104,7 @@ export function App({
   playbackSettings: PlaybackSettingsService;
   backgroundSettings: BackgroundSettingsService;
   logs: LogService;
+  feedback?: FeedbackService;
   ai: AiService;
   metatube: MetaTubeService;
   scraping?: ScrapeService;
@@ -282,6 +285,7 @@ export function App({
         playbackSettings,
         backgroundSettings,
         logs,
+        feedback,
         ai,
         metatube,
         scraping,
