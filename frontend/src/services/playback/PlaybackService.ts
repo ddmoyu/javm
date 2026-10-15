@@ -2,6 +2,7 @@ import { playbackRequest } from "./source";
 import type { PlaybackOptions, PlaybackRequest, PlaybackFormat } from "./source";
 import type { PlaybackProgress } from "./PlaybackHistory";
 import { logEvent } from "../logging/events";
+import { assertPlaybackAllowed, privacyRevision } from "../privacy/session";
 
 export interface MediaResponse {
   url: string;
@@ -81,6 +82,8 @@ export class PlaybackService {
     for (const media of this.resources) await this.release(media);
   }
   async play(source: string, options: PlaybackOptions = {}) {
+    assertPlaybackAllowed();
+    const privacyVersion = privacyRevision();
     if (this.stopped) throw new Error("应用正在退出。");
     if (this.operation) throw new Error("正在切换视频，请稍后重试。");
     const request = playbackRequest(source, options);
@@ -93,9 +96,14 @@ export class PlaybackService {
       let media: PreparedPlayback | undefined;
       try {
         await this.releaseAll();
+        assertPlaybackAllowed(privacyVersion);
         controller.signal.throwIfAborted();
         media = await this.port.prepare(request, controller.signal);
         this.resources.add(media);
+        if (privacyVersion !== privacyRevision()) {
+          await this.release(media);
+          assertPlaybackAllowed(privacyVersion);
+        }
         if (controller.signal.aborted) {
           await this.release(media);
           return;

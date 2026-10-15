@@ -23,6 +23,7 @@ import { window as nativeWindow } from "@neutralinojs/lib";
 import { startPlayerDrag } from "../../platform/neutralino/playerFrame";
 import { bindToolbarVisibility } from "./toolbarVisibility";
 import { logEvent } from "../../services/logging/events";
+import { getPrivacySession, privacyRevision, silenceMedia } from "../../services/privacy/session";
 import {
   getWindowState,
   refreshWindowState,
@@ -37,6 +38,7 @@ function Media({ media }: { media: PreparedPlayback }) {
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const attemptedAutoplay = useRef(false);
+  const [autoplayRevision] = useState(privacyRevision);
   const cleanup = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 每次会话仅创建一次 Loader 类型，避免普通 React 重渲染重建 HLS 引擎。
   const [hlsConfig] = useState(() => ({
@@ -70,6 +72,10 @@ function Media({ media }: { media: PreparedPlayback }) {
   }, []);
   const start = () => {
     if (!video.current) return;
+    if (getPrivacySession().protected) {
+      silenceMedia(video.current);
+      return;
+    }
     void video.current
       .play()
       .then(() => setAutoplayBlocked(false))
@@ -80,16 +86,25 @@ function Media({ media }: { media: PreparedPlayback }) {
   };
   const props = {
     ref: video,
-    autoPlay: true,
+    // 统一从 canplay 启动，避免老板键之后迟到的媒体就绪事件自动续播。
+    autoPlay: false,
     playsInline: true,
     preload: "auto" as const,
     onCanPlay: () => {
       if (!attemptedAutoplay.current) {
         attemptedAutoplay.current = true;
+        if (privacyRevision() !== autoplayRevision) {
+          if (video.current) silenceMedia(video.current);
+          return;
+        }
         start();
       }
     },
     onPlaying: () => {
+      if (getPrivacySession().protected && video.current) {
+        silenceMedia(video.current);
+        return;
+      }
       setError("");
       setAutoplayBlocked(false);
     },

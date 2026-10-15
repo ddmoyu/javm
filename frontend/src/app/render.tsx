@@ -16,6 +16,9 @@ import { createApplicationFeedback } from "../platform/neutralino/feedback";
 import { FeedbackBoundary } from "../features/feedback/FeedbackBoundary";
 import { FeedbackDialog } from "../features/feedback/FeedbackDialog";
 import { setLocale, translate } from "../i18n/core";
+import { createPrivacyService } from "../platform/neutralino/privacy";
+import { PrivacyBoundary } from "../features/privacy/PrivacyBoundary";
+import { initializePrivacyInput, setPrivacySession } from "../services/privacy/session";
 import { useLocale } from "../i18n";
 import { useMemo } from "react";
 import type { ReactNode } from "react";
@@ -93,6 +96,8 @@ export async function start() {
   const root = document.getElementById("root");
   if (!root) throw new Error("缺少应用根节点");
   const id = runtime === "desktop" ? playerWindowId() : undefined;
+  setPrivacySession({ protected: true });
+  initializePrivacyInput();
   if (runtime === "desktop" && !id) {
     if ((await prepareUpdateStartup()) === false) return;
     const { claimApplicationInstance } = await import("../platform/neutralino/applicationInstance");
@@ -102,6 +107,8 @@ export async function start() {
   const feedback = !id ? createApplicationFeedback(runtime) : undefined;
   const preferences = createUiPreferences(runtime);
   await preferences.initialize();
+  const privacy = !id ? createPrivacyService(runtime) : undefined;
+  if (privacy) await privacy.initialize();
   const synchronizeLanguage = () => setLocale(preferences.getSnapshot().value.language);
   synchronizeLanguage();
   const unsubscribeLanguage = preferences.subscribe(synchronizeLanguage);
@@ -126,11 +133,15 @@ export async function start() {
   createRoot(root, { onUncaughtError: failStartup }).render(
     <StrictMode>
       <LocalizedTheme preferences={preferences}>
-        <FeedbackBoundary service={feedback}>
-          {view}
-          <StartupReady preferences={preferences} main={!id} />
-        </FeedbackBoundary>
-        {feedback && <FeedbackDialog service={feedback} />}
+        {privacy ? (
+          <PrivacyBoundary service={privacy} runtime={runtime}>
+            <FeedbackBoundary service={feedback}>{view}</FeedbackBoundary>
+            {feedback && <FeedbackDialog service={feedback} />}
+          </PrivacyBoundary>
+        ) : (
+          <FeedbackBoundary>{view}</FeedbackBoundary>
+        )}
+        <StartupReady preferences={preferences} main={!id} />
       </LocalizedTheme>
     </StrictMode>,
   );

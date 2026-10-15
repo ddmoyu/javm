@@ -12,7 +12,7 @@ import {
   Stack,
   Text,
 } from "@mantine/core";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import { copyText } from "../../platform/neutralino/clipboard";
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";

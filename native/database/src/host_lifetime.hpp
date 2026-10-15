@@ -43,6 +43,7 @@ class HostLifetime {
         throw std::runtime_error("Cannot identify the Neutralino host process");
     }
 public:
+    DWORD processId() const { return GetProcessId(host_.get()); }
     explicit HostLifetime(unsigned short port): host_(openHost(port)), watcher_([this](std::stop_token stop) {
         while (!stop.stop_requested()) {
             const auto result = WaitForSingleObject(host_.get(), 250);

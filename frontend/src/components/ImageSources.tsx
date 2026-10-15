@@ -75,6 +75,7 @@ function CandidateImage({
       {resolved ? (
         <Image
           {...props}
+          data-private-image
           src={resolved.src}
           loading="lazy"
           decoding="async"

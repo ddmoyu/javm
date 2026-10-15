@@ -10,6 +10,10 @@ import { encodedPowerShell, quoteWindowsArgument } from "./process";
 import { nativeSettingsStorage as playbackStorage } from "./settingsStorage";
 import { executableExists, toolPlatform } from "./toolPaths";
 import { quotePosixArgument } from "./posixProcess";
+import { showOpenDialog } from "./privateDialogs";
+import { createPrivacyService } from "./privacy";
+import { privacyNative } from "./privacyNative";
+import { assertPlaybackAllowed, privacyRevision } from "../../services/privacy/session";
 
 export { playbackStorage };
 
@@ -27,7 +31,7 @@ export function createPlaybackSettings(runtime: Runtime) {
     runtime === "desktop",
     async () =>
       (
-        await os.showOpenDialog(t("选择外部播放器"), {
+        await showOpenDialog(t("选择外部播放器"), {
           filters:
             toolPlatform() === "Windows"
               ? [{ name: t("Windows 播放器"), extensions: ["exe"] }]
@@ -60,12 +64,25 @@ export async function openExternalPlayer(
   path: string,
   signal?: AbortSignal,
 ) {
+  assertPlaybackAllowed();
+  const privacyVersion = privacyRevision();
   if (runtime !== "desktop") throw new Error("外部播放需要在桌面应用中使用。");
   if (request.kind === "local") {
     const stat = await filesystem.getStats(request.source).catch(() => null);
     if (!stat?.isFile) throw new Error("视频文件不存在或无法读取，请检查路径及磁盘连接。");
   }
   signal?.throwIfAborted();
+  assertPlaybackAllowed(privacyVersion);
+  if (
+    toolPlatform() === "Windows" &&
+    createPrivacyService(runtime).getSnapshot().settings.protectRecentFiles
+  ) {
+    if (path) await validatePlayerPath(path);
+    signal?.throwIfAborted();
+    assertPlaybackAllowed(privacyVersion);
+    await privacyNative.request("privacy.openExternal", { source: request.source, path });
+    return;
+  }
   if (!path) {
     await os.open(request.source);
     return;
@@ -79,6 +96,7 @@ export async function openExternalPlayer(
   );
   await validatePlayerPath(path);
   signal?.throwIfAborted();
+  assertPlaybackAllowed(privacyVersion);
   const platform = toolPlatform();
   const macApp = platform === "Darwin" && path.endsWith(".app");
   const command =

@@ -32,7 +32,7 @@ import type { ArtworkMode } from "./FilmArtworkEditor";
 import { FilmEditor } from "./FilmEditor";
 import { FilmDeleteDialog } from "./FilmDeleteDialog";
 import { FilmResources } from "./FilmResources";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import { copyText } from "../../platform/neutralino/clipboard";
 import { libraryError } from "../../services/library/LibraryService";
 import { LibraryDocumentsPanel } from "../directories/LibraryDocumentsPanel";

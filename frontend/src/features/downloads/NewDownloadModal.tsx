@@ -11,7 +11,7 @@ import {
   Textarea,
   TextInput,
 } from "@mantine/core";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
 import { parseHeaders } from "../../services/downloads/input";

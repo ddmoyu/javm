@@ -8,6 +8,7 @@ import type { MediaImage } from "../contracts/media";
 import { bindImagePreviewFullscreen } from "../platform/neutralino/imagePreviewFullscreen";
 import { Button, Group, Loader, Modal, Text } from "@mantine/core";
 import { useImageSources } from "./ImageSources";
+import { getPrivacySession, subscribePrivacySession } from "../services/privacy/session";
 
 interface Gallery {
   images: MediaImage[];
@@ -58,11 +59,14 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
     failed?: boolean;
   }>();
   const returnTarget = useRef<HTMLElement | undefined>(undefined);
+  useEffect(() => subscribePrivacySession(() => {
+    if (getPrivacySession().protected) setGallery(null);
+  }), []);
   const value = useMemo(
     () => ({
       opened: gallery !== null,
       open: (images: MediaImage[], index = 0, referer?: string) => {
-        if (!images.length) return;
+        if (!images.length || getPrivacySession().protected) return;
         const trigger =
           document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
         returnTarget.current = trigger;
@@ -83,7 +87,7 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
       // Mantine 重新启用焦点约束会先聚焦关闭按钮，随后再返回图片入口。
       const trigger = returnTarget.current;
       const timer = window.setTimeout(() => {
-        if (trigger?.isConnected) trigger.focus({ preventScroll: true });
+        if (trigger?.isConnected && !getPrivacySession().protected) trigger.focus({ preventScroll: true });
         returnTarget.current = undefined;
       });
       return () => window.clearTimeout(timer);
@@ -125,7 +129,7 @@ export function ImagePreviewProvider({ children }: { children: ReactNode }) {
         }),
       );
       clearTimeout(timer);
-      if (disposed) return;
+      if (disposed || getPrivacySession().protected) return;
       const available = resolved.filter((image): image is MediaImage => !!image);
       if (!available.length) {
         setPreparing({ gallery, completed, failed: true });

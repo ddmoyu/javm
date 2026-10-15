@@ -1,7 +1,7 @@
 import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import type { LibraryDocumentsService } from "../../services/library/LibraryDocumentsService";
 export function LibraryDocumentsPanel({
   service,

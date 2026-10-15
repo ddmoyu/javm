@@ -16,7 +16,7 @@ import {
 } from "@mantine/core";
 import type { Film } from "../../contracts/media";
 import { useWorkspace } from "../../app/state";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import type { ArtworkService, CropArea } from "../../services/library/ArtworkService";
 import { FilmFramePicker } from "./FilmFramePicker";
 

@@ -1,5 +1,6 @@
 import { Icon, MessageBoxChoice, os, window as nativeWindow } from "@neutralinojs/lib";
 import { logEvent } from "../../services/logging/events";
+import { getPrivacySession } from "../../services/privacy/session";
 
 const previews = new Set<HTMLElement>();
 let enteredByPreview = false;
@@ -36,10 +37,12 @@ function syncWindowFullscreen() {
       if (!enteredByPreview && fullscreenPreview()) {
         await document.exitFullscreen().catch(() => {});
       }
-      void os
-        .showMessageBox("JAVM", "图片预览全屏切换失败，请重试。", MessageBoxChoice.OK, Icon.ERROR)
-        .catch(() => {});
+      if (!getPrivacySession().protected)
+        void os
+          .showMessageBox("JAVM", "图片预览全屏切换失败，请重试。", MessageBoxChoice.OK, Icon.ERROR)
+          .catch(() => {});
     } finally {
+      if (getPrivacySession().protected) void nativeWindow.hide().catch(() => {});
       syncing = false;
       if (pending) syncWindowFullscreen();
     }

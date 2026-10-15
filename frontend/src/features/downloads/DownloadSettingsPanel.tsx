@@ -1,7 +1,7 @@
 import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, NumberInput, Stack, Text, TextInput } from "@mantine/core";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import { useWorkspace } from "../../app/state";
 import { Icon } from "../../components/icons";
 import { describeError } from "../../services/downloads/DownloadService";

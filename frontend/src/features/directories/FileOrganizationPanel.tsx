@@ -14,7 +14,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import { Icon } from "../../components/icons";
 import type { FileOrganizationService } from "../../services/library/FileOrganizationService";
 export function FileOrganizationPanel({ service }: { service: FileOrganizationService }) {

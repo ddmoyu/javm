@@ -1,7 +1,7 @@
 import { t, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Progress, Stack, Text, TextInput } from "@mantine/core";
-import { os } from "@neutralinojs/lib";
+import * as os from "../../platform/neutralino/privateDialogs";
 import type { FileOrganizationService } from "../../services/library/FileOrganizationService";
 export function FileOrganizationModal({
   service,

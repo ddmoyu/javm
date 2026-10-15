@@ -14,6 +14,7 @@
 #include "http_service.hpp"
 #include "engine.hpp"
 #include "service.hpp"
+#include "privacy.hpp"
 #include "../../common/shared_slot.hpp"
 #include <atomic>
 #include <iostream>
@@ -82,6 +83,7 @@ int runMain(int argc, Char* argv[]) {
 #endif
         javm::http::Service http;
         javm::platform::Service platform;
+        std::unique_ptr<javm::platform::Privacy> privacy;
         javm::update::Engine updates(databasePath.parent_path());
         // 主实例握手先于下载数据库独占锁；第二次启动可转发参数并退出。
         auto ensureDatabase=[&] {if(!database) database=std::make_unique<Database>(databasePath);};
@@ -111,6 +113,16 @@ int runMain(int argc, Char* argv[]) {
 #endif
                 } else if (method.starts_with("update.")) {
                     response["result"] = updates.request(method, data.value("params", Json::object()));
+                } else if (method.starts_with("privacy.")) {
+                    if (!privacy) privacy = std::make_unique<javm::platform::Privacy>(
+#if JAVM_USE_WINHTTP
+                        hostLifetime.processId(),
+#else
+                        0,
+#endif
+                        [&] { if (!disconnected) socket->send(javm::extension::responseEnvelope(bootstrap, Json::object(), "javm.privacy.bossKey")); });
+                    privacy->request(requestId, method, data.value("params", Json::object()), sendResponse);
+                    continue;
                 } else if (method.starts_with("platform.")) {
                     platform.request(requestId, method, data.value("params", Json::object()), sendResponse);
                     continue;
@@ -175,6 +187,7 @@ int runMain(int argc, Char* argv[]) {
         }
         disconnected = true;
         platform.shutdown();
+        if (privacy) privacy->shutdown();
         http.shutdown();
 #if JAVM_WITH_MEDIA
         mediaProbes.shutdown();

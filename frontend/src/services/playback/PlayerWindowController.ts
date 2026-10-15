@@ -8,6 +8,13 @@ import type { PlayerCommand, PlayerWindowMessage } from "./windowChannel";
 import type { PlaybackHistoryStore } from "./PlaybackHistory";
 import { servePlaybackHistory } from "./historyChannel";
 import { logEvent } from "../logging/events";
+import {
+  assertPlaybackAllowed,
+  getPrivacySession,
+  privacyRevision,
+  subscribePrivacySession,
+  triggerBossKey,
+} from "../privacy/session";
 
 interface Pending {
   resolve: () => void;
@@ -35,11 +42,20 @@ export class PlayerWindowController implements PlaybackController {
   private operation?: Promise<void>;
   private closing?: Promise<void>;
   private stopped = false;
+  private unsubscribePrivacy: () => void;
   constructor(
     private launch: (id: string) => Promise<void>,
     private windowMode: () => PlaybackWindowMode = () => "reuse",
     private historyStore?: PlaybackHistoryStore,
-  ) {}
+  ) {
+    this.unsubscribePrivacy = subscribePrivacySession(() => {
+      for (const session of this.sessions)
+        session.channel.postMessage({
+          type: "privacy",
+          state: getPrivacySession(),
+        } satisfies PlayerWindowMessage);
+    });
+  }
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -138,8 +154,14 @@ export class PlayerWindowController implements PlaybackController {
           });
       } else if (data.type === "ready") {
         clearTimeout(session.startup);
+        channel.postMessage({
+          type: "privacy",
+          state: getPrivacySession(),
+        } satisfies PlayerWindowMessage);
         channel.postMessage({ type: "ping" });
         ready();
+      } else if (data.type === "privacy-request") {
+        triggerBossKey();
       } else if (data.type === "state") {
         this.updateSession(session, data.snapshot);
       } else if (data.type === "result") {
@@ -199,6 +221,8 @@ export class PlayerWindowController implements PlaybackController {
     return this.playInWindow(source, options, this.windowMode() === "reuse");
   }
   private async playInWindow(source: string, options: PlaybackOptions | undefined, reuse: boolean) {
+    assertPlaybackAllowed();
+    const privacyVersion = privacyRevision();
     if (this.stopped) throw new Error("应用正在退出。");
     if (this.operation || this.closing) throw new Error("正在切换视频，请稍后重试。");
     const request = playbackRequest(source, options);
@@ -220,6 +244,7 @@ export class PlayerWindowController implements PlaybackController {
     let started = false;
     const operation = (async () => {
       await session.ready;
+      assertPlaybackAllowed(privacyVersion);
       if (!this.closing) {
         await this.command(session, focusOnly ? { action: "focus" } : { action: "play", request });
         started = !focusOnly;
@@ -268,5 +293,6 @@ export class PlayerWindowController implements PlaybackController {
   async shutdown() {
     this.stopped = true;
     await this.close();
+    this.unsubscribePrivacy();
   }
 }

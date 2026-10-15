@@ -4,6 +4,7 @@ import type { BackgroundSettingsService } from "../../services/settings/Backgrou
 import { flushLogs, logEvent } from "../../services/logging/events";
 import { stopApplicationLaunches } from "./applicationInstance";
 import { prepareFeedbackExit, resumeFeedbackAfterFailedExit } from "./feedback";
+import { restorePrivateWindow } from "./privacy";
 import { t, subscribeLocale } from "../../i18n/core";
 
 let trayReady = false;
@@ -132,14 +133,13 @@ export function initializeLifecycle(
   });
   void events.on("trayMenuItemClicked", (event: CustomEvent<{ id: string }>) => {
     if (exiting) return;
-    if (event.detail.id === "show") void nativeWindow.show().then(() => nativeWindow.focus());
+    if (event.detail.id === "show") void restorePrivateWindow();
     if (event.detail.id === "exit") void exitApplication().catch(report);
   });
   if (window.NL_OS === "Darwin") {
     void events.on("mainMenuItemClicked", (event: CustomEvent<{ id: string }>) => {
       if (exiting) return;
-      if (event.detail.id === "javm-show")
-        void nativeWindow.show().then(() => nativeWindow.focus());
+      if (event.detail.id === "javm-show") void restorePrivateWindow();
       if (event.detail.id === "javm-quit") void exitApplication().catch(report);
     });
     setMacMenu();

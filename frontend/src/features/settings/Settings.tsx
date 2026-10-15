@@ -32,6 +32,7 @@ import { LibraryBackupPanel } from "./LibraryBackupPanel";
 import { SystemIntegrationPanel } from "./SystemIntegrationPanel";
 import { FeedbackHistory } from "../feedback/FeedbackHistory";
 import { createUiPreferences } from "../../app/preferences";
+import { PrivacySettingsPanel } from "./PrivacySettingsPanel";
 import { languages, isLocale } from "../../i18n";
 
 const contactLinks = [
@@ -41,6 +42,7 @@ const contactLinks = [
 
 const sections = [
   { id: "appearance", label: "外观与交互", icon: "sun", group: "偏好设置" },
+  { id: "privacy", label: "隐私保护", icon: "shield", group: "偏好设置" },
   { id: "downloads", label: "下载与存储", icon: "download", group: "偏好设置" },
   { id: "player", label: "播放设置", icon: "play", group: "偏好设置" },
   { id: "library", label: "片库与迁移", icon: "folder", group: "偏好设置" },
@@ -160,6 +162,7 @@ export function Settings() {
   };
   const panels: Record<Section, ReactNode> = {
     appearance: <AppearanceSettings />,
+    privacy: <PrivacySettingsPanel />,
     downloads: <DownloadSettingsPanel key={runtime} />,
     player: <PlaybackSettingsPanel />,
     library: (

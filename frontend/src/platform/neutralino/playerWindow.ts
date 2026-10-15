@@ -8,10 +8,18 @@ import { playerChannelName } from "../../services/playback/windowChannel";
 import type { PlayerWindowMessage } from "../../services/playback/windowChannel";
 import { createPlaybackHistoryStore } from "./playbackHistory";
 import { captureUnhandledErrors, setLogSink } from "../../services/logging/events";
+import {
+  assertPlaybackAllowed,
+  bindBossKey,
+  getPrivacySession,
+  privacyRevision,
+  setPrivacySession,
+} from "../../services/privacy/session";
 
 export function createPlayerWindowController(windowMode: () => PlaybackWindowMode) {
   const controller = new PlayerWindowController(
     async (id) => {
+      assertPlaybackAllowed();
       // 使用主页面 origin，以同源 BroadcastChannel 通信；每个窗口仍连接自己的官方原生 API。
       const url = new URL(location.pathname, location.origin);
       url.searchParams.set("javmPlayer", id);
@@ -19,6 +27,7 @@ export function createPlayerWindowController(windowMode: () => PlaybackWindowMod
       const resourceMode = args.find((arg) => /^--res-mode=(directory|bundle|embedded)$/.test(arg));
       await nativeWindow.create(url.href, {
         title: t("JAVM 播放器"),
+        hidden: true,
         width: 960,
         height: 600,
         minWidth: 440,
@@ -49,6 +58,11 @@ export function connectPlayerWindow(
 ) {
   const channel = new BroadcastChannel(playerChannelName(id));
   const send = (message: PlayerWindowMessage) => channel.postMessage(message);
+  bindBossKey(() => {
+    setPrivacySession({ protected: true });
+    void nativeWindow.hide().catch(() => {});
+    send({ type: "privacy-request" });
+  });
   let rateStart = performance.now();
   let rateCount = 0;
   setLogSink((input) => {
@@ -93,24 +107,40 @@ export function connectPlayerWindow(
   channel.onmessage = ({ data }: MessageEvent<PlayerWindowMessage>) => {
     lastContact = performance.now();
     contacted = true;
+    if (data.type === "privacy") {
+      setPrivacySession(data.state);
+      if (data.state.protected) {
+        void nativeWindow.hide().catch(() => notice("播放器窗口隐藏失败，内容已遮挡。"));
+        if (service.getSnapshot().preparing) void service.close().catch(() => {});
+      }
+      return;
+    }
     if (data.type === "ping") {
       send({ type: "pong" });
       return;
     }
     if (data.type !== "command") return;
+    const privacyVersion = privacyRevision();
     const execute = async () => {
       if (data.command.action === "close") {
         await close();
         return;
       }
       if (closing) throw new Error("播放器正在关闭。");
+      assertPlaybackAllowed(privacyVersion);
       if (data.command.action === "play")
         await nativeWindow.setTitle(`${data.command.request.title} · JAVM`);
       if (await nativeWindow.isMinimized()) await nativeWindow.unminimize();
+      assertPlaybackAllowed(privacyVersion);
       await nativeWindow.show();
+      if (getPrivacySession().protected || privacyVersion !== privacyRevision()) {
+        await nativeWindow.hide();
+        assertPlaybackAllowed(privacyVersion);
+      }
       await nativeWindow.focus();
       // 窗口 API 等待期间可能收到关闭事件，不能随后启动一个新播放会话。
       if (closing) throw new Error("播放器正在关闭。");
+      assertPlaybackAllowed(privacyVersion);
       if (data.command.action === "play") {
         const request = data.command.request;
         await service.play(request.source, request);

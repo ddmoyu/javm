@@ -1,6 +1,7 @@
 import type { PlaybackRequest } from "./source";
 import type { PlaybackSnapshot } from "./PlaybackService";
 import type { LogInput } from "../logging/events";
+import type { PrivacySession } from "../privacy/session";
 
 export type PlayerCommand =
   | { action: "play"; request: PlaybackRequest }
@@ -8,6 +9,8 @@ export type PlayerCommand =
   | { action: "close" };
 
 export type PlayerWindowMessage =
+  | { type: "privacy"; state: PrivacySession }
+  | { type: "privacy-request" }
   | { type: "log"; input: LogInput }
   | { type: "ready" | "closed" | "ping" | "pong" }
   | { type: "state"; snapshot: Omit<PlaybackSnapshot, "media"> }

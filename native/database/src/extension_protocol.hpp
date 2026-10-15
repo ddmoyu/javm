@@ -75,8 +75,8 @@ inline std::string messageId() {
     }
     return result;
 }
-inline std::string responseEnvelope(const Bootstrap& boot, const nlohmann::json& response) {
+inline std::string responseEnvelope(const Bootstrap& boot, const nlohmann::json& response, const char* event = "javm.database.response") {
     return nlohmann::json{{"id", messageId()}, {"method", "app.broadcast"}, {"accessToken", boot.token},
-        {"data", {{"event", "javm.database.response"}, {"data", response}}}}.dump();
+        {"data", {{"event", event}, {"data", response}}}}.dump();
 }
 } // namespace javm::extension

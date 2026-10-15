@@ -1,0 +1,51 @@
+.privacy-content {
+  height: 100%;
+}
+html[data-privacy-protected="true"] .privacy-content,
+html[data-privacy-protected="true"] .privacy-content *,
+html[data-privacy-protected="true"] body > :not(#root):not(#startup),
+html[data-privacy-protected="true"] body > :not(#root):not(#startup) *,
+html[data-privacy-protected="true"][data-window-kind="player"] #root,
+html[data-privacy-protected="true"][data-window-kind="player"] #root * {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+html[data-privacy-protected="true"] dialog::backdrop {
+  visibility: hidden;
+}
+.privacy-lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483646;
+  overflow: auto;
+  background: var(--mantine-color-body);
+  padding: 32px;
+}
+.privacy-lock-card {
+  width: min(100%, 400px);
+}
+.privacy-service-alert {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: min(380px, calc(100vw - 48px));
+  z-index: 1100;
+}
+/* 图片自身才是揭示区域；鼠标移出后立即恢复，不使用过渡留下清晰帧。 */
+html[data-privacy-blur="true"] [data-private-image],
+html[data-privacy-blur="true"] .javm-image-preview img {
+  filter: blur(22px);
+  clip-path: inset(0);
+}
+@media (hover: hover) {
+  html[data-privacy-blur="true"] [data-private-image]:hover,
+  html[data-privacy-blur="true"] :is(.film-cover, .thumb):hover [data-private-image],
+  html[data-privacy-blur="true"] .javm-image-preview img:hover {
+    filter: none;
+  }
+}
+/* 失去窗口焦点时，悬停状态不继续揭示图片。 */
+html[data-privacy-blur="true"][data-privacy-unfocused="true"] [data-private-image],
+html[data-privacy-blur="true"][data-privacy-unfocused="true"] .javm-image-preview img {
+  filter: blur(22px) !important;
+}
