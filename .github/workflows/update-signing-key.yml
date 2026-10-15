@@ -1,15 +1,7 @@
 name: 自动更新签名密钥
 on:
+  # 在 main 手动维护签名密钥，不随日常提交自动运行。
   workflow_dispatch:
-  # 一次性初始化分支；普通分支与 PR 不自动运行。
-  push:
-    branches: [codex/update-signing-key]
-    paths:
-      - .github/workflows/update-signing-key.yml
-      - scripts/update-key.mjs
-      - resources/update-public-key.json
-      - scripts/legacy-update.mjs
-      - resources/legacy-update-public-key.json
 permissions:
   contents: read
 concurrency:

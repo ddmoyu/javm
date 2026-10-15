@@ -2,7 +2,7 @@ name: 第三方精简组件
 
 on:
   push:
-    branches: [dev]
+    branches: [main]
     paths:
       - .github/workflows/third-party.yml
       - scripts/third-party/**

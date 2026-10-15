@@ -48,7 +48,7 @@ if (command === "plan") {
     }
     publish.push(name);
     // Reserve the source ref before a long build. The workflow token may not
-    // create a tag for an older commit after dev receives workflow changes.
+    // create a tag for an older commit after main receives workflow changes.
     if (process.env.JAVM_RESERVE_COMPONENT_TAGS === "1") {
       if (!process.env.GITHUB_SHA) throw new Error("组件标签缺少构建提交");
       try {

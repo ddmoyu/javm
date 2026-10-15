@@ -1,8 +1,8 @@
 # JAVM
 
-JAVM 新工程，基于 `dev` 分支使用 React、TypeScript、Mantine、Vite+ 和官方 Neutralinojs 重建。C++20 的 SQLite 扩展与后台媒体服务位于 `native/database` 和 `native/media`。
+JAVM 使用 React、TypeScript、Mantine、Vite+ 和官方 Neutralinojs 重建，后续开发统一在 `main` 分支进行。C++20 的 SQLite 扩展与后台媒体服务位于 `native/database` 和 `native/media`。
 
-当前为 **1.0.5 正式版**，采用全新数据模型，旧库迁移面向 `0.5.3`。安装包与便携包见 [最新正式版](https://github.com/ddmoyu/javm/releases/latest)，Beta 版本见 [全部发布](https://github.com/ddmoyu/javm/releases)。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
+当前为 **1.0.6 正式版**，采用全新数据模型，旧库迁移面向 `0.5.3`。安装包与便携包见 [最新正式版](https://github.com/ddmoyu/javm/releases/latest)，Beta 版本见 [全部发布](https://github.com/ddmoyu/javm/releases)。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
 
 界面图标统一使用 [Phosphor](https://phosphoricons.com/)（`@phosphor-icons/react`，MIT 许可），从 `frontend/src/components/icons.tsx` 复用。默认线性图标，收藏等选中态使用填充样式；原 JAVM Logo 和旧版图箱保留。许可文本位于 `resources/licenses/phosphor-icons-react.txt`，随前端及 EXE 一起打包。
 
@@ -129,7 +129,7 @@ docs/                     重构约定、选型和验证记录
 - 0.5.3 迁移已用合成数据库验证；维度收藏与别名提供归档恢复，旧任务保留且不自动执行。日常片库备份覆盖资料和关联记录，不包含媒体文件、下载库或设置。安全桌面完整流程和恢复验证见[模块闭环记录](docs/verification/2026-10-11-module-closure.md)；NAS、慢盘及完整发行环境仍需独立验收。
 - 桌面窗口使用官方窗口 API，首次启动居中显示；关闭窗口可按设置留在托盘继续任务，显式退出先停止任务并保存状态。已验证对应事件处理器，长期托盘队列和系统级交互仍需独立验收，见 [后台运行验证](docs/verification/2026-10-10-background-running.md)。
 - `pnpm test` 包含查询规则、空资料边界、下载状态机与播放会话测试；`pnpm test:downloads` 覆盖实际下载、合并、进程退出与 SQLite，`pnpm test:playback` 覆盖合成素材的真实播放。通过测试不代表网站、所有编解码器或发布包已全面验收。
-- 普通工程检查仅手动触发；dev 上的组件配方变更会按指纹独立构建和发布，未修改的组件直接复用。Alpha 标签用于完整便携包发布，组件 Release 不占用仓库 Latest。
+- 普通工程检查及更新隔离验收在 main 手动触发；main 上的组件配方变更会按指纹独立构建和发布，未修改的组件直接复用。应用标签必须来自 main，正式版、Beta 和 Alpha 均通过现有跨平台发布流程构建安装包及便携包；组件 Release 不占用仓库 Latest。流程见 [分支与发布约定](docs/decisions/0037-main-development.md)。
 - `pnpm test:metadata` 使用隔离的桌面宿主和本机模拟接口验证真实传输与加密存储，并运行已准备的包内 MetaTube，验证按需启动、驻留及宿主退出后的进程回收。测试不使用真实片库或供应商密钥，初始验证见 [资料辅助验证](docs/verification/2026-10-09-metatube-ai.md)。
 - 版本组合、选择原因与阶段差异见 [初始化决策](docs/decisions/0001-initialization.md)。
 

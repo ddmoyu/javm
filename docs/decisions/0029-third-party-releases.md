@@ -9,7 +9,7 @@
 
 组件标签为 deps-组件-上游版本-构建指纹前12位。指纹包含该组件的来源、裁剪配置、补丁、构建及验证脚本、目标平台和受控工具链配置；不包含 JAVM 版本和仓库整体提交号。共同构建基础设施改变会使相关组件失效，单个组件的来源配置改变只影响该组件。
 
-.github/workflows/third-party.yml 在 dev 的相关路径变化时检查指纹，也保留手动入口。已有相同标签且附件完整则跳过；所有声明平台构建成功后汇总发布。公开产物不覆盖，未完成的草稿允许同一配方继续上传。组件 Release 不标记为 Latest，避免干扰 JAVM 更新检查。
+.github/workflows/third-party.yml 在 main 的相关路径变化时检查指纹，也保留手动入口。已有相同标签且附件完整则跳过；所有声明平台构建成功后汇总发布。公开产物不覆盖，未完成的草稿允许同一配方继续上传。组件 Release 不标记为 Latest，避免干扰 JAVM 更新检查。
 
 ## 产物与使用
 
@@ -31,10 +31,10 @@ pnpm offline:setup 查询当前源码配方对应的最新可用组件产物，�
 
 应用 Alpha 发布执行工程检查、默认测试集、Release 构建与隔离运行包验证，再发布预发布版本。跨平台、真实站点和真实用户数据不属于此轮验证范围。
 
-## Alpha 发布顺序
+## 应用发布顺序（2026-10-15 更新）
 
-先将应用版本同步到 package.json 和 neutralino.config.json，提交并推送 dev。等待组件工作流完成，再创建 v版本号-alpha.序号 标签并推送；标签必须指向 dev 已包含的提交。
+先将应用版本同步到 package.json 和 neutralino.config.json，更新 CHANGELOG.md，提交并推送 main。等待组件工作流完成，再创建 v版本号 标签并推送；正式版使用 v主版本.次版本.补丁号，预发布追加 -alpha.序号 或 -beta.序号。标签必须指向 origin/main 已包含的提交，详见 [ADR 0037](0037-main-development.md)。
 
-.github/workflows/release-alpha.yml 核对标签和版本、执行 pnpm check 与 pnpm test、下载匹配配方的组件，再构建和解压验证完整便携包。发布阶段先上传草稿、下载所有附件并比对 SHA-256，全部通过后才公开为预发布。公开标签和附件不覆盖；失败草稿可通过重跑相同标签的工作流恢复。
+.github/workflows/release-alpha.yml 同时负责正式版、Beta 和 Alpha。它核对标签和版本、执行 pnpm check 与 pnpm test、下载匹配配方的组件，再构建和验证 Windows、macOS 双架构与 Linux 的安装包和便携包。发布阶段先上传草稿、下载所有附件并比对 SHA-256，全部通过后才按对应通道公开；仅正式版标为 Latest。公开标签和附件不覆盖；失败草稿可通过重跑相同标签的工作流恢复。
 
 除 ZIP 外，Release 单独提供文件清单、THIRD-PARTY-NOTICES.txt、verification.json 和 SHA256SUMS；清单包含各组件的来源 Release、指纹、构建提交及附件哈希。运行目录不添加这些开发记录。

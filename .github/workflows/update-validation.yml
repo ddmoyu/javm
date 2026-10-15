@@ -7,8 +7,6 @@ on:
         type: choice
         options: [all, posix, windows]
         default: all
-  push:
-    branches: [codex/update-validation]
 permissions:
   contents: read
 concurrency:

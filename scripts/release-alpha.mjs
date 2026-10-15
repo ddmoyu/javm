@@ -37,12 +37,12 @@ function verifySource() {
   }
   if (process.env.GITHUB_REF_NAME !== tag) throw new Error("发布标签与应用版本不一致");
   if (git(["rev-parse", tag + "^{commit}"]) !== commit) throw new Error("发布标签提交不一致");
-  git(["merge-base", "--is-ancestor", commit, "origin/dev"]);
+  git(["merge-base", "--is-ancestor", commit, "origin/main"]);
   if (git(["status", "--porcelain", "--untracked-files=no"])) throw new Error("拒绝发布未提交修改");
 }
 if (command === "verify-source") {
   verifySource();
-  console.log(tag + " / " + commit + " 已验证属于 dev");
+  console.log(tag + " / " + commit + " 已验证属于 main");
 } else if (command === "prepare") {
   const bundle = await readJson(path.join(root, "dist/offline/latest.json"));
   const manifest = await readJson(bundle.manifest);

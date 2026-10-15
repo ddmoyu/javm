@@ -41,7 +41,7 @@ jobs:
         with:
           node-version-file: .node-version
           cache: pnpm
-      - name: 核对版本标签和 dev 源码
+      - name: 核对版本标签和 main 源码
         run: node scripts/release-alpha.mjs verify-source
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
