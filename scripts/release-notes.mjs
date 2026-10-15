@@ -61,7 +61,7 @@ export function renderReleaseNotes({ version, changes, repository, assets }) {
   if (mac.length) {
     rows.splice(1, 0, `| macOS | ${mac.join("<br>")} |`);
     requirements.unshift(
-      "macOS 13+；DMG 中将 JAVM.app 拖入 Applications。开发包未使用 Developer ID 签名或公证。",
+      "macOS 13+；DMG 中将 JAVM.app 拖入 Applications。macOS 包未使用 Developer ID 签名或公证。",
     );
   }
   return [

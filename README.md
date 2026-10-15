@@ -2,7 +2,7 @@
 
 JAVM 新工程，基于 `dev` 分支使用 React、TypeScript、Mantine、Vite+ 和官方 Neutralinojs 重建。C++20 的 SQLite 扩展与后台媒体服务位于 `native/database` 和 `native/media`。
 
-当前为 **1.0 系列 Alpha**，采用全新数据模型，旧库迁移面向 `0.5.3`。可下载版本以 [GitHub Releases](https://github.com/ddmoyu/javm/releases) 为准。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
+当前为 **1.0.5 正式版**，采用全新数据模型，旧库迁移面向 `0.5.3`。安装包与便携包见 [最新正式版](https://github.com/ddmoyu/javm/releases/latest)，Beta 版本见 [全部发布](https://github.com/ddmoyu/javm/releases)。沿用旧版 Logo，覆盖标题栏、浏览器页签、桌面窗口和 Windows EXE 图标；版本升级不改变当前功能接入范围。
 
 界面图标统一使用 [Phosphor](https://phosphoricons.com/)（`@phosphor-icons/react`，MIT 许可），从 `frontend/src/components/icons.tsx` 复用。默认线性图标，收藏等选中态使用填充样式；原 JAVM Logo 和旧版图箱保留。许可文本位于 `resources/licenses/phosphor-icons-react.txt`，随前端及 EXE 一起打包。
 
@@ -80,7 +80,9 @@ pnpm test:playback:preferences # 验证播放设置、跨窗口续播与外部�
 
 适用于 Windows 10/11 x64；满足上述系统前提后，本地片库、扫描和播放可离线使用。网络下载、MetaTube 在线资料和 AI 服务仍需要网络，AI 需要自行配置接口。个人数据仍保存在当前 Windows 用户的数据目录，不随软件包分发。
 
-Alpha 发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS 13+（Apple Silicon / Intel）和 Ubuntu 24.04 x64 的开发适配已完成，APP/DMG、AppImage/DEB 与便携包均通过 [桌面及安装 CI](https://github.com/ddmoyu/javm/actions/runs/38398786888)；正式可下载平台以 Release 实际附件为准。开发构建下载、实际验证环境与运行依赖见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md) 和 [适配计划](docs/CROSS_PLATFORM_PLAN.md)。
+发布流程同时生成 **Setup x64** 安装版和 **Portable x64** ZIP。Setup 默认安装到当前用户目录，提供开始菜单与卸载入口，卸载保留用户数据；Portable 保留解压即用方式，两者均使用当前用户的数据目录。构建安装包需要 Inno Setup 6，构建与发布校验见 [安装包与发布说明](docs/decisions/0032-windows-installer.md)。macOS 13+（Apple Silicon / Intel）提供 DMG 与便携 ZIP；Ubuntu 24.04 x64 提供 DEB、AppImage 与便携包。macOS 包未使用 Developer ID 签名或公证；Linux 便携包与 AppImage 依赖同版本系统库。实际验证环境与运行依赖见 [跨平台核对](docs/CROSS_PLATFORM_STATUS.md) 和 [适配计划](docs/CROSS_PLATFORM_PLAN.md)。
+
+“设置 → 关于 JAVM”提供正式版与 Beta 两个更新通道，发现更新后由用户下载并确认重启。新版更新验证签名并备份程序和数据，安装或首次启动失败时尝试恢复。0.5.3 用户可通过原更新入口升级，首次跨版本安装仍沿用旧机制，后续更新启用新版回退保护；详见 [自动更新与旧版升级](docs/decisions/0035-automatic-updates.md)。
 
 FFmpeg 采用参考老版 `ddmoyu/ffmepg` 裁剪配置的 **8.0.1 精简构建**，保留 JPEG 抽帧、MP4 无损合并与进度输出，关闭网络、硬件加速与视频转码。媒体轨道和时长检查复用内置 MediaInfo，不再构建或分发 ffprobe。打包会校验构建凭据、二进制哈希、体积和实际能力，拒绝混入完整版。来源与复现方式见 [精简 FFmpeg](docs/decisions/0013-lightweight-ffmpeg.md)。
 
