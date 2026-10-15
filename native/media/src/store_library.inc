@@ -122,6 +122,10 @@ ON CONFLICT(path_key) DO UPDATE SET stamp=excluded.stamp,encoding=excluded.encod
     }
     if(file.contains("stream_url")) run(db_,"INSERT INTO stream_targets(media_id,url) SELECT id,? FROM media_files WHERE path_key=? ON CONFLICT(media_id) DO UPDATE SET url=excluded.url",{file.at("stream_url"),pathKey(fs::path(pathFromText(path)))});
     if(!path.empty()) {
+        const auto key=pathKey(fs::path(pathFromText(path)));
+        if(file.contains("bitrate"))
+            run(db_,"INSERT INTO media_quality(media_id,video_bitrate) SELECT id,? FROM media_files WHERE path_key=? ON CONFLICT(media_id) DO UPDATE SET video_bitrate=excluded.video_bitrate",{file.at("bitrate"),key});
+        else run(db_,"DELETE FROM media_quality WHERE media_id=(SELECT id FROM media_files WHERE path_key=?)",{key});
         const auto name=pathText(fs::path(pathFromText(path)).stem());std::smatch part;
         static const std::regex pattern(R"((?:^|[ ._-])(?:CD|DISC|DISK|PART)[ ._-]*([0-9]{1,2})(?:$|[ ._-]))",std::regex::icase);
         if(std::regex_search(name,part,pattern) && std::stoi(part[1])>0)
@@ -164,7 +168,7 @@ Json Store::decorate(Json result) {
 
 Json Store::find(const fs::path& path) {
     std::lock_guard lock(mutex_);
-    auto found=rows(db_,"SELECT c.*,m.file_stamp,m.width,m.height,m.duration_ms,m.codec,m.fast_hash,m.missing FROM media_files m JOIN javm_catalog c ON c.id=m.work_id WHERE m.path_key=?",{pathKey(path)});
+    auto found=rows(db_,"SELECT c.*,m.file_stamp,m.width,m.height,m.duration_ms,m.codec,m.fast_hash,m.missing,q.video_bitrate AS bitrate FROM media_files m JOIN javm_catalog c ON c.id=m.work_id LEFT JOIN media_quality q ON q.media_id=m.id WHERE m.path_key=?",{pathKey(path)});
     if(found.empty()) return Json::object();
     auto result=found[0]; result["nfo_parser"]=0;
     return result;
@@ -256,22 +260,23 @@ void Store::finish(const Json& directory,const std::string& state,const std::str
 
 Json Store::maintenanceRows(const std::string& after, bool health) {
     std::lock_guard lock(mutex_);
-    const std::string extra=health ? ",m.file_stamp,m.codec,w.scan_status,w.poster,w.thumb,w.fanart,(SELECT path FROM nfo_documents WHERE work_id=w.id AND canonical=1) AS nfo" : "";
-    auto result = rows(db_,R"SQL(SELECT m.id,m.path,w.title,w.code,m.fast_hash AS hash,m.file_size AS size,m.duration_ms/1000 AS duration,m.missing,
+    const std::string extra=health ? ",m.file_stamp,w.scan_status,w.poster,w.thumb,w.fanart,(SELECT path FROM nfo_documents WHERE work_id=w.id AND canonical=1) AS nfo" : "";
+    auto result = rows(db_,R"SQL(SELECT m.id,m.work_id AS workId,m.path,w.title,w.code,m.fast_hash AS hash,m.file_size AS size,m.duration_ms/1000.0 AS duration,m.missing,
+ m.codec,q.video_bitrate AS bitrate,COALESCE(p.part_number,0) AS part,COALESCE(p.total,0) AS parts,
  CASE WHEN m.width>0 AND m.height>0 THEN m.width||'x'||m.height ELSE '' END AS resolution
-)SQL"+extra+" FROM media_files m JOIN works w ON w.id=m.work_id WHERE m.id>? ORDER BY m.id LIMIT 500",{after});
+)SQL"+extra+" FROM media_files m JOIN works w ON w.id=m.work_id LEFT JOIN media_quality q ON q.media_id=m.id LEFT JOIN media_parts p ON p.media_id=m.id WHERE m.id>? ORDER BY m.id LIMIT 500",{after});
     for (auto& row: result) row["missing"] = row["missing"].get<int>() != 0;
     return result;
 }
 Json Store::fileIdentity(const std::string& id) {
     std::lock_guard lock(mutex_);
-    const auto found = rows(db_,"SELECT id,path,file_stamp FROM media_files WHERE id=?",{id});
+    const auto found = rows(db_,"SELECT m.id,m.path,m.file_stamp,COALESCE(p.part_number,0) AS part FROM media_files m LEFT JOIN media_parts p ON p.media_id=m.id WHERE m.id=?",{id});
     if (found.empty()) throw std::runtime_error("要保留的视频记录已不存在，请重新检查");
     return found[0];
 }
 Json Store::removalInfo(const std::string& id) {
     std::lock_guard lock(mutex_);
-    auto found=rows(db_,"SELECT m.id,m.work_id,m.path AS video_path,m.file_stamp,w.poster,w.thumb,w.fanart FROM media_files m JOIN works w ON w.id=m.work_id WHERE m.id=?",{id});
+    auto found=rows(db_,"SELECT m.id,m.work_id,m.path AS video_path,m.file_stamp,w.poster,w.thumb,w.fanart,COALESCE(p.part_number,0) AS part FROM media_files m JOIN works w ON w.id=m.work_id LEFT JOIN media_parts p ON p.media_id=m.id WHERE m.id=?",{id});
     if(found.empty()) throw std::runtime_error("文件记录已不存在，请刷新");
     auto result=found[0]; const auto workId=result["work_id"];
     Json assets=Json::array(),shared=Json::array(),stems=Json::array();

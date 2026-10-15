@@ -20,7 +20,13 @@ import { ObjectMenu, objectMenuKey } from "../../components/ObjectMenu";
 import { Empty } from "../../components/ui";
 import { maintenancePageSize } from "../../contracts/maintenance";
 import type { LibraryMaintenanceService } from "../../services/library/LibraryMaintenanceService";
-import { filename, parentDirectory } from "../../services/library/maintenanceRules";
+import {
+  filename,
+  parentDirectory,
+  videoBitrate,
+  videoPart,
+} from "../../services/library/maintenanceRules";
+import type { MaintenanceVideo } from "../../contracts/maintenance";
 import { openMediaDirectory } from "../../platform/neutralino/directoryPicker";
 
 function fileSize(value: number | null) {
@@ -28,6 +34,15 @@ function fileSize(value: number | null) {
   if (!value) return "0 B";
   const power = value >= 1024 ** 3 ? 3 : value >= 1024 ** 2 ? 2 : 1;
   return `${(value / 1024 ** power).toFixed(2)} ${["B", "KB", "MB", "GB"][power]}`;
+}
+function bitrateLabel(video: MaintenanceVideo) {
+  const bitrate = videoBitrate(video);
+  if (!bitrate.value) return "码率未知";
+  const value =
+    bitrate.value >= 1_000_000
+      ? `${(bitrate.value / 1_000_000).toFixed(2)} Mbps`
+      : `${(bitrate.value / 1_000).toFixed(0)} kbps`;
+  return bitrate.estimated ? `估算总码率 ${value}` : `视频码率 ${value}`;
 }
 
 export function LibraryMaintenanceModal({
@@ -93,6 +108,12 @@ export function LibraryMaintenanceModal({
     setMetadataOnly(false);
     setConfirming(true);
   };
+  const confirmSuggestions = async () => {
+    const changed = await select("suggested");
+    const current = service.getSnapshot();
+    if (changed && current.phase === "ready" && current.selected > 0 && !current.unprotected)
+      confirm();
+  };
   return (
     <>
       <Modal
@@ -134,7 +155,7 @@ export function LibraryMaintenanceModal({
                 <Button
                   size="xs"
                   variant="default"
-                  disabled={busy || !state.total}
+                  disabled={busy || !state.suggested}
                   onClick={() => void select("suggested")}
                 >
                   选择建议清理项
@@ -159,25 +180,57 @@ export function LibraryMaintenanceModal({
                 取消选择
               </Button>
             </Group>
-            <Button
-              size="xs"
-              color="red"
-              leftSection={<Icon name="trash" size={15} />}
-              disabled={busy || state.phase !== "ready" || !state.selected}
-              onClick={confirm}
-            >
-              删除所选 {state.selected || ""}
-            </Button>
+            <Group gap="xs">
+              {duplicates && (
+                <Button
+                  size="xs"
+                  color="red"
+                  variant="light"
+                  leftSection={<Icon name="trash" size={15} />}
+                  disabled={busy || state.phase !== "ready" || !state.suggested}
+                  onClick={() => void confirmSuggestions()}
+                >
+                  一键清理建议项
+                </Button>
+              )}
+              <Button
+                size="xs"
+                color="red"
+                leftSection={<Icon name="trash" size={15} />}
+                disabled={busy || state.phase !== "ready" || !state.selected}
+                onClick={confirm}
+              >
+                删除所选 {state.selected || ""}
+              </Button>
+            </Group>
           </Group>
           <Text size="xs" c="dimmed">
             {duplicates
-              ? "按相同番号或头尾文件指纹分组，优先保留可用、时长完整、清晰度高的视频。相同番号可能是分段或不同版本，清理前请核对。"
+              ? "按作品、番号或文件指纹分组。优先画质：时长接近时比较分辨率、可比码率和大小；分段、不同剪辑和参数不足项需人工核对。"
               : ads
                 ? "从已入库视频中筛选零字节、重复文件名和关键词命中项，排除词优先。不进行视频内容识别。"
                 : health
                   ? "检查文件可访问性、文件变化、视频资料、NFO 和封面。检查只生成报告，修复后可重新扫描目录；离线文件不会自动删除。"
                   : "选择需要删除的本地视频资源。作品资料与收藏会保留，删除前请核对路径。"}
           </Text>
+          {duplicates && (
+            <Text size="xs" c="dimmed">
+              估算总码率由大小与时长计算，包含音频和容器开销。建议仅依据文件参数，不代表实际画面质量；重新扫描可补齐视频码率。
+            </Text>
+          )}
+          {duplicates && state.phase === "ready" && state.total > 0 && (
+            <Group gap="xs" aria-live="polite">
+              <Badge variant="light" color="green">
+                建议清理 {state.suggested} 项
+              </Badge>
+              <Text size="xs">预计释放 {fileSize(state.suggestedBytes)}</Text>
+              {state.review > 0 && (
+                <Badge variant="light" color="yellow">
+                  需人工核对 {state.review} 项
+                </Badge>
+              )}
+            </Group>
+          )}
           {duplicates && state.unhashed > 0 && (
             <Text size="xs" c="yellow">
               {state.unhashed} 个视频尚无文件指纹，可在目录页重新扫描以补齐；目前仍参与番号对照。
@@ -239,11 +292,11 @@ export function LibraryMaintenanceModal({
                 >
                   <Table.Thead>
                     <Table.Tr>
-                      <Table.Th w={56}>选择</Table.Th>
+                      <Table.Th w={72}>选择</Table.Th>
                       <Table.Th>视频与路径</Table.Th>
-                      <Table.Th w={150}>视频信息</Table.Th>
-                      <Table.Th w={180}>命中原因</Table.Th>
-                      <Table.Th w={56}>操作</Table.Th>
+                      <Table.Th w={190}>视频信息</Table.Th>
+                      <Table.Th w={210}>{duplicates ? "保留建议与原因" : "命中原因"}</Table.Th>
+                      <Table.Th w={72}>操作</Table.Th>
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
@@ -302,6 +355,21 @@ export function LibraryMaintenanceModal({
                                   建议保留
                                 </Badge>
                               )}
+                              {duplicates && video.suggested && (
+                                <Badge size="xs" color="red" variant="light">
+                                  建议清理
+                                </Badge>
+                              )}
+                              {duplicates && video.review && (
+                                <Badge size="xs" color="yellow" variant="light">
+                                  需人工核对
+                                </Badge>
+                              )}
+                              {duplicates && videoPart(video) > 0 && (
+                                <Badge size="xs" variant="light">
+                                  第 {videoPart(video)} 段
+                                </Badge>
+                              )}
                               {video.missing && (
                                 <Badge size="xs" color="yellow" variant="light">
                                   文件不可用
@@ -327,13 +395,30 @@ export function LibraryMaintenanceModal({
                           </Table.Td>
                           <Table.Td>
                             <Text size="sm">{video.resolution || "清晰度未知"}</Text>
+                            {duplicates && (
+                              <Text size="xs" c="dimmed">
+                                {video.codec || "编码未知"}
+                              </Text>
+                            )}
+                            {duplicates && (
+                              <Text size="xs" c="dimmed">
+                                {bitrateLabel(video)}
+                              </Text>
+                            )}
                             <Text size="xs" c="dimmed">
                               {video.duration ? `${Math.round(video.duration / 60)} 分钟 · ` : ""}
                               {fileSize(video.size)}
                             </Text>
                           </Table.Td>
                           <Table.Td>
-                            <Text size="xs">{video.reason}</Text>
+                            {duplicates && (
+                              <Text size="xs" mb={4}>
+                                {video.advice ?? ""}
+                              </Text>
+                            )}
+                            <Text size="xs" c={duplicates ? "dimmed" : undefined}>
+                              {video.reason}
+                            </Text>
                           </Table.Td>
                           <Table.Td>
                             <ActionIcon
@@ -376,7 +461,7 @@ export function LibraryMaintenanceModal({
               }
               description={
                 duplicates
-                  ? "当前片库没有匹配的番号或文件指纹。"
+                  ? "当前片库没有匹配的作品、番号或文件指纹。"
                   : ads
                     ? "可以调整关键词或排除规则后重新检查。"
                     : health
@@ -400,6 +485,11 @@ export function LibraryMaintenanceModal({
               ? "将删除这些视频的 NFO、独占封面和刮削资料，保留原视频及片库记录。"
               : "将永久删除所选视频。作品资料、NFO、封面、收藏和旁边的其他文件会保留；最后一个视频移除后，作品显示为未下载。"}
           </Text>
+          {duplicates && !metadataOnly && (
+            <Text size="sm" fw={600}>
+              预计释放 {fileSize(state.selectedBytes)}
+            </Text>
+          )}
           <Text size="xs" c="dimmed">
             {metadataOnly
               ? "清除作品的 NFO 和封面；与其他资源共享资料时会停止并提示。"
@@ -415,7 +505,7 @@ export function LibraryMaintenanceModal({
             (state.unprotected > 0 ? (
               <Alert color="yellow" role="alert">
                 有 {state.unprotected}{" "}
-                个所选视频没有可用的保留副本。每组至少取消勾选一个可用视频后再清理。
+                个所选视频没有可用的保留副本。每组、每个分段至少取消勾选一个可用视频后再清理。
               </Alert>
             ) : (
               <Text size="xs" c="dimmed">

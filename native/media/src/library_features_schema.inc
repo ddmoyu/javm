@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS facet_aliases(dimension TEXT NOT NULL,alias TEXT NOT 
 CREATE INDEX IF NOT EXISTS facet_aliases_canonical ON facet_aliases(dimension,canonical,blocked);
 CREATE TABLE IF NOT EXISTS facet_names(dimension TEXT NOT NULL,name TEXT NOT NULL,label TEXT NOT NULL,PRIMARY KEY(dimension,name));
 CREATE TABLE IF NOT EXISTS media_parts(media_id TEXT PRIMARY KEY REFERENCES media_files(id) ON DELETE CASCADE,part_number INTEGER NOT NULL,total INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS media_quality(media_id TEXT PRIMARY KEY REFERENCES media_files(id) ON DELETE CASCADE,video_bitrate INTEGER NOT NULL DEFAULT 0 CHECK(video_bitrate>=0));
 CREATE TABLE IF NOT EXISTS media_subtitles(media_id TEXT NOT NULL REFERENCES media_files(id) ON DELETE CASCADE,path_key TEXT NOT NULL,path TEXT NOT NULL,PRIMARY KEY(media_id,path_key));
 CREATE TABLE IF NOT EXISTS app_launches(id INTEGER PRIMARY KEY,payload TEXT NOT NULL,created INTEGER NOT NULL DEFAULT(unixepoch()));
 )SQL"

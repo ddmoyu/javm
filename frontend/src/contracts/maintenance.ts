@@ -11,6 +11,7 @@ export const defaultAdRules: AdRules = {
 };
 export interface MaintenanceVideo {
   id: string;
+  workId?: string;
   path: string;
   title: string;
   code: string;
@@ -18,6 +19,11 @@ export interface MaintenanceVideo {
   size: number | null;
   duration: number;
   resolution: string;
+  codec?: string;
+  /** 视频流码率（bit/s）；旧记录或探测不支持时为空。 */
+  bitrate?: number | null;
+  part?: number;
+  parts?: number;
   missing: boolean;
   issues?: string[];
 }
@@ -29,6 +35,8 @@ export interface MaintenanceRow extends MaintenanceVideo {
   suggested: boolean;
   suggestedKeep: boolean;
   selected: boolean;
+  advice?: string;
+  review?: boolean;
 }
 export interface RemovalTarget {
   id: string;
@@ -40,6 +48,10 @@ export interface MaintenancePage {
   total: number;
   groups: number;
   selected: number;
+  suggested: number;
+  suggestedBytes: number;
+  selectedBytes: number;
+  review: number;
   unprotected: number;
   unhashed: number;
   page: number;

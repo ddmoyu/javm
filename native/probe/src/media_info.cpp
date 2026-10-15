@@ -121,6 +121,7 @@ Json readDirect(const fs::path& file, const fs::path& libraryPath) {
         {"audioChannels", integer(MediaInfo_Stream_Audio, L"Channel(s)")},
         {"audioLanguage", value(MediaInfo_Stream_Audio, L"Language")},
         {"width", integer(MediaInfo_Stream_Video, L"Width")}, {"height", integer(MediaInfo_Stream_Video, L"Height")},
+        {"bitrate", static_cast<std::int64_t>(number(value(MediaInfo_Stream_Video, L"BitRate"), 9'007'199'254'740'991.0))},
         {"codec", value(MediaInfo_Stream_Video, L"Format")}};
 }
 } // namespace javm::probe

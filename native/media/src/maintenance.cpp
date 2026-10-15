@@ -134,6 +134,8 @@ Json LibraryService::maintenance(const std::string& method, const Json& params) 
                 throw std::runtime_error("重复清理需要保留一个可用视频，请取消勾选要保留的文件");
             const auto& requested = params.at("retained");
             const auto copy = store_.fileIdentity(requested.at("id"));
+            if (copy.at("part") != info.at("part"))
+                throw std::runtime_error("不同分段不能互相替代，请为当前分段保留可用副本");
             const fs::path copyPath(pathFromText(copy.at("path")));
             if (copy.at("id") == info.at("id") || pathKey(copyPath) == pathKey(path) ||
                 pathKey(copyPath) != pathKey(fs::path(pathFromText(requested.at("path")))))

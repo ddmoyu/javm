@@ -312,13 +312,13 @@ Json LibraryService::prepareScrape(const Json& params) {
         }
         fileStamp=stamp(path);
         auto old=store_.find(path);
-        const auto metadata=!old.empty() && old.value("file_stamp",std::string{})==fileStamp
-            ? Json{{"video",true},{"width",old["width"]},{"height",old["height"]},{"durationMs",old["duration_ms"]},{"codec",old["codec"]}}
+        const auto metadata=!old.empty() && old.value("file_stamp",std::string{})==fileStamp && !old.value("bitrate",Json()).is_null()
+            ? Json{{"video",true},{"width",old["width"]},{"height",old["height"]},{"durationMs",old["duration_ms"]},{"codec",old["codec"]},{"bitrate",old["bitrate"]}}
             : probe(path,scrapeCancelled_);
         if(!metadata.at("video").get<bool>()) throw std::runtime_error("文件不是可识别的视频");
         Json file={{"path",pathText(path)},{"parent",pathText(path.parent_path())},{"name",pathText(path.stem())},
             {"file_stamp",fileStamp},{"size",fs::file_size(path)},{"mtime",modifiedSeconds(path)},
-            {"width",metadata["width"]},{"height",metadata["height"]},{"duration_ms",metadata["durationMs"]},{"codec",metadata["codec"]},{"fast_hash",fastHash(path)}};
+            {"width",metadata["width"]},{"height",metadata["height"]},{"duration_ms",metadata["durationMs"]},{"codec",metadata["codec"]},{"bitrate",metadata.value("bitrate",int64_t{0})},{"fast_hash",fastHash(path)}};
         if(!workId.empty()) file["work_id"]=workId;
         auto nfoPath=path; nfoPath.replace_extension(".nfo");
         if(!fs::exists(nfoPath) && fs::exists(path.parent_path()/"movie.nfo")) {
@@ -452,7 +452,8 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                     unchanged = old.value("file_stamp",std::string{}) == before;
                     file = {{"path",pathText(path)},{"path_key",pathKey(path)},{"parent",pathText(path.parent_path())},
                         {"name",pathText(path.stem())},{"file_stamp",before},{"size",fs::file_size(path)},{"mtime",modifiedSeconds(path)}};
-                    if (unchanged) for (const auto* field: {"width","height","duration_ms","codec"}) file[field] = old[field];
+                    // 没有码率记录的旧资源只补探测一次；已探测但格式不提供码率时保存 0。
+                    if (unchanged && !old.value("bitrate",Json()).is_null()) for (const auto* field: {"width","height","duration_ms","codec","bitrate"}) file[field] = old[field];
                     else {
                         {
                             std::lock_guard lock(progressMutex_);
@@ -467,6 +468,7 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                         if (!metadata.at("video").get<bool>()) { increment("skipped"); increment("processed"); return; }
                         file["width"] = metadata["width"]; file["height"] = metadata["height"];
                         file["duration_ms"] = metadata["durationMs"]; file["codec"] = metadata["codec"];
+                        file["bitrate"] = metadata.value("bitrate",int64_t{0});
                     }
                     fs::path nfoPath;
                     file["fast_hash"] = unchanged && old.value("fast_hash",Json()).is_string() && !old["fast_hash"].get<std::string>().empty()

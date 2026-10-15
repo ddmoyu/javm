@@ -18,6 +18,10 @@ const emptyPage: MaintenancePage = {
   total: 0,
   groups: 0,
   selected: 0,
+  suggested: 0,
+  suggestedBytes: 0,
+  selectedBytes: 0,
+  review: 0,
   unprotected: 0,
   unhashed: 0,
   page: 1,
@@ -238,13 +242,15 @@ export class LibraryMaintenanceService {
     this.publish({ phase: "idle", changing: false, message: "检查已停止" });
   }
   async change(command: Extract<MaintenanceCommand, { type: "page" | "select" }>) {
-    if (this.snapshot.phase !== "ready" || this.snapshot.changing) return;
+    if (this.snapshot.phase !== "ready" || this.snapshot.changing) return false;
     this.publish({ changing: true });
     try {
       this.publish(await this.call<MaintenancePage>(command));
+      return true;
     } catch (error) {
       logEvent("error", "library", "maintenance_change_failed", message(error));
       this.publish({ error: message(error) });
+      return false;
     } finally {
       this.publish({ changing: false });
     }
@@ -258,7 +264,7 @@ export class LibraryMaintenanceService {
     )
       return Promise.resolve();
     if (!metadataOnly && this.snapshot.mode === "duplicates" && this.snapshot.unprotected) {
-      this.publish({ error: "每组请至少保留一个可用视频，取消勾选要保留的文件后再清理。" });
+      this.publish({ error: "每组、每个分段请至少保留一个可用视频，取消勾选要保留的文件后再清理。" });
       return Promise.resolve();
     }
     this.cancelled = false;

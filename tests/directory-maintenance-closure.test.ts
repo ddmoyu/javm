@@ -14,6 +14,7 @@ const sample = (id: string, extra: Partial<MaintenanceVideo> = {}): MaintenanceV
   size: 1024,
   duration: 600,
   resolution: "1920x1080",
+  codec: "AVC",
   missing: false,
   ...extra,
 });
@@ -106,7 +107,7 @@ describe("目录清理闭环修复", () => {
     ).toEqual([
       { id: "keep", suggestedKeep: true, suggested: false },
       { id: "copy", suggestedKeep: false, suggested: true },
-      { id: "gone", suggestedKeep: false, suggested: true },
+      { id: "gone", suggestedKeep: false, suggested: false },
     ]);
     expect(retainedCopies(rows, new Set(["copy", "gone"])).get(rows[0]!.groupId)?.id).toBe("keep");
     expect(retainedCopies(rows, new Set(["keep", "copy"])).size).toBe(0);

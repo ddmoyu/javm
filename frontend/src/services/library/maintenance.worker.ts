@@ -7,7 +7,14 @@ import type {
   MaintenanceMode,
   AdRules,
 } from "../../contracts/maintenance";
-import { adRows, duplicateRows, healthRows, retainedCopies, usableCopy } from "./maintenanceRules";
+import {
+  adRows,
+  duplicateRows,
+  healthRows,
+  retainedCopies,
+  retentionKey,
+  usableCopy,
+} from "./maintenanceRules";
 
 let videos: MaintenanceVideo[] = [],
   rows: MaintenanceRow[] = [];
@@ -26,9 +33,21 @@ function snapshot(): MaintenancePage {
     total: rows.length,
     groups: mode === "duplicates" ? new Set(rows.map((row) => row.groupId)).size : 0,
     selected: selected.size,
+    suggested: rows.reduce((count, row) => count + Number(row.suggested), 0),
+    suggestedBytes: rows.reduce(
+      (bytes, row) => bytes + (row.suggested && !row.missing ? Math.max(0, row.size ?? 0) : 0),
+      0,
+    ),
+    selectedBytes: rows.reduce(
+      (bytes, row) =>
+        bytes + (selected.has(row.id) && !row.missing ? Math.max(0, row.size ?? 0) : 0),
+      0,
+    ),
+    review: rows.reduce((count, row) => count + Number(!!row.review), 0),
     unprotected: retained
-      ? rows.filter((row) => selected.has(row.id) && usableCopy(row) && !retained.has(row.groupId))
-          .length
+      ? rows.filter(
+          (row) => selected.has(row.id) && usableCopy(row) && !retained.has(retentionKey(row)),
+        ).length
       : 0,
     unhashed,
     page,
@@ -83,7 +102,11 @@ self.onmessage = (event: MessageEvent<{ id: number; command: MaintenanceCommand 
         result = rows
           .filter((row) => selected.has(row.id))
           .slice(command.after, command.after + 30)
-          .map(({ id, path, groupId }) => ({ id, path, retained: retained?.get(groupId) }));
+          .map((row) => ({
+            id: row.id,
+            path: row.path,
+            retained: retained?.get(retentionKey(row)),
+          }));
         break;
       }
       case "removed": {

@@ -16,6 +16,7 @@ const video = (id: string, extra: Partial<MaintenanceVideo> = {}): MaintenanceVi
   size: 1024,
   duration: 6000,
   resolution: "1920x1080",
+  codec: "AVC",
   missing: false,
   ...extra,
 });
@@ -37,7 +38,7 @@ describe("重复与广告检查规则", () => {
     expect(result.every((row) => row.reason === "番号与文件指纹关联" && row.crossDirectory)).toBe(
       true,
     );
-    expect(result.map((row) => row.suggested)).toEqual([false, true, true]);
+    expect(result.every((row) => !row.suggested && row.review)).toBe(true);
     expect(result.every((row) => !row.selected)).toBe(true);
   });
   it("内容指纹可单独成组，空番号空指纹不形成重复组", () => {
