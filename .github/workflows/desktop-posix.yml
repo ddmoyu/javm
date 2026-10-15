@@ -3,10 +3,15 @@ on:
   workflow_dispatch:
   workflow_call:
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: desktop-posix-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   desktop:
     name: ${{ matrix.target }} 组件与桌面
+    permissions:
+      contents: write
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -17,25 +22,24 @@ jobs:
           - { target: macos-arm64, runner: macos-15 }
           - { target: macos-x64, runner: macos-15-intel }
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.1.0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - uses: actions/setup-go@v6.1.0
+          install: "false"
+      - name: 核对发布标签来源
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node scripts/release-alpha.mjs verify-source
+      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
         with:
           go-version: "1.25.0"
           cache: false
       - run: pnpm install --frozen-lockfile
-      - name: 核对发布标签来源
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: node scripts/release-alpha.mjs verify-source
       - name: 准备 Linux 构建依赖
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build nasm libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-0 gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad libayatana-appindicator3-1 patchelf squashfs-tools desktop-file-utils xvfb gnome-keyring dbus-x11
+        run: sudo apt-get update && sudo apt-get install -y ninja-build nasm libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-dev gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad libayatana-appindicator3-dev patchelf squashfs-tools desktop-file-utils xvfb gnome-keyring dbus-x11 policykit-1
       - name: 准备 macOS 构建工具
         if: runner.os == 'macOS'
         run: |
@@ -54,6 +58,15 @@ jobs:
         env:
           JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
         run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
+      - name: 临时系统只授权本次 dpkg 夹具
+        if: runner.os == 'Linux'
+        run: |
+          printf 'polkit.addRule(function(action, subject) { if (action.id == "org.freedesktop.policykit.exec" && action.lookup("program") == "/usr/bin/dpkg" && subject.user == "%s") return polkit.Result.YES; });\n' "$(id -un)" | sudo tee /etc/polkit-1/rules.d/49-javm-update-validation.rules >/dev/null
+          sudo systemctl restart polkit
+      - name: 验证 APP、AppImage、DEB 更新及故障回退
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
+        run: node --disable-warning=ExperimentalWarning --test scripts/update-platform.test.mjs
       - name: 验证系统凭据存储
         if: ${{ !cancelled() && steps.native.outcome == 'success' }}
         run: node scripts/verify-system-credentials.mjs
@@ -83,9 +96,35 @@ jobs:
       - name: 检查安装包与实际宿主
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: node scripts/verify-posix-package.mjs
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-alpha.')
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/update/tests/legacy-tauri/target
+          key: legacy-updater-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/update/tests/legacy-tauri/Cargo.lock') }}
+      - name: 编译 0.5.3 原更新插件安全驱动
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-alpha.')
+        run: cargo build --locked --manifest-path native/update/tests/legacy-tauri/Cargo.toml
+      - name: 验证 0.5.3 到当前发布的签名安装与新宿主启动
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-alpha.')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/verify-legacy-upgrade.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-alpha.')
+        with:
+          name: javm-upgrade-${{ matrix.target }}
+          path: build/legacy-upgrade-${{ matrix.target }}.json
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: javm-development-${{ matrix.target }}
           path: dist/posix-release/${{ matrix.target }}/*
           if-no-files-found: error
+          compression-level: 0
           retention-days: 14

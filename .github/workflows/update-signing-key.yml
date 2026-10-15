@@ -15,6 +15,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: "false"
+          cache: "false"
       - name: 准备 GitHub sealed box 加密库
         run: sudo apt-get update -qq && sudo apt-get install -y libsodium23
       - name: 初始化或验证更新签名
@@ -24,10 +28,6 @@ jobs:
           JAVM_ACTIONS_PUBLIC_KEY: Pewow781lHIzBA7s8i9E7wb8d9ia/ATpRzhO+HoTdzE=
           JAVM_ACTIONS_PUBLIC_KEY_ID: "3380204578043523366"
         run: node scripts/update-key.mjs bootstrap
-      - uses: actions/setup-node@v7.1.0
-        with:
-          node-version-file: .node-version
-      - uses: pnpm/action-setup@v6.1.0
       - name: 验证旧版 Tauri 密钥仍可用于兼容升级
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

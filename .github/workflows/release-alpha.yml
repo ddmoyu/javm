@@ -1,4 +1,5 @@
-name: JAVM 正式与预发布安装包
+name: 应用发布与跨平台验收
+run-name: ${{ startsWith(github.ref, 'refs/tags/v') && format('发布 {0}', github.ref_name) || format('手动验收 {0} · {1}', github.ref_name, inputs.validation) }}
 
 on:
   push:
@@ -15,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: alpha-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -28,19 +29,20 @@ jobs:
     permissions:
       contents: write
     uses: ./.github/workflows/desktop-posix.yml
+    secrets: inherit
   build:
+    name: Windows x64 安装包与便携包
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.1.0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
         with:
-          node-version-file: .node-version
-          cache: pnpm
+          install: "false"
       - name: 核对版本标签和 main 源码
         run: node scripts/release-alpha.mjs verify-source
       - run: pnpm install --frozen-lockfile
@@ -74,7 +76,8 @@ jobs:
         run: |
           pnpm native:build --release --update-tests
           if ($LASTEXITCODE -ne 0) { throw 'Updater fixture build failed' }
-          node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
+          node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs scripts/update-setup.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Updater installation validation failed' }
       - name: 验证封面与资料的原生写入
         env:
           JAVM_MEDIA_INTEGRATION: "1"
@@ -85,33 +88,62 @@ jobs:
         run: node scripts/package-installer.mjs
       - name: 验证安装、覆盖安装与卸载
         run: ./scripts/verify-installer.ps1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/update/tests/legacy-tauri/target
+          key: legacy-updater-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/update/tests/legacy-tauri/Cargo.lock') }}
+      - name: 编译 0.5.3 原更新插件安全驱动
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        run: cargo build --locked --manifest-path native/update/tests/legacy-tauri/Cargo.toml
+      - name: 验证 0.5.3 到当前发布的签名安装与新宿主启动
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/verify-legacy-upgrade.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        with:
+          name: javm-upgrade-windows-x64
+          path: build/legacy-upgrade-windows-x64.json
+          if-no-files-found: error
+          retention-days: 14
       - name: 整理发布附件和验证记录
         run: node scripts/release-alpha.mjs prepare
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: javm-alpha-windows-x64
           path: build/alpha-release/*
           if-no-files-found: error
+          compression-level: 0
           retention-days: 14
 
   publish:
+    name: 校验附件并发布
     needs: [build, desktop-posix]
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v7.1.0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
         with:
-          node-version-file: .node-version
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/download-artifact@v8.0.2
+          install: "false"
+          cache: "false"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: javm-alpha-windows-x64
           path: build/alpha-release
-      - uses: actions/download-artifact@v8.0.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: javm-development-*
           path: build/posix-artifacts

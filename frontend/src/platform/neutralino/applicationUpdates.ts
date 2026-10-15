@@ -13,6 +13,7 @@ import type {
 import type { Runtime } from "./bootstrap";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { createResolutionHttp } from "./resolutionHttp";
+import { bounds, ResolutionError } from "../../services/streamResolution/shared";
 import { nativeSettingsStorage } from "./settingsStorage";
 import {
   cancelUpdateHandoff,
@@ -39,11 +40,22 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
           url,
           headers: { Accept: "application/vnd.github+json" },
           maxBytes: 1024 * 1024,
-          timeoutMs: 15000,
+          timeoutMs: bounds.requestMs,
           proxy: await network.getProxy(),
         },
         signal,
-      );
+      ).catch((error: unknown) => {
+        if (error instanceof ResolutionError) {
+          const message =
+            error.code === "timeout"
+              ? "检查更新超时，请检查网络或代理后重试。"
+              : error.code === "limit_exceeded"
+                ? "更新信息超过大小限制，请前往官方发布页面检查更新。"
+                : "检查更新请求失败，请检查网络或代理后重试。";
+          throw new Error(message, { cause: error });
+        }
+        throw error;
+      });
       if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.location) {
         url = new URL(response.headers.location, url).href;
         continue;

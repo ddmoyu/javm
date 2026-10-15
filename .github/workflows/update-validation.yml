@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   posix:
-    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'windows'
+    if: inputs.scope != 'windows'
     name: ${{ matrix.target }} 安装与回退
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
@@ -26,14 +26,11 @@ jobs:
           - { target: macos-arm64, runner: macos-15 }
           - { target: macos-x64, runner: macos-15-intel }
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/cache@v6.1.0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -85,7 +82,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/verify-legacy-upgrade.mjs
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: update-validation-${{ matrix.target }}
@@ -96,19 +93,16 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
   windows:
-    if: github.event_name != 'workflow_dispatch' || inputs.scope != 'posix'
+    if: inputs.scope != 'posix'
     name: Windows 旧版升级
     runs-on: windows-2025
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - uses: actions/cache@v6.1.0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
@@ -136,7 +130,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: node scripts/verify-legacy-upgrade.mjs
-      - uses: actions/upload-artifact@v7.0.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: update-validation-windows-x64

@@ -3,31 +3,50 @@ name: 工程检查
 on:
   # 仅允许手动运行；提交、推送、PR 和标签都不自动触发。
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 检查范围
+        type: choice
+        options: [all, frontend, native]
+        default: all
 
 permissions:
   contents: read
 
+concurrency:
+  group: check-${{ github.ref }}-${{ inputs.scope || 'all' }}
+  cancel-in-progress: true
+
 jobs:
   frontend:
-    runs-on: ubuntu-latest
+    if: inputs.scope != 'native'
+    name: 前端检查与构建
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: pnpm/action-setup@v6.1.0
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          node-version-file: .node-version
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
       - run: pnpm check
       - run: pnpm build
 
   native-windows:
-    runs-on: windows-latest
+    if: inputs.scope != 'frontend'
+    name: Windows x64 原生构建
+    runs-on: windows-2025
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: "false"
+          cache: "false"
       - name: 构建 C++ 和 SQLite
         shell: pwsh
-        run: ./scripts/build-native.ps1
+        run: pnpm native:build
       - name: 检查原生构建版本
         shell: pwsh
         run: ./build/native/windows-msvc/bin/javm_database.exe --version

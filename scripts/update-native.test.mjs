@@ -14,6 +14,7 @@ import {
   signManifest,
   verifyManifest,
   platformVersion,
+  releaseVersion,
 } from "./update-format.mjs";
 import { updateManifest } from "./update-release.mjs";
 const run = promisify(execFile);
@@ -45,7 +46,7 @@ const privateKey = createPrivateKey({
 }).export({ type: "pkcs8", format: "pem" });
 const json = async (file) => JSON.parse(await readFile(file, "utf8"));
 const save = (file, value) => writeFile(file, JSON.stringify(value));
-async function fixture(mode) {
+async function fixture(mode, current = "99.0.0-beta.1", next = "99.0.0-beta.2") {
   await mkdir(".tmp", { recursive: true });
   const base = await mkdtemp(path.resolve(".tmp", "update-safe-"));
   const root = path.join(base, "安全 安装"),
@@ -59,8 +60,9 @@ async function fixture(mode) {
   await copyFile(app, entry);
   await chmod(entry, 0o755);
   await writeFile(path.join(root, "old-only.txt"), "old-runtime");
-  await writeFile(path.join(root, "user-file.txt"), "safe-user-data");
   await save(path.join(root, "fixture-mode.json"), { mode: "old" });
+  await installationReceipt(root, current, "portable");
+  await writeFile(path.join(root, "user-file.txt"), "safe-user-data");
   for (const name of ["library.sqlite3", "downloads-v1.sqlite3"]) {
     const db = new DatabaseSync(path.join(dataRoot, name));
     db.exec(
@@ -73,14 +75,14 @@ async function fixture(mode) {
   await chmod(path.join(stage, "JAVM" + suffix), 0o755);
   await save(path.join(stage, "fixture-mode.json"), { mode });
   await writeFile(path.join(stage, "new-only.txt"), "new-runtime");
-  await installationReceipt(stage, "99.0.0-beta.2", "portable");
+  await installationReceipt(stage, next, "portable");
   const archive = path.join(transaction, "package.jup");
   const files = await updateArchive(stage, archive);
   const manifest = {
     schema: 1,
     app: "net.ddmoyu.javm",
-    version: "99.0.0-beta.2",
-    channel: "beta",
+    version: next,
+    channel: releaseVersion(next).channel,
     minimumUpdater: 1,
     assets: [
       {
@@ -102,8 +104,8 @@ async function fixture(mode) {
     ownerPid: 0,
     extensionPid: 0,
     version: manifest.version,
-    currentVersion: "99.0.0-beta.1",
-    owned: ["JAVM" + suffix, "old-only.txt", "fixture-mode.json"],
+    currentVersion: current,
+    owned: ["JAVM" + suffix, "old-only.txt", "fixture-mode.json", "update-installation.json"],
     files,
     envelope: signManifest(manifest, privateKey),
   };
@@ -133,6 +135,35 @@ test("正式和 Beta 的平台版本及签名清单", () => {
   assert.throws(() => updateManifest("1.2.0-alpha.1", []));
   assert.throws(() => updateManifest("1.2.0-beta.1", []));
 });
+
+for (const mode of ["ok", "fail"]) {
+  void test(`1.0.7 到 1.0.8 正式版便携更新：${mode}`, async () => {
+    const f = await fixture(mode, "1.0.7", "1.0.8");
+    try {
+      await run(updater, ["--apply", f.transaction], { windowsHide: true, timeout: 30000 });
+      assert.equal(
+        (await json(path.join(f.transaction, "status.json"))).phase,
+        mode === "ok" ? "committed" : "rolled-back",
+      );
+      assert.equal(
+        (await json(path.join(f.root, "update-installation.json"))).version,
+        mode === "ok" ? "1.0.8" : "1.0.7",
+      );
+      for (const name of ["library.sqlite3", "downloads-v1.sqlite3"])
+        assert.equal(
+          dbValue(path.join(f.dataRoot, name)),
+          mode === "ok" ? "new-safe-value" : "old-safe-value",
+        );
+      assert.equal(
+        (await json(path.join(f.settings, "preferences.json"))).value,
+        mode === "ok" ? "new-safe-value" : "old-safe-value",
+      );
+      assert.equal(await readFile(path.join(f.root, "user-file.txt"), "utf8"), "safe-user-data");
+    } finally {
+      await cleanup(f);
+    }
+  });
+}
 test("健康启动提交后保留新版数据，恢复命令不会再降级", async () => {
   const f = await fixture("ok");
   try {

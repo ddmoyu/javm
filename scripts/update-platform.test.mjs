@@ -18,7 +18,14 @@ import {
 import { setTimeout as delay } from "node:timers/promises";
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
-import { installationReceipt, updateArchive, hashFile, signManifest } from "./update-format.mjs";
+import {
+  installationReceipt,
+  updateArchive,
+  hashFile,
+  signManifest,
+  releaseVersion,
+  platformVersion,
+} from "./update-format.mjs";
 import { download } from "./third-party/posix/common.mjs";
 const run = promisify(execFile);
 const exec = (file, args, options = {}) => run(file, args, { timeout: 60000, ...options });
@@ -85,7 +92,7 @@ async function signed(file, kind, version) {
       schema: 1,
       app: "net.ddmoyu.javm",
       version,
-      channel: "beta",
+      channel: releaseVersion(version).channel,
       minimumUpdater: 1,
       assets: [
         {
@@ -140,7 +147,7 @@ async function appimage(base, source, name) {
   await chmod(file, 0o755);
   return file;
 }
-async function fixture(kind, mode) {
+async function fixture(kind, mode, current = "99.0.0-beta.1", nextVersion = "99.0.0-beta.2") {
   await mkdir(".tmp", { recursive: true });
   const base = await mkdtemp(path.resolve(".tmp", "update-platform-"));
   const id = randomBytes(16).toString("hex"),
@@ -159,8 +166,8 @@ async function fixture(kind, mode) {
   await save(path.join(settings, "preferences.json"), { value: "old-safe-value" });
   const old = path.join(base, kind === "app" ? "JAVM.app" : "old"),
     next = path.join(base, kind === "app" ? "next/JAVM.app" : "next");
-  const oldBin = await payload(old, "old", kind, "99.0.0-beta.1");
-  await payload(next, mode, kind, "99.0.0-beta.2");
+  const oldBin = await payload(old, "old", kind, current);
+  await payload(next, mode, kind, nextVersion);
   let root = old,
     entry = path.join(oldBin, "JAVM"),
     archive,
@@ -183,13 +190,20 @@ async function fixture(kind, mode) {
     root = `/opt/JAVM-update-validation-${id}`;
     entry = path.join(root, "JAVM");
     packageId = `javm-update-validation-${id}`;
-    const previous = await deb(base, old, root, packageId, "99.0.0~beta.1");
+    const previous = await deb(base, old, root, packageId, platformVersion(current, "deb"));
     await exec("sudo", ["dpkg", "-i", previous]);
     await copyFile(previous, path.join(transaction, "previous.deb"));
-    rollback = await signed(path.join(transaction, "previous.deb"), kind, "99.0.0-beta.1");
+    rollback = await signed(path.join(transaction, "previous.deb"), kind, current);
     archive = path.join(transaction, "package.deb");
     await copyFile(
-      await deb(base, next, root, packageId, "99.0.0~beta.2", mode === "install-fail"),
+      await deb(
+        base,
+        next,
+        root,
+        packageId,
+        platformVersion(nextVersion, "deb"),
+        mode === "install-fail",
+      ),
       archive,
     );
   }
@@ -208,11 +222,11 @@ async function fixture(kind, mode) {
     entry,
     ownerPid: 0,
     extensionPid: 0,
-    currentVersion: "99.0.0-beta.1",
-    version: "99.0.0-beta.2",
+    currentVersion: current,
+    version: nextVersion,
     files,
     owned: receipt.owned,
-    envelope: await signed(archive, kind, "99.0.0-beta.2"),
+    envelope: await signed(archive, kind, nextVersion),
     rollback,
   };
   await save(path.join(transaction, "job.json"), job);
@@ -228,6 +242,7 @@ async function fixture(kind, mode) {
     job,
     packageId,
     oldHash: await hashFile(entry),
+    newHash: await hashFile(archive),
   };
 }
 async function cleanup(f) {
@@ -250,30 +265,52 @@ async function assertRestored(f) {
   assert.equal((await json(path.join(f.settings, "preferences.json"))).value, "old-safe-value");
   if (mac) await exec("codesign", ["--verify", "--deep", "--strict", f.root]);
 }
-for (const kind of mac ? ["app"] : ["appimage", "deb"]) {
-  for (const mode of ["ok", "fail", ...(kind === "deb" ? ["install-fail"] : [])]) {
-    test(`${kind} 实际安装与 ${mode} 启动/安装结果`, { skip: !enabled }, async () => {
-      const f = await fixture(kind, mode);
-      try {
-        const status = await apply(f);
-        assert.equal(
-          status.phase,
-          mode === "ok" ? "committed" : "rolled-back",
-          JSON.stringify(status),
-        );
-        if (mode === "ok")
-          assert.equal(dbValue(path.join(f.dataRoot, "library.sqlite3")), "new-safe-value");
-        else await assertRestored(f);
-        if (kind === "deb")
-          assert.equal(
-            (await exec("dpkg-query", ["-W", "-f=${Version}", f.packageId])).stdout,
-            mode === "ok" ? "99.0.0~beta.2" : "99.0.0~beta.1",
-          );
-        if (mac) await exec("codesign", ["--verify", "--deep", "--strict", f.root]);
-      } finally {
-        await cleanup(f);
-      }
-    });
+for (const [current, next] of [
+  ["99.0.0-beta.1", "99.0.0-beta.2"],
+  ["1.0.7", "1.0.8"],
+]) {
+  for (const kind of mac ? ["app"] : ["appimage", "deb"]) {
+    for (const mode of ["ok", "fail", ...(kind === "deb" ? ["install-fail"] : [])]) {
+      test(
+        `${kind} ${current} 到 ${next} 实际安装与 ${mode} 启动/安装结果`,
+        { skip: !enabled },
+        async () => {
+          const f = await fixture(kind, mode, current, next);
+          try {
+            const status = await apply(f);
+            assert.equal(
+              status.phase,
+              mode === "ok" ? "committed" : "rolled-back",
+              JSON.stringify(status),
+            );
+            if (mode === "ok") {
+              for (const name of ["library.sqlite3", "downloads-v1.sqlite3"])
+                assert.equal(dbValue(path.join(f.dataRoot, name)), "new-safe-value");
+              assert.equal(
+                (await json(path.join(f.settings, "preferences.json"))).value,
+                "new-safe-value",
+              );
+              if (kind === "appimage") assert.equal(await hashFile(f.entry), f.newHash);
+            } else await assertRestored(f);
+            if (kind === "deb")
+              assert.equal(
+                (await exec("dpkg-query", ["-W", "-f=${Version}", f.packageId])).stdout,
+                platformVersion(mode === "ok" ? next : current, "deb"),
+              );
+            if (mac) {
+              assert.equal(
+                (await json(path.join(f.root, "Contents/Resources/update-installation.json")))
+                  .version,
+                mode === "ok" ? next : current,
+              );
+              await exec("codesign", ["--verify", "--deep", "--strict", f.root]);
+            }
+          } finally {
+            await cleanup(f);
+          }
+        },
+      );
+    }
   }
 }
 test("macOS root 私有暂存与回退不受用户快照篡改影响", { skip: !enabled || !mac }, async () => {
