@@ -1,0 +1,33 @@
+name: 工程检查
+
+on:
+  # 仅允许手动运行；提交、推送、PR 和标签都不自动触发。
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm build
+
+  native-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: 构建 C++ 和 SQLite
+        shell: pwsh
+        run: ./scripts/build-native.ps1
+      - name: 检查原生构建版本
+        shell: pwsh
+        run: ./build/native/windows-msvc/bin/javm_database.exe --version

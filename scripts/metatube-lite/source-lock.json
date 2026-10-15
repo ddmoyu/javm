@@ -1,0 +1,671 @@
+{
+  "repository": "metatube-community/metatube-sdk-go",
+  "commit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
+  "toolchain": "go1.25.0",
+  "userAgentCount": 846,
+  "userAgentSequenceSha256": "b63789178b470d7f8e97b06d36b2658aa846786d1c41d781c1023d4ca9e93358",
+  "files": [
+    {
+      "path": "cmd/cmd.go",
+      "sha": "5b0342365a5a2a7b64217d7519f4747f9a437737",
+      "size": 3104
+    },
+    {
+      "path": "cmd/init.go",
+      "sha": "db7399876cc119ad63c821f052f341e810c8e9a9",
+      "size": 134
+    },
+    {
+      "path": "cmd/server/main.go",
+      "sha": "11bfcddb723df7b6f4d68a8260b196e7107e872d",
+      "size": 704
+    },
+    {
+      "path": "collection/maps/cimap.go",
+      "sha": "1c1cdce3340a011a3146fe2fff8b817609cf99f1",
+      "size": 2063
+    },
+    {
+      "path": "collection/maps/orderedmap.go",
+      "sha": "a3f7b7b80998d0ec9e0b796b6260c20adb176fad",
+      "size": 1705
+    },
+    {
+      "path": "collection/sets/orderedset.go",
+      "sha": "5c70cb70d0001e452d54d6b5fc1d94e98b55f8c4",
+      "size": 1444
+    },
+    {
+      "path": "collection/slices/flatten.go",
+      "sha": "a586664ca34d2fb5be9270df730f7a06e667b73f",
+      "size": 300
+    },
+    {
+      "path": "collection/slices/wslice.go",
+      "sha": "a5b7041f9414f5a84a2203e887a85e94617d9f9b",
+      "size": 1106
+    },
+    {
+      "path": "collection/unionfind/unionfind.go",
+      "sha": "d658562799cb30ce6bbdfdc652697d157eb7c7ff",
+      "size": 4725
+    },
+    {
+      "path": "common/bufferpool/bufferpool.go",
+      "sha": "cf9e7c389d23872b0dc08d76a46534ef5a8c4f50",
+      "size": 475
+    },
+    {
+      "path": "common/cluster/group.go",
+      "sha": "bec0304d035b6604156fe9d69124a8e1f664d52a",
+      "size": 949
+    },
+    {
+      "path": "common/cluster/locatable.go",
+      "sha": "1567194b123ded6f95d04db596ecaf9cd24b50c8",
+      "size": 501
+    },
+    {
+      "path": "common/cluster/sort.go",
+      "sha": "cfecbb586a67449084bbb2a017cbc8ab9086f306",
+      "size": 1074
+    },
+    {
+      "path": "common/comparer/compare.go",
+      "sha": "24c2581dd3f589339aa9eba4c14649faa7ce6e42",
+      "size": 297
+    },
+    {
+      "path": "common/convertor/convert.go",
+      "sha": "eba7128e0617747a13b4192e702aca6b3fa145ef",
+      "size": 211
+    },
+    {
+      "path": "common/convertor/replace.go",
+      "sha": "cb2250073dd17eec7b767689d0793f9ca7b62d5d",
+      "size": 277
+    },
+    {
+      "path": "common/fetch/body.go",
+      "sha": "bf60cb62884609f235750ca3508037e03560d8df",
+      "size": 406
+    },
+    {
+      "path": "common/fetch/fetch.go",
+      "sha": "99fc5c5fdd4d8e77224ddc135f931e663460c49e",
+      "size": 3871
+    },
+    {
+      "path": "common/fetch/option.go",
+      "sha": "68f15786db237444daf838764c03c5d6bf39cfb3",
+      "size": 1920
+    },
+    {
+      "path": "common/js/js.go",
+      "sha": "5dbc01a34a4a504a0e159d756679a931bf014f01",
+      "size": 474
+    },
+    {
+      "path": "common/m3u8/m3u8.go",
+      "sha": "0506f54064e840e0fdd2c332d9f89f232dd610c8",
+      "size": 864
+    },
+    {
+      "path": "common/number/number.go",
+      "sha": "6fa1d6833c60c4399e9681767aeff153029cda6d",
+      "size": 2698
+    },
+    {
+      "path": "common/number/shirouto.go",
+      "sha": "0ae4b62dc0590d8f5b921a987abf642177f3e929",
+      "size": 581
+    },
+    {
+      "path": "common/parallel/parallel.go",
+      "sha": "d0037b61031eaeaf726814d70749f02aa2ff1d77",
+      "size": 300
+    },
+    {
+      "path": "common/parser/parse.go",
+      "sha": "23ff71ed818168244315571d9c7888c14fc9eac4",
+      "size": 3677
+    },
+    {
+      "path": "common/pool/pool.go",
+      "sha": "e05ff6ef6ba12f5b3edc57234369a83840f6ba20",
+      "size": 831
+    },
+    {
+      "path": "common/random/useragent.go",
+      "sha": "94b1d7034dea84a620fdadecd9197817c2ca8cc4",
+      "size": 579
+    },
+    {
+      "path": "common/singledo/singledo.go",
+      "sha": "3b4ee4ca15135603b01ed96d20e44f414eaeba6b",
+      "size": 1043
+    },
+    {
+      "path": "constant/ratio.go",
+      "sha": "07f6e565b4d4ce69415e6ad36c6b85c223f0368b",
+      "size": 221
+    },
+    {
+      "path": "database/database.go",
+      "sha": "99e39ab096d0a6572aa5eb5a9703444112dee8b0",
+      "size": 2014
+    },
+    {
+      "path": "engine/actor.go",
+      "sha": "3eb60156c2d39a639b8852d806b8487465237504",
+      "size": 7030
+    },
+    {
+      "path": "engine/database.go",
+      "sha": "009ef6e00f660262e6992395cae81773a4762c05",
+      "size": 958
+    },
+    {
+      "path": "engine/dbengine/db_actor.go",
+      "sha": "ab2f83c4081e935e35858927d7c623319b080710",
+      "size": 2054
+    },
+    {
+      "path": "engine/dbengine/db_movie.go",
+      "sha": "2a967f6ae6b278ac18597a090cde8f8eb5d811ce",
+      "size": 3287
+    },
+    {
+      "path": "engine/dbengine/db_options.go",
+      "sha": "36e1947b867dce3ce193502b726dbe3ffe5ec7ce",
+      "size": 899
+    },
+    {
+      "path": "engine/dbengine/dbengine.go",
+      "sha": "afce0599d55f0401673e630553f1b223676fc3ed",
+      "size": 2777
+    },
+    {
+      "path": "engine/engine.go",
+      "sha": "c8fe29f0d04121c75a5f45c7a61347108c26353f",
+      "size": 4630
+    },
+    {
+      "path": "engine/init.go",
+      "sha": "639ca5f541fd647b7ccb21be9fb598812b3fae55",
+      "size": 3467
+    },
+    {
+      "path": "engine/movie.go",
+      "sha": "81fab493f60a2a1cbc5ae051762d3e264328e6db",
+      "size": 7806
+    },
+    {
+      "path": "engine/option.go",
+      "sha": "3330d89ddb20fae18092ee9a2b53f63d713d53ea",
+      "size": 612
+    },
+    {
+      "path": "engine/providerid/providerid.go",
+      "sha": "71c1ca1815b6dc46338a6cccfea26062583c77de",
+      "size": 1656
+    },
+    {
+      "path": "engine/register_exp.go",
+      "sha": "f5b528b3accda8946253372c114c7ed45d307448",
+      "size": 438
+    },
+    {
+      "path": "engine/register.go",
+      "sha": "fbfe463379e39ec419391563cb948eab1790b935",
+      "size": 2164
+    },
+    {
+      "path": "errors/errors.go",
+      "sha": "4ce8b5fa9cdbb24dc5827163dbe14810734111f4",
+      "size": 921
+    },
+    {
+      "path": "errors/status.go",
+      "sha": "8319282d008a5a0f05a39b67eabe4b2f02b8b483",
+      "size": 4042
+    },
+    {
+      "path": "go.mod",
+      "sha": "29c836fe6df7e1cfe07e056e61197c8a3b4c37a5",
+      "size": 6075
+    },
+    {
+      "path": "go.sum",
+      "sha": "750afb62b697f7884316c3f071d05a21b3a5c607",
+      "size": 37148
+    },
+    {
+      "path": "imageutil/crop.go",
+      "sha": "907be53b16873c5a8ef87cc02222b9f894464bad",
+      "size": 889
+    },
+    {
+      "path": "imageutil/decode.go",
+      "sha": "649788091093d617676dfc50be6ca56eeae68f9e",
+      "size": 581
+    },
+    {
+      "path": "imageutil/hash.go",
+      "sha": "ee28270a99a06236b587b5af781001b8fdca0abc",
+      "size": 1074
+    },
+    {
+      "path": "imageutil/register.go",
+      "sha": "5e2f0e258811f93beecc77d776e289b76ab54247",
+      "size": 183
+    },
+    {
+      "path": "internal/envconfig/config.go",
+      "sha": "39a83344975affa9e17c3af4c72d5ba686bc187c",
+      "size": 1250
+    },
+    {
+      "path": "internal/envconfig/envconfig.go",
+      "sha": "28d888da28876895e7401e286619d752d17029ec",
+      "size": 2896
+    },
+    {
+      "path": "internal/version/modules.go",
+      "sha": "d7ff8f03c6c9e96b43cfdbf1225a11b6177c083a",
+      "size": 297
+    },
+    {
+      "path": "internal/version/version.go",
+      "sha": "c0d0ec9b5e94072049256eb5522081a63a3e644f",
+      "size": 761
+    },
+    {
+      "path": "LICENSE",
+      "sha": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+      "size": 11357
+    },
+    {
+      "path": "model/actor.go",
+      "sha": "9038831cdbc1f4ad9dc9d27b782284fd8a1f86d7",
+      "size": 1867
+    },
+    {
+      "path": "model/movie.go",
+      "sha": "d4295d14069563fd0d467931ef568de3e744cd34",
+      "size": 3494
+    },
+    {
+      "path": "model/time.go",
+      "sha": "2e17552002012de883e27d15b6c9f373007b5321",
+      "size": 105
+    },
+    {
+      "path": "provider/10musume/10musume.go",
+      "sha": "290b0f69619ac3b0dfea66ca743bd0a27577ca9a",
+      "size": 1346
+    },
+    {
+      "path": "provider/1pondo/1pondo.go",
+      "sha": "7dfad471dc6a1603fe6a2bc88de60c361f0e1726",
+      "size": 1394
+    },
+    {
+      "path": "provider/1pondo/core/core.go",
+      "sha": "ae72803ee4e87d164d2fcb660fd0ad6482f6f507",
+      "size": 9054
+    },
+    {
+      "path": "provider/av-league/av-league.go",
+      "sha": "54431f11d9a2dbc4ecaaf984c99ff6daf60c6aba",
+      "size": 5098
+    },
+    {
+      "path": "provider/avbase/avbase.go",
+      "sha": "7c42bc7aa0e5c338d747bd333d519e74a59c1134",
+      "size": 8857
+    },
+    {
+      "path": "provider/avbase/responses.go",
+      "sha": "8cfa386afc4752db5ac66e56fe51ef641fccf243",
+      "size": 1357
+    },
+    {
+      "path": "provider/aventertainments/aventertainments.go",
+      "sha": "77292bd2d77e0a5a826530efb8603f90c2cef96c",
+      "size": 6351
+    },
+    {
+      "path": "provider/c0930/c0930.go",
+      "sha": "71e7786ff0e8a9cb848a264477da17116bd03626",
+      "size": 891
+    },
+    {
+      "path": "provider/caribbeancom/caribbeancom.go",
+      "sha": "73a1aeb72e2a337341a24a440e5c0565f4fe7743",
+      "size": 953
+    },
+    {
+      "path": "provider/caribbeancom/core/core.go",
+      "sha": "98fd0189eaeaab5d200e02786ad8eb5df0db1f5a",
+      "size": 6453
+    },
+    {
+      "path": "provider/caribbeancompr/caribbeancompr.go",
+      "sha": "6e89587c6b601352336870e3be2c3b3235464eff",
+      "size": 1022
+    },
+    {
+      "path": "provider/dahlia/core/core.go",
+      "sha": "59c9eb417151fea4f4bcef38931a1088541d541f",
+      "size": 5017
+    },
+    {
+      "path": "provider/dahlia/dahlia.go",
+      "sha": "5f3d9ac27d01b9345cf768e282bde5a97c93d08c",
+      "size": 746
+    },
+    {
+      "path": "provider/duga/duga.go",
+      "sha": "b0f79578a9d67599b524c3944d2d55863616e2f6",
+      "size": 6356
+    },
+    {
+      "path": "provider/errors.go",
+      "sha": "9e3e4090ff47f4c266b4979bfb224306367ee25a",
+      "size": 653
+    },
+    {
+      "path": "provider/factory.go",
+      "sha": "8add6d10cedb40a3560ba38b5ba530e269d7f4de",
+      "size": 1247
+    },
+    {
+      "path": "provider/faleno/faleno.go",
+      "sha": "2bee6c42745675885bd13e4ba8e9b08cd4fc8981",
+      "size": 737
+    },
+    {
+      "path": "provider/fanza/fanza.go",
+      "sha": "53000b20c269300fc923b6e92349c0193fd8dbac",
+      "size": 31316
+    },
+    {
+      "path": "provider/fanza/internal/graphql/graphql.go",
+      "sha": "3713c9c1deed3d6d36954e9f8b3fe654f231c8ad",
+      "size": 2252
+    },
+    {
+      "path": "provider/fanza/internal/graphql/options.go",
+      "sha": "00ed0bf295c06d6858795e1cc8458bdce49f8d21",
+      "size": 762
+    },
+    {
+      "path": "provider/fanza/internal/graphql/query/ContentPageData.graphql",
+      "sha": "49f7a8f4bb1dea154c3609a4dd04005cfe81949f",
+      "size": 5949
+    },
+    {
+      "path": "provider/fanza/internal/graphql/query/UserReviews.graphql",
+      "sha": "42cde9a2e8de9bf14c08a318805916925cc78591",
+      "size": 355
+    },
+    {
+      "path": "provider/fanza/internal/graphql/response.go",
+      "sha": "5f48fdea5fd02caf1df19dc3656e4ef15123bfd0",
+      "size": 8807
+    },
+    {
+      "path": "provider/fanza/internal/searchparse/response.go",
+      "sha": "f339a14f12a526866226aa727376748e766aa3f3",
+      "size": 2292
+    },
+    {
+      "path": "provider/fanza/internal/searchparse/search.go",
+      "sha": "3efab0d980db040577c32223a98739703fe1c41f",
+      "size": 3069
+    },
+    {
+      "path": "provider/fc2/fc2.go",
+      "sha": "8869c84e32d735d23344d19e43d3c1d89c38b1ff",
+      "size": 5488
+    },
+    {
+      "path": "provider/fc2/fc2util/fc2util.go",
+      "sha": "2cb140deb15a025a54eaf5a43ee61bc946d34af7",
+      "size": 260
+    },
+    {
+      "path": "provider/fc2hub/fc2hub.go",
+      "sha": "41b2f41118492be9b6b7473535c10a7fa35ae2fe",
+      "size": 7157
+    },
+    {
+      "path": "provider/fc2ppvdb/fc2ppvdb.go",
+      "sha": "5fad418ba65fbd7263fec13480ab61ecf9006edc",
+      "size": 3041
+    },
+    {
+      "path": "provider/gcolle/gcolle.go",
+      "sha": "0ec087097345d392f7d623ba2da6659672279853",
+      "size": 4312
+    },
+    {
+      "path": "provider/getchu/getchu.go",
+      "sha": "bcd31d3722ba69939bab967275c400187e86c379",
+      "size": 3520
+    },
+    {
+      "path": "provider/gfriends/gfriends.go",
+      "sha": "40e72103f278081291d320a848d199ca6f862741",
+      "size": 3660
+    },
+    {
+      "path": "provider/h0930/core/core.go",
+      "sha": "522c38e64be9f6e759fe706ab7800ce48a3f9b96",
+      "size": 4841
+    },
+    {
+      "path": "provider/h0930/h0930.go",
+      "sha": "29b36e8f3a60d50a784170f52959a267be554ff6",
+      "size": 895
+    },
+    {
+      "path": "provider/h4610/h4610.go",
+      "sha": "283fc377a081787941d4999d99febf2b947e7302",
+      "size": 895
+    },
+    {
+      "path": "provider/heydouga/heydouga.go",
+      "sha": "fd69e7baa5c04a45db04ecb4c3eeadfb158975b8",
+      "size": 6489
+    },
+    {
+      "path": "provider/heyzo/heyzo.go",
+      "sha": "4c853677a0383ed7493658ad72f48468a5e98c33",
+      "size": 8736
+    },
+    {
+      "path": "provider/internal/imcmp/image.go",
+      "sha": "44cc69977c856d97242d0c64fdeea5b309c0615c",
+      "size": 1572
+    },
+    {
+      "path": "provider/internal/scraper/option.go",
+      "sha": "8327d5218d5191f8713fc12e4a45ae2e2f3fbd4f",
+      "size": 1908
+    },
+    {
+      "path": "provider/internal/scraper/scraper.go",
+      "sha": "6f489df33b9828ebe28ab1fd85734304c29a31c6",
+      "size": 2446
+    },
+    {
+      "path": "provider/jav321/jav321.go",
+      "sha": "d711a68918b52b75e4a72bc1d60a03febb9a6790",
+      "size": 7303
+    },
+    {
+      "path": "provider/javbus/javbus.go",
+      "sha": "4a13b3da32acf1750646cda20e4a27629feb328e",
+      "size": 5851
+    },
+    {
+      "path": "provider/javfree/javfree.go",
+      "sha": "59e07426565c1f6dd10df94ea0815bb72779b15e",
+      "size": 4324
+    },
+    {
+      "path": "provider/kin8tengoku/kin8tengoku.go",
+      "sha": "fe99a06635bd6b9b05ffa129c5405f64e584766b",
+      "size": 6734
+    },
+    {
+      "path": "provider/madouqu/madouqu.go",
+      "sha": "d540d8e215742400bc6d8ae7976b1071988fa6d3",
+      "size": 4792
+    },
+    {
+      "path": "provider/mgstage/mgstage.go",
+      "sha": "4dd08a29d12f31da2718eae5f01957e4c9709576",
+      "size": 7031
+    },
+    {
+      "path": "provider/modelmediaasia/modelmediaasia.go",
+      "sha": "c52418d0ab6c8932162efd499cabab209263c762",
+      "size": 7513
+    },
+    {
+      "path": "provider/modelmediaasia/responses.go",
+      "sha": "edc62c094b479bad5d1f19aa72c6c192c320c1a4",
+      "size": 3388
+    },
+    {
+      "path": "provider/muramura/muramura.go",
+      "sha": "6da0b43d3b20e81a8ebce191ff895c35a9793a04",
+      "size": 1264
+    },
+    {
+      "path": "provider/mywife/mywife.go",
+      "sha": "eef29e4ff9ac4ac27065d417cd638c89846bc671",
+      "size": 3206
+    },
+    {
+      "path": "provider/pacopacomama/pacopacomama.go",
+      "sha": "10178843cb4d164aae27fb465a6be974e98cb9ac",
+      "size": 1394
+    },
+    {
+      "path": "provider/pcolle/pcolle.go",
+      "sha": "84c35bdf74962d7ed3c74516c773f3bf2b9051c7",
+      "size": 3792
+    },
+    {
+      "path": "provider/provider.go",
+      "sha": "f0b443bf66fafb3be249270a369277db1e720bd2",
+      "size": 2992
+    },
+    {
+      "path": "provider/sod/sod.go",
+      "sha": "9a278050feda6ced633bee2affc7d4029208d6b2",
+      "size": 6616
+    },
+    {
+      "path": "provider/theporndb/actor.go",
+      "sha": "54f8cbbea2d5b858ac93409af0f49857b250d808",
+      "size": 5120
+    },
+    {
+      "path": "provider/theporndb/structs.go",
+      "sha": "452ab9b9b05323c677a61ff93c7a7db4a2f1a1eb",
+      "size": 4701
+    },
+    {
+      "path": "provider/theporndb/theporndb.go",
+      "sha": "c225dc19d2160cf79bd7fc6a7040914ed6c1b17d",
+      "size": 558
+    },
+    {
+      "path": "provider/theporndb/video.go",
+      "sha": "7c49e0c409017da206d67d5b2055d9fdcba20270",
+      "size": 5333
+    },
+    {
+      "path": "provider/tokyo-hot/tokyo-hot.go",
+      "sha": "48f63843d0405a50438bd10062f021c5e5f4a253",
+      "size": 7336
+    },
+    {
+      "path": "route/auth.go",
+      "sha": "b8246482efaf4922aaec32f1f491c07260aeb1b3",
+      "size": 649
+    },
+    {
+      "path": "route/auth/token.go",
+      "sha": "a5c3e498d3b4f7d152a9833c06e286fe56f59a60",
+      "size": 601
+    },
+    {
+      "path": "route/auth/validator.go",
+      "sha": "bccec2b8759da70ea2282fde66825e630f76cd44",
+      "size": 63
+    },
+    {
+      "path": "route/cache.go",
+      "sha": "79f3299e538a67fb16f40375c7d998207342742c",
+      "size": 537
+    },
+    {
+      "path": "route/database.go",
+      "sha": "3de102fdf77c4f00ca2b522386c34db8c16f6f3b",
+      "size": 442
+    },
+    {
+      "path": "route/info.go",
+      "sha": "301de4b7d78144d286a74c658cfe051ded32a9cb",
+      "size": 1422
+    },
+    {
+      "path": "route/redirect.go",
+      "sha": "7281f89bf74667754f518abefeda146b43ab495d",
+      "size": 1252
+    },
+    {
+      "path": "route/route.go",
+      "sha": "b3e41eb4dd8b35b6ce2e32dc22085a1680fdd681",
+      "size": 4042
+    },
+    {
+      "path": "route/search.go",
+      "sha": "d65c1d8abb5b8030bc547aea01058bbf71e90e47",
+      "size": 2381
+    }
+  ],
+  "support": [
+    {
+      "path": "datatypes/date.go",
+      "url": "https://raw.githubusercontent.com/go-gorm/datatypes/v1.2.7/date.go",
+      "sha256": "d803acad9d9459707ec2982ff8db671e3ec3d107969ab135d49b40165dc98124"
+    },
+    {
+      "path": "datatypes/json_type.go",
+      "url": "https://raw.githubusercontent.com/go-gorm/datatypes/v1.2.7/json_type.go",
+      "sha256": "07cc0d89d7df08fabb5829e9ff83c33a56780f8899f7f3cc7312ae6061a9f280"
+    },
+    {
+      "path": "datatypes/LICENSE",
+      "url": "https://raw.githubusercontent.com/go-gorm/datatypes/v1.2.7/License",
+      "sha256": "59f62caa972078dc1664ce928b5e5d51b78633fc43b78894d2dab83bc504edee"
+    },
+    {
+      "path": "useragent/useragent_data.json",
+      "url": "https://raw.githubusercontent.com/projectdiscovery/useragent/v0.0.107/useragent_data.json",
+      "sha256": "6b530a9cc70e68cbcb9e95ae898a47d7219ee7cd705bab855de57403bb914759"
+    },
+    {
+      "path": "useragent/LICENSE",
+      "url": "https://raw.githubusercontent.com/projectdiscovery/useragent/v0.0.107/LICENSE",
+      "sha256": "49982116f64385bdf8582a379e591a19d6040dec22e50e29dc311596d357af23"
+    }
+  ]
+}

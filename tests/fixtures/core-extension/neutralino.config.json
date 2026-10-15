@@ -1,0 +1,25 @@
+{
+  "applicationId": "net.ddmoyu.javm.corefixture",
+  "version": "0.0.0",
+  "defaultMode": "cloud",
+  "url": "/",
+  "documentRoot": "/public/",
+  "port": 0,
+  "enableServer": true,
+  "enableNativeAPI": true,
+  "enableExtensions": true,
+  "exportAuthInfo": true,
+  "tokenSecurity": "one-time",
+  "dataLocation": "app",
+  "storageLocation": "app",
+  "logging": { "enabled": false, "writeToLogFile": false },
+  "nativeAllowList": ["app.exit", "app.broadcast", "extensions.dispatch", "extensions.getStats"],
+  "extensions": [
+    {
+      "id": "net.ddmoyu.javm.database",
+      "commandWindows": "\"${NL_PATH}/javm_database_core.exe\" --database \"${NL_PATH}/safe data/tasks.sqlite3\"",
+      "commandLinux": "\"${NL_PATH}/javm_database_core\" --database \"${NL_PATH}/safe data/tasks.sqlite3\"",
+      "commandDarwin": "\"${NL_PATH}/javm_database_core\" --database \"${NL_PATH}/safe data/tasks.sqlite3\""
+    }
+  ]
+}

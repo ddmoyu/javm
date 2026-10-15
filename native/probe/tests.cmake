@@ -1,0 +1,38 @@
+add_executable(javm_probe_fixture "${PROJECT_SOURCE_DIR}/tests/native/probe_fixture.cpp")
+target_link_libraries(javm_probe_fixture PRIVATE javm_probe)
+set_target_properties(javm_probe_fixture PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+add_executable(javm_probe_boundaries_test "${PROJECT_SOURCE_DIR}/tests/native/probe_boundaries_test.cpp")
+target_link_libraries(javm_probe_boundaries_test PRIVATE javm_probe)
+add_test(NAME javm_probe_boundaries COMMAND javm_probe_boundaries_test)
+
+foreach(kind full incomplete)
+    add_library(javm_mediainfo_${kind}_fixture SHARED "${PROJECT_SOURCE_DIR}/tests/native/mediainfo_fixture.cpp")
+    target_link_libraries(javm_mediainfo_${kind}_fixture PRIVATE nlohmann_json::nlohmann_json)
+    target_include_directories(javm_mediainfo_${kind}_fixture SYSTEM PRIVATE "${probe_api_include}")
+    target_compile_definitions(javm_mediainfo_${kind}_fixture PRIVATE UNICODE _UNICODE MEDIAINFO_DLL_EXPORT)
+    set_target_properties(javm_mediainfo_${kind}_fixture PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/probe-fixtures/${kind}"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/probe-fixtures/${kind}"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/probe-fixtures/${kind}")
+    if(WIN32)
+        set_target_properties(javm_mediainfo_${kind}_fixture PROPERTIES OUTPUT_NAME MediaInfo)
+    else()
+        set_target_properties(javm_mediainfo_${kind}_fixture PROPERTIES OUTPUT_NAME mediainfo SOVERSION 0)
+    endif()
+    if(kind STREQUAL "incomplete")
+        target_compile_definitions(javm_mediainfo_${kind}_fixture PRIVATE JAVM_INCOMPLETE_FIXTURE=1)
+    endif()
+endforeach()
+add_library(javm_probe_adapter_check OBJECT ../media/src/probe.cpp)
+target_link_libraries(javm_probe_adapter_check PRIVATE javm_probe)
+foreach(target javm_probe_fixture javm_probe_boundaries_test javm_mediainfo_full_fixture javm_mediainfo_incomplete_fixture javm_probe_adapter_check)
+    if(MSVC)
+        target_compile_options(${target} PRIVATE /W4 /WX /permissive- /utf-8)
+        target_compile_definitions(${target} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    else()
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+endforeach()
+# 文件名由 CMake 推导，Node 用例不猜测 dylib / so 的具体输出路径。
+file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/probe-fixtures/paths.json" CONTENT
+    "{\"worker\":\"$<TARGET_FILE:javm_probe_fixture>\",\"full\":\"$<TARGET_FILE:javm_mediainfo_full_fixture>\",\"incomplete\":\"$<TARGET_FILE:javm_mediainfo_incomplete_fixture>\"}\n")

@@ -1,0 +1,126 @@
+name: 跨平台基础、核心与工具检查
+
+on:
+  # 只检查已移植的基础、核心与探测模块，不发布完整桌面产物。
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  foundations:
+    name: ${{ matrix.target }} 基础与核心
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-x64
+            runner: windows-2025
+            core: windows-core/bin/javm_database_core.exe
+            transport: winhttp
+            host: neutralino-win_x64.exe
+            preset: windows-core
+          - target: linux-x64
+            runner: ubuntu-24.04
+            core: linux-core/bin/javm_database_core
+            transport: curl
+            host: neutralino-linux_x64
+            preset: linux-core
+          - target: macos-arm64
+            runner: macos-15
+            core: macos-core/bin/javm_database_core
+            transport: curl
+            host: neutralino-mac_arm64
+            preset: macos-core
+          - target: macos-x64
+            runner: macos-15-intel
+            core: macos-core/bin/javm_database_core
+            transport: curl
+            host: neutralino-mac_x64
+            preset: macos-core
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: pnpm/action-setup@v6.1.0
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 准备 Linux 开发依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libicu-dev libsecret-1-dev libgtk-3-0t64 libwebkit2gtk-4.1-0
+      - name: 准备 macOS 开发依赖
+        if: runner.os == 'macOS'
+        run: |
+          for formula in ninja openssl@3 icu4c; do
+            brew list --versions "$formula" >/dev/null || brew install "$formula"
+          done
+      - name: 检查宿主选择与本地安装
+        run: node --test scripts/desktop-host.test.mjs scripts/build-native.test.mjs
+      - name: 检查数据目录与缓存适配
+        run: pnpm exec vp test run tests/application-paths.test.ts tests/cache-platform-paths.test.ts
+      - name: 检查工具路径与 POSIX 进程适配
+        run: pnpm exec vp test run tests/tool-paths-platform.test.ts tests/posix-process-adapter.test.ts
+      - name: 检查 POSIX 文件路径与外部播放器
+        run: pnpm exec vp test run tests/desktop-paths-platform.test.ts tests/playback-platform.test.ts
+      - name: 编译原生基础夹具
+        run: pnpm native:build --portability-checks
+      - name: 检查原生 UTF-8 边界
+        run: ctest --test-dir build/native/portability-checks --output-on-failure
+      - name: 编译隔离数据库与 HTTP 核心
+        run: pnpm native:build --core-only
+      - name: 检查原生工具参数边界
+        run: ctest --test-dir build/native/${{ matrix.preset }} -R '^javm_process_spec$' --output-on-failure
+      - name: 检查探测 Unicode 与结果边界
+        run: ctest --test-dir build/native/${{ matrix.preset }} -R '^javm_probe_boundaries$' --output-on-failure
+      - name: 检查文件系统与 NFO 边界
+        run: ctest --test-dir build/native/${{ matrix.preset }} -R '^javm_file_platform$' --output-on-failure
+      - name: 检查完整媒体扩展、扫描与备份恢复
+        env:
+          JAVM_LIBRARY_BUILD: build/native/${{ matrix.preset }}
+        run: node --test scripts/library-platform.test.mjs
+      - name: 检查独立媒体探测与动态库生命周期
+        env:
+          JAVM_PROBE_BUILD: build/native/${{ matrix.preset }}
+        run: node --test scripts/media-probe-platform.test.mjs
+      - name: 检查 POSIX 进程组与宿主异常退出
+        if: runner.os != 'Windows'
+        env:
+          JAVM_PROCESS_EXE: build/native/${{ matrix.preset }}/bin/javm_process
+        run: node --test scripts/posix-process.test.mjs
+      - name: 检查官方扩展协议、数据库与 HTTP 生命周期
+        env:
+          JAVM_CORE_EXE: build/native/${{ matrix.core }}
+          JAVM_CORE_TRANSPORT: ${{ matrix.transport }}
+        run: node --disable-warning=ExperimentalWarning --test scripts/core-extension.test.mjs
+      - name: 检查系统服务协议与回环端口
+        env:
+          JAVM_CORE_EXE: build/native/${{ matrix.core }}
+        run: node --test scripts/platform-services.test.mjs
+      - name: 准备官方 Neutralino 宿主
+        run: pnpm desktop:setup
+      - name: 检查官方 POSIX 进程 API 与执行权限
+        if: runner.os != 'Windows'
+        env:
+          JAVM_PROCESS_EXE: build/native/${{ matrix.preset }}/bin/javm_process
+          JAVM_NEUTRALINO_EXE: bin/${{ matrix.host }}
+        run: node --test scripts/posix-neutralino.test.mjs
+      - name: 检查官方宿主启动与正常退出
+        env:
+          JAVM_CORE_EXE: build/native/${{ matrix.core }}
+          JAVM_CORE_TRANSPORT: ${{ matrix.transport }}
+          JAVM_NEUTRALINO_EXE: bin/${{ matrix.host }}
+        run: node --test scripts/core-neutralino.test.mjs
+      - name: 编译 Windows curl 通信夹具
+        if: runner.os == 'Windows'
+        run: pnpm native:build --core-only --curl-transport
+      - name: 检查 Windows curl 通信与异常退出
+        if: runner.os == 'Windows'
+        env:
+          JAVM_CORE_EXE: build/native/windows-core-curl/bin/javm_database_core.exe
+          JAVM_CORE_TRANSPORT: curl
+          JAVM_NEUTRALINO_EXE: bin/neutralino-win_x64.exe
+        run: node --disable-warning=ExperimentalWarning --test scripts/core-extension.test.mjs scripts/core-neutralino.test.mjs

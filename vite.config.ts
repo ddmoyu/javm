@@ -1,38 +1,39 @@
-import path from "node:path";
-import { defineConfig } from "vite";
-import vue from "@vitejs/plugin-vue";
-import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite-plus";
+import frontend from "./frontend/vite.config";
 
-const host = process.env.TAURI_DEV_HOST;
-
-// https://vite.dev/config/
-export default defineConfig(async () => ({
-  plugins: [vue(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+export default defineConfig({
+  ...frontend,
+  lint: {
+    plugins: ["typescript", "react", "jsx-a11y"],
+    options: { typeAware: true, typeCheck: true },
+    ignorePatterns: [
+      "build/**",
+      "dist/**",
+      "bin/**",
+      ".neutralino/**",
+      ".tmp/**",
+      "tests/fixtures/posix-desktop/media/**",
+      "tests/fixtures/posix-desktop/.build/**",
+    ],
   },
-
-  // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-  //
-  // 1. prevent Vite from obscuring rust errors
-  clearScreen: false,
-  // 2. tauri expects a fixed port, fail if that port is not available
-  server: {
-    port: 1420,
-    strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-        protocol: "ws",
-        host,
-        port: 1421,
-      }
-      : undefined,
-    watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
-    },
+  fmt: {
+    ignorePatterns: [
+      "native/**/*.inc",
+      "frontend/src/services/catalog/builtin-*.json",
+      "docs/REFACTOR_PLAN.md",
+      "pnpm-lock.yaml",
+      "resources/licenses/**",
+      "tests/fixtures/posix-desktop/media/**",
+      "tests/fixtures/posix-desktop/.build/**",
+      "build/**",
+      "dist/**",
+      "bin/**",
+      ".neutralino/**",
+      ".tmp/**",
+    ],
   },
-}));
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.{ts,tsx}", "../tests/**/*.test.ts"],
+  },
+});

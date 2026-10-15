@@ -1,0 +1,336 @@
+.layout {
+  --mantine-color-dimmed: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-2));
+  display: grid;
+  grid-template-columns: 184px minmax(0, 780px);
+  gap: 36px;
+  max-width: 1000px;
+  margin: 8px auto 24px;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 8px;
+  min-width: 0;
+}
+
+.title {
+  margin: 0 0 24px;
+  padding-inline: 12px;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 36px;
+}
+
+.navGroup + .navGroup {
+  margin-top: 24px;
+}
+.groupLabel {
+  color: var(--mantine-color-dimmed);
+  font-size: 11px;
+  padding: 0 12px 8px;
+}
+.navItem {
+  min-height: 40px;
+  border-radius: 8px;
+  margin-bottom: 4px;
+  color: var(--mantine-color-dimmed);
+}
+.navItem[data-active] {
+  color: var(--mantine-primary-color-light-color);
+  font-weight: 600;
+}
+.mobileNavigation {
+  display: none;
+}
+.content {
+  min-width: 0;
+  container-type: inline-size;
+  container-name: settings-panel;
+}
+.content > section[hidden] {
+  display: none;
+}
+.pageHeading {
+  min-height: 36px;
+  margin-bottom: 22px;
+}
+.sectionTitle {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.cardHeading {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.cardHeading h3 {
+  margin: 0;
+}
+.cardHeading svg {
+  color: var(--mantine-color-dimmed);
+}
+.cardBody {
+  padding-inline: 20px;
+}
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding-block: 17px;
+}
+.cardBody > * + * {
+  border-top: 1px solid var(--line);
+}
+.rowText {
+  min-width: 0;
+  flex: 1;
+}
+.rowControl {
+  max-width: 100%;
+  flex-shrink: 0;
+}
+.rowControl > :global(.mantine-Select-root) {
+  width: 192px;
+}
+.fields {
+  padding-block: 18px;
+}
+.themeOptions {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding-inline: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding-block: 20px;
+}
+.themeOption {
+  min-width: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease;
+}
+.themeOption:hover {
+  border-color: var(--mantine-primary-color-filled);
+}
+.themeOption[data-selected] {
+  border-color: var(--mantine-primary-color-filled);
+  box-shadow: 0 0 0 1px var(--mantine-primary-color-filled);
+}
+.themePreview {
+  --preview-bg: var(--mantine-color-dark-9);
+  --preview-sidebar: var(--mantine-color-dark-8);
+  --preview-tile: var(--mantine-color-dark-6);
+  --preview-line: var(--mantine-color-dark-4);
+  display: flex;
+  height: 102px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--preview-bg);
+}
+.themePreview[data-tone="light"] {
+  --preview-bg: var(--mantine-color-rouge-0);
+  --preview-sidebar: var(--mantine-color-white);
+  --preview-tile: var(--mantine-color-white);
+  --preview-line: var(--mantine-color-rouge-1);
+}
+.previewNav {
+  width: 23%;
+  padding: 14px 9px;
+  background: var(--preview-sidebar);
+}
+.previewNav > span {
+  display: block;
+  height: 5px;
+  margin-bottom: 9px;
+  border-radius: 2px;
+  background: var(--preview-line);
+}
+.previewNav > span:first-child {
+  width: 70%;
+  background: var(--mantine-color-rouge-5);
+  margin-bottom: 18px;
+}
+.previewBody {
+  flex: 1;
+  padding: 13px 14px;
+}
+.previewToolbar {
+  display: block;
+  width: 42%;
+  height: 5px;
+  margin-bottom: 12px;
+  background: var(--preview-line);
+  border-radius: 3px;
+}
+.previewPosters {
+  display: flex;
+  gap: 8px;
+  height: 59px;
+}
+.previewPosters > span {
+  flex: 1;
+  border-radius: 4px;
+  background: var(--preview-tile);
+  border: 1px solid var(--preview-line);
+}
+.themeCaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 6px 6px;
+}
+.themeLabel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+.themeCheck {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+[data-selected] > .themeCaption > .themeCheck {
+  color: var(--mantine-color-white);
+  background: var(--mantine-primary-color-filled);
+  border-color: transparent;
+}
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px 15px;
+  color: var(--mantine-color-dimmed);
+  background: var(--mantine-color-default-hover);
+  border-radius: 8px;
+}
+.note > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.pathField {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+.pathField > :first-child {
+  flex: 1;
+  min-width: 0;
+}
+.saveBar {
+  position: sticky;
+  bottom: -18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px 0 18px;
+  background: var(--mantine-color-body);
+  border-top: 1px solid var(--line);
+}
+.aboutBrand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0 18px;
+}
+.aboutBrand > div {
+  flex: 1;
+}
+
+.proxyRecommendation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding-block: 20px;
+}
+.proxyProvider {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.proxyRecommendation > a {
+  flex-shrink: 0;
+}
+
+@container (max-width: 880px) {
+  .layout {
+    grid-template-columns: 164px minmax(0, 1fr);
+    gap: 24px;
+  }
+}
+@container (max-width: 700px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+    margin-top: 4px;
+  }
+  .sidebar {
+    position: static;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .title {
+    margin: 0;
+    padding: 0;
+  }
+  .navigation {
+    display: none;
+  }
+  .mobileNavigation {
+    display: block;
+    width: 180px;
+  }
+  .pageHeading {
+    margin-bottom: 14px;
+  }
+}
+@container settings-panel (max-width: 510px) {
+  .cardHeading {
+    padding-inline: 16px;
+  }
+  .cardBody {
+    padding-inline: 16px;
+  }
+  .row {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .rowText {
+    flex-basis: 180px;
+  }
+  .themeOptions {
+    gap: 10px;
+  }
+  .themeLabel > :last-child {
+    display: none;
+  }
+  .themePreview {
+    height: 85px;
+  }
+  .previewPosters {
+    height: 46px;
+  }
+}

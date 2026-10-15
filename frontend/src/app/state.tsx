@@ -1,0 +1,60 @@
+import { createContext, useContext } from "react";
+import type { Film } from "../contracts/media";
+import type { DownloadService } from "../services/downloads/DownloadService";
+import type { LibraryService, LibrarySnapshot } from "../services/library/LibraryService";
+import type { Runtime } from "../platform/neutralino/bootstrap";
+import type { FilmFacet } from "../features/films/filmMetadata";
+import type { PlaybackOptions } from "../services/playback/source";
+import type { NetworkSettingsService } from "../services/network/NetworkSettingsService";
+import type { PlaybackSettingsService } from "../services/playback/PlaybackSettingsService";
+import type { AiService } from "../services/metadata/AiService";
+import type { MetaTubeService } from "../services/metadata/MetaTubeService";
+import type { BackgroundSettingsService } from "../services/settings/BackgroundSettingsService";
+import type { LogService } from "../services/logging/LogService";
+import type { LegacyImportService } from "../services/library/LegacyImportService";
+import type { ScrapeService } from "../services/scraping/ScrapeService";
+import type { ResolutionService } from "../services/streamResolution/ResolutionService";
+import type { ResourceSearchService } from "../services/streamResolution/ResourceSearchService";
+import type { FeedbackService } from "../services/feedback/FeedbackService";
+
+export type Page = "library" | "discover" | "directories" | "downloads" | "scraper" | "settings";
+export type FilmDetailView = "info" | "edit" | "links";
+export interface WorkspaceState {
+  page: Page;
+  go: (page: Page) => void;
+  library: LibraryService;
+  legacyImport?: LegacyImportService;
+  libraryState: LibrarySnapshot;
+  toggleFavorite: (film: Film) => void;
+  downloads: DownloadService;
+  scraping?: ScrapeService;
+  resolution?: ResolutionService;
+  resourceSearch?: ResourceSearchService;
+  showScrapeQueue?: () => void;
+  network: NetworkSettingsService;
+  playbackSettings: PlaybackSettingsService;
+  backgroundSettings: BackgroundSettingsService;
+  logs: LogService;
+  feedback?: FeedbackService;
+  ai: AiService;
+  metatube: MetaTubeService;
+  openFilm: (film: Film, view?: FilmDetailView) => void;
+  play: (film: Film) => void;
+  playSource: (source: string, options?: PlaybackOptions) => void;
+  scrape: (film: Film) => void;
+  browseFacet: (facet: FilmFacet, value: string) => void;
+  notice: (message: string) => void;
+  theme: "dark" | "light";
+  setTheme: (theme: "dark" | "light") => void;
+  runtime: Runtime;
+  unavailable: (feature: string) => void;
+  cardClickToPlay: boolean;
+  setCardClickToPlay: (enabled: boolean) => void;
+  add: (kind: "import" | "download", film?: Film) => void;
+}
+export const WorkspaceContext = createContext<WorkspaceState | null>(null);
+export function useWorkspace() {
+  const context = useContext(WorkspaceContext);
+  if (!context) throw new Error("界面上下文未初始化");
+  return context;
+}

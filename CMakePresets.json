@@ -1,0 +1,99 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "native",
+      "displayName": "Native development",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
+      }
+    },
+    {
+      "name": "windows-msvc",
+      "displayName": "Windows x64 / MSVC",
+      "inherits": "native",
+      "environment": { "VSLANG": "1033" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl"
+      }
+    },
+    {
+      "name": "windows-core",
+      "displayName": "Windows isolated database / HTTP core",
+      "inherits": "windows-msvc",
+      "cacheVariables": { "JAVM_CORE_ONLY": true }
+    },
+    {
+      "name": "windows-core-curl",
+      "displayName": "Windows isolated core / portable WebSocket",
+      "inherits": "windows-core",
+      "cacheVariables": { "JAVM_EXTENSION_TRANSPORT": "curl" }
+    },
+    {
+      "name": "linux-core",
+      "displayName": "Linux isolated database / HTTP core",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
+      "cacheVariables": { "JAVM_CORE_ONLY": true }
+    },
+    {
+      "name": "macos-core",
+      "displayName": "macOS isolated database / HTTP core",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": { "JAVM_CORE_ONLY": true, "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0" }
+    },
+    {
+      "name": "linux-app",
+      "displayName": "Ubuntu 24.04 desktop",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "macos-app",
+      "displayName": "macOS 13 desktop",
+      "inherits": "native",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" },
+      "cacheVariables": { "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0" }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "linux-app",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "JAVM_USE_PREBUILT_DEPENDENCIES": true }
+    },
+    {
+      "name": "macos-release",
+      "inherits": "macos-app",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release", "JAVM_USE_PREBUILT_DEPENDENCIES": true }
+    },
+    {
+      "name": "windows-release",
+      "displayName": "Windows x64 / Release portable",
+      "inherits": "windows-msvc",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded",
+        "JAVM_USE_PREBUILT_DEPENDENCIES": true
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "native", "configurePreset": "native" },
+    { "name": "windows-msvc", "configurePreset": "windows-msvc" },
+    { "name": "windows-core", "configurePreset": "windows-core" },
+    { "name": "windows-core-curl", "configurePreset": "windows-core-curl" },
+    { "name": "linux-core", "configurePreset": "linux-core" },
+    { "name": "macos-core", "configurePreset": "macos-core" },
+    { "name": "linux-app", "configurePreset": "linux-app" },
+    { "name": "macos-app", "configurePreset": "macos-app" },
+    { "name": "linux-release", "configurePreset": "linux-release" },
+    { "name": "macos-release", "configurePreset": "macos-release" },
+    { "name": "windows-release", "configurePreset": "windows-release" }
+  ]
+}
