@@ -61,6 +61,8 @@ export class LegacyImportService {
     try {
       const result = await this.port.request<LegacyImportSnapshot>("library.legacy.check");
       this.publish({
+        operation: "import",
+        removedWorks: undefined,
         sourcePath: undefined,
         targetPath: undefined,
         phase: undefined,
@@ -100,6 +102,7 @@ export class LegacyImportService {
       return;
     }
     this.starting = true;
+    this.refreshed = false;
     this.publish({
       state: "running",
       phase: "preparing",

@@ -180,6 +180,7 @@ void Store::migrate() {
 #include "store_artwork.inc"
 #include "store_file_operations.inc"
 #include "store_backup.inc"
+#include "store_legacy_repair.inc"
 Json Store::playbackPosition(const Json& params) {
     const auto key = params.at("key").get<std::string>();
     if (key.size() != 64 || key.find_first_not_of("0123456789abcdef") != std::string::npos)

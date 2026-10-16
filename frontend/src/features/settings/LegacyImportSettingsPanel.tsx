@@ -8,8 +8,10 @@ import { SettingCard, SettingRow } from "./SettingsPrimitives";
 export function LegacyImportSettingsPanel({ service }: { service: LegacyImportService }) {
   useLocale();
   const state = useSyncExternalStore(service.subscribe, service.getSnapshot);
-  const hint =
-    state.state === "running"
+  const repair = state.operation === "repair";
+  const hint = repair
+    ? "核对旧库导入的发现页缓存，保留原有片库与恢复副本。"
+    : state.state === "running"
       ? "旧数据正在合并，可打开引导查看进度。"
       : state.state === "completed"
         ? "旧数据已合并到当前片库，恢复副本已保留。"
@@ -18,7 +20,7 @@ export function LegacyImportSettingsPanel({ service }: { service: LegacyImportSe
           : "稍后导入或取消后，可以从这里重新开始；合并时保留新版已有资料。";
   return (
     <SettingCard title={t("旧版数据迁移")} icon="upload">
-      <SettingRow title={t("导入旧版片库")} hint={t(hint)}>
+      <SettingRow title={t(repair ? "修复旧库导入" : "导入旧版片库")} hint={t(hint)}>
         <Button
           variant="default"
           size="xs"
@@ -26,7 +28,11 @@ export function LegacyImportSettingsPanel({ service }: { service: LegacyImportSe
           leftSection={<Icon name="upload" size={14} />}
           onClick={() => void service.open()}
         >
-          {state.state === "running" ? t("查看导入进度") : t("打开导入引导")}
+          {repair
+            ? t("打开修复引导")
+            : state.state === "running"
+              ? t("查看导入进度")
+              : t("打开导入引导")}
         </Button>
       </SettingRow>
     </SettingCard>

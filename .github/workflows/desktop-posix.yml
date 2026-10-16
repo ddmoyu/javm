@@ -58,6 +58,11 @@ jobs:
         env:
           JAVM_UPDATE_FIXTURES: build/native/${{ runner.os == 'macOS' && 'macos-release' || 'linux-release' }}/update-fixtures
         run: node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs
+      - name: 验证旧库导入与发现页缓存修复
+        env:
+          JAVM_MEDIA_INTEGRATION: "1"
+          JAVM_DATABASE_EXE: ${{ github.workspace }}/bin/javm_database
+        run: pnpm exec vp test run tests/legacy-discovery-repair-native.integration.test.ts
       - name: 临时系统只授权本次 dpkg 夹具
         if: runner.os == 'Linux'
         run: |

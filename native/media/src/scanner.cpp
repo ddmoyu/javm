@@ -116,6 +116,8 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
     if(method.starts_with("library.analytics.")) return store_.analytics(method,params);
     if(method.starts_with("library.backup.")) return backup(method,params);
     if(!store_.healthy()) {
+        if(method=="library.legacy.check") return legacy::inspect(store_.path());
+        if(method=="library.legacy.status") { std::lock_guard lock(progressMutex_); return legacy_; }
         if(method.starts_with("library.instance.")) return store_.applicationInstance(method,params);
         if(method=="library.status") return {{"directories",Json::array()},{"scan",nullptr},{"revision",revision_},{"databasePath",pathText(store_.path())},{"recoveryError",store_.recoveryError()}};
         if(method=="library.shutdown" || method=="library.cancel") {shutdown();return Json::object();}
@@ -148,7 +150,8 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
         if (busy_) throw std::runtime_error("请等待当前扫描或导入任务结束后重试");
         if (worker_.joinable()) worker_.join();
         cancelled_=false;
-        { std::lock_guard progressLock(progressMutex_); legacy_["state"]="running"; legacy_["phase"]="preparing"; legacy_["error"]=""; }
+        const auto candidate=store_.legacyCandidate();
+        { std::lock_guard progressLock(progressMutex_); legacy_=candidate; legacy_["state"]="running"; legacy_["phase"]="preparing"; legacy_["error"]=""; }
         busy_=true; importing_=true;
         try {
             worker_=std::thread([this] {
@@ -163,7 +166,7 @@ Json LibraryService::handle(const std::string& method, const Json& params) {
                 } catch (const std::exception& error) {
                     std::lock_guard lock(progressMutex_);
                     legacy_["state"]=cancelled_ ? "cancelled" : "failed";
-                    legacy_["error"]=cancelled_ ? "导入已取消，新旧数据均已保留。" : error.what();
+                    legacy_["error"]=cancelled_ ? "操作已取消，原片库保留。" : error.what();
                 }
                 importing_=false; busy_=false;
             });

@@ -82,6 +82,10 @@ jobs:
         env:
           JAVM_MEDIA_INTEGRATION: "1"
         run: pnpm exec vp test run tests/artwork-native.integration.test.ts tests/metadata-fusion-native.integration.test.ts
+      - name: 验证旧库导入与发现页缓存修复
+        env:
+          JAVM_MEDIA_INTEGRATION: "1"
+        run: pnpm exec vp test run tests/legacy-discovery-repair-native.integration.test.ts tests/legacy-1.0-native.integration.test.ts tests/legacy-import-preservation-native.integration.test.ts
       - name: 解压运行并验证安全样例
         run: pnpm test:offline
       - name: 使用 Inno Setup 构建 Windows 安装包

@@ -76,8 +76,11 @@ describe.runIf(enabled)("旧库探测与当前库启动独立", () => {
     expect((await host.request<LegacyImportSnapshot>("library.legacy.check")).state).toBe(
       "available",
     );
-    await expect(host.request("library.status")).rejects.toThrow("当前片库完整性检查失败");
-    await expect(host.request("library.status")).rejects.toThrow("never used");
+    expect(await host.request("library.status")).toMatchObject({
+      databasePath: target,
+      recoveryError: expect.stringContaining("片库已损坏"),
+    });
+    await expect(host.request("library.legacy.start")).rejects.toThrow("片库已损坏");
     expect(await host.request("library.legacy.status")).toMatchObject({ state: "unchecked" });
     expect((await host.request<LegacyImportSnapshot>("library.legacy.check")).state).toBe(
       "available",

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   Alert,
   Button,
+  Checkbox,
   Group,
   Modal,
   Pagination,
@@ -44,8 +45,21 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<ScrapeTask | null>(null);
   const [query, setQuery] = useState("");
+  // 绑定记录版本，任务重试或合并后不会沿用旧选择。
+  const [selected, setSelected] = useState<Map<string, number>>(() => new Map());
+  const [removalProgress, setRemovalProgress] = useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
   const creation = useRef<AbortController | null>(null);
-  useEffect(() => () => creation.current?.abort(), []);
+  const removal = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      creation.current?.abort();
+      removal.current?.abort();
+    },
+    [],
+  );
   const perform = async (action: () => Promise<unknown>) => {
     if (busy) return;
     setBusy(true);
@@ -63,6 +77,51 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
   const count = state.tasks.length;
   const current = Math.min(pageNumber, Math.max(1, Math.ceil(count / 50)));
   const tasks = [...state.tasks].reverse().slice((current - 1) * 50, current * 50);
+  const selectable = tasks.filter((task) => !activeScrape(task));
+  const isSelected = (task: ScrapeTask) =>
+    selected.get(task.id) === task.revision && !activeScrape(task);
+  const selectedTasks = state.tasks.filter(isSelected);
+  const failedTasks = state.tasks.filter((task) => task.status === "failed");
+  const pageSelected = selectable.filter(isSelected).length;
+  const selectionDisabled = busy || !state.available || !state.ready;
+  const selectTasks = (targets: ScrapeTask[], checked: boolean) => {
+    setSelected((previous) => {
+      const next = new Map(
+        state.tasks
+          .filter((task) => previous.get(task.id) === task.revision && !activeScrape(task))
+          .map((task) => [task.id, task.revision]),
+      );
+      for (const task of targets) {
+        if (checked) next.set(task.id, task.revision);
+        else next.delete(task.id);
+      }
+      return next;
+    });
+  };
+  const removeTasks = (targets: ScrapeTask[], onlyFailed = false) =>
+    perform(async () => {
+      if (!scraping || !targets.length) return;
+      const abort = new AbortController();
+      removal.current = abort;
+      setRemovalProgress({ completed: 0, total: targets.length });
+      try {
+        const result = await scraping.removeMany(
+          targets.map((task) => task.id),
+          {
+            onlyFailed,
+            signal: abort.signal,
+            onProgress: (completed, total) => setRemovalProgress({ completed, total }),
+          },
+        );
+        notice(
+          t("已移除 {0} 条记录，{1} 条保留。", result.removed, result.retained) +
+            (result.error ? ` ${t(result.error)}` : ""),
+        );
+      } finally {
+        removal.current = null;
+        setRemovalProgress(null);
+      }
+    });
   return (
     <div className="fill-column">
       <Group justify="space-between" mb="md">
@@ -73,7 +132,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
           <Button
             variant="default"
             size="xs"
-            disabled={!state.available || !state.ready}
+            disabled={selectionDisabled}
             onClick={() => {
               if (!scraping) return;
               const paused = !state.paused;
@@ -86,7 +145,7 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
           </Button>
           <Button
             size="xs"
-            disabled={!state.available || !state.ready}
+            disabled={selectionDisabled}
             leftSection={<Icon name="plus" size={15} />}
             onClick={() => setOpened(true)}
           >
@@ -99,19 +158,87 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
           {t(publicMessage(state.error))}
         </Alert>
       )}
+      <Group justify="space-between" gap="xs" mb="sm">
+        <Group gap="xs">
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<Icon name="trash" size={15} />}
+            disabled={selectionDisabled || !selectedTasks.length}
+            onClick={() => void removeTasks(selectedTasks)}
+          >
+            {t("移除选中")}
+          </Button>
+          <Button
+            size="xs"
+            variant="default"
+            disabled={selectionDisabled || !failedTasks.length}
+            onClick={() => void removeTasks(failedTasks, true)}
+          >
+            {t("移除失败")}
+          </Button>
+          <Text size="xs" c="dimmed" component="output" aria-live="polite">
+            {t("已选 {0} 项", selectedTasks.length)}
+          </Text>
+          {!!selectedTasks.length && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              disabled={selectionDisabled}
+              onClick={() => setSelected(new Map())}
+            >
+              {t("取消选择")}
+            </Button>
+          )}
+        </Group>
+        {removalProgress ? (
+          <Group gap="xs">
+            <Text size="xs" c="dimmed" component="output" aria-live="polite">
+              {t("正在移除 {0}/{1} 条", removalProgress.completed, removalProgress.total)}
+            </Text>
+            <Button size="compact-xs" variant="subtle" onClick={() => removal.current?.abort()}>
+              {t("停止移除")}
+            </Button>
+          </Group>
+        ) : (
+          <Text size="xs" c="dimmed">
+            {t("仅移除已结束的任务记录，保留影片和已保存资料。")}
+          </Text>
+        )}
+      </Group>
       <div className="table-panel">
-        <Table stickyHeader verticalSpacing="sm" horizontalSpacing="md" layout="fixed" miw={660}>
+        <Table stickyHeader verticalSpacing="sm" horizontalSpacing="md" layout="fixed" miw={720}>
           <Table.Thead>
             <Table.Tr>
-              <Table.Th w="31%">{t("影片")}</Table.Th>
-              <Table.Th w="15%">{t("番号")}</Table.Th>
+              <Table.Th w={44}>
+                <Checkbox
+                  size="xs"
+                  aria-label={t("全选本页已结束任务")}
+                  title={t("全选本页已结束任务")}
+                  checked={!!selectable.length && pageSelected === selectable.length}
+                  indeterminate={pageSelected > 0 && pageSelected < selectable.length}
+                  disabled={selectionDisabled || !selectable.length}
+                  onChange={(event) => selectTasks(selectable, event.currentTarget.checked)}
+                />
+              </Table.Th>
+              <Table.Th w="28%">{t("影片")}</Table.Th>
+              <Table.Th w="14%">{t("番号")}</Table.Th>
               <Table.Th w="30%">{t("状态")}</Table.Th>
-              <Table.Th w="24%">{t("操作")}</Table.Th>
+              <Table.Th>{t("操作")}</Table.Th>
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {tasks.map((task) => (
               <Table.Tr key={task.id}>
+                <Table.Td>
+                  <Checkbox
+                    size="xs"
+                    aria-label={t("选择任务 {0}", task.name)}
+                    checked={isSelected(task)}
+                    disabled={selectionDisabled || activeScrape(task)}
+                    onChange={(event) => selectTasks([task], event.currentTarget.checked)}
+                  />
+                </Table.Td>
                 <Table.Td>
                   <Text size="sm" fw={600} truncate>
                     {task.name}

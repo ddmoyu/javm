@@ -26,6 +26,7 @@ class Store {
     std::string saveWork(const Json& file, const Json& nfo, const std::string* nfoSource);
     void rememberAssetRoot(const fs::path& path);
     int64_t importLegacyRows(sqlite3* source, const std::atomic_bool& cancelled, const legacy::Progress& progress);
+    Json repairLegacyDiscovery(const std::atomic_bool& cancelled, const legacy::Progress& progress);
     Json decorate(Json videos);
 public:
     explicit Store(fs::path path);

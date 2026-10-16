@@ -83,6 +83,53 @@ function hold<T>(signal: AbortSignal) {
 }
 
 describe("同一视频的刮削任务复用", () => {
+  it("批量移除只清理结束记录，去重并保留排队任务及失败项", async () => {
+    const { service, records, port, provider } = fixture([
+      record("done", { workId: "done", status: "completed" }),
+      record("failed", { workId: "failed" }),
+      record("queued", { workId: "queued", status: "queued" }),
+      record("write-error", { workId: "write-error" }),
+    ]);
+    service.pauseQueue(true);
+    await service.retry("queued");
+    const originalRemove = vi.mocked(port.remove).getMockImplementation()!;
+    vi.mocked(port.remove).mockImplementation(async (task) => {
+      if (task.id === "write-error") throw new Error("安全模拟存储失败");
+      await originalRemove(task);
+    });
+    const result = await service.removeMany(["done", "done", "queued", "write-error", "failed"]);
+    expect(result).toMatchObject({ removed: 2, retained: 2 });
+    expect(result.error).not.toBe("");
+    expect([...records.keys()].sort()).toEqual(["queued", "write-error"]);
+    expect(provider.search).not.toHaveBeenCalled();
+    expect(port.commit).not.toHaveBeenCalled();
+  });
+  it("移除失败记录逐条复核状态，保留已恢复成功的任务", async () => {
+    const { service, records } = fixture([
+      record("done", { workId: "done", status: "completed" }),
+      record("failed", { workId: "failed" }),
+    ]);
+    expect(await service.removeMany(["done", "failed"], { onlyFailed: true })).toEqual({
+      removed: 1,
+      retained: 1,
+      error: "",
+    });
+    expect([...records.keys()]).toEqual(["done"]);
+  });
+  it("停止批量移除后保留未处理记录并报告进度", async () => {
+    const { service, records } = fixture(
+      Array.from({ length: 45 }, (_, i) => record(`safe-${i}`, { workId: `safe-${i}` })),
+    );
+    const abort = new AbortController();
+    const progress = vi.fn(() => abort.abort());
+    const result = await service.removeMany([...records.keys()], {
+      signal: abort.signal,
+      onProgress: progress,
+    });
+    expect(result).toEqual({ removed: 20, retained: 25, error: "" });
+    expect(progress).toHaveBeenLastCalledWith(20, 45);
+    expect(records.size).toBe(25);
+  });
   it("并发添加二十次只创建一行，运行中再次添加不重置阶段或重复请求", async () => {
     const { service, records, port, provider } = fixture();
     service.pauseQueue(true);

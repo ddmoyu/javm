@@ -4,6 +4,7 @@ Json Store::legacyCandidate() {
 }
 Json Store::importLegacy(const std::atomic_bool& cancelled,const legacy::Progress& progress) {
     std::lock_guard lock(mutex_);
+    if(legacy::candidate(db_,path_).value("operation",std::string{})=="repair") return repairLegacyDiscovery(cancelled,progress);
     return legacy::importDatabase(db_,path_,cancelled,progress,[&](sqlite3* source) { return importLegacyRows(source,cancelled,progress); });
 }
 int64_t Store::importLegacyRows(sqlite3* source,const std::atomic_bool& cancelled,const legacy::Progress& progress) {
@@ -26,7 +27,6 @@ int64_t Store::importLegacyRows(sqlite3* source,const std::atomic_bool& cancelle
     }
     if(!exists("videos")) throw std::runtime_error("旧库缺少影片表，未导入");
     Query videos(source,"SELECT * FROM videos ORDER BY id");
-    std::map<std::string,std::string> ids;
     while(videos.next()) {
         stop(); const auto old=videos.row();
         Json nfo=Json::object(), file=Json::object();
@@ -77,32 +77,15 @@ int64_t Store::importLegacyRows(sqlite3* source,const std::atomic_bool& cancelle
         } else file["kind"]="metadata";
         for(const auto* kind:{"poster","thumb","fanart"}) if(!stringValue(old,kind).empty()) file[kind]=old[kind];
         const auto id=saveWork(file,nfo,nullptr);
-        ids[old["id"].is_string()?old["id"].get<std::string>():old["id"].dump()]=id;
         run(db_,"UPDATE works SET favorite=MAX(favorite,?),created_at=COALESCE(?,created_at),scraped_at=COALESCE(?,scraped_at) WHERE id=?",{numeric(old,"favorite")!=0,old.value("created_at",Json()),old.value("scraped_at",Json()),id});
         if(path.is_absolute()) {
             run(db_,"UPDATE media_files SET missing=? WHERE path_key=?",{!present,pathKey(path)});
         }
     }
-    // 旧版演员/分类作品清单本就允许没有本地文件，导入为独立作品资料。
-    for(const auto* table:{"actor_works","facet_works"}) if(exists(table)) {
-        Query entries(source,std::string("SELECT * FROM ")+table);
-        while(entries.next()) {
-            stop(); const auto old=entries.row(); const auto code=stringValue(old,"code");
-            if(code.empty()) continue;
-            const auto local=old.value("local_video_id",Json());
-            const auto oldId=local.is_string()?local.get<std::string>():local.dump();
-            Json file={{"kind","metadata"},{"name",stringValue(old,"title")},{"poster",stringValue(old,"cover_url")}};
-            if(ids.contains(oldId)) file["work_id"]=ids.at(oldId);
-            const auto title=stringValue(old,"title");
-            Json nfo={{"num",code},{"title",title.empty()?code:title},{"premiered",stringValue(old,"release_date")}};
-            const auto id=saveWork(file,nfo,nullptr);
-            if(std::string(table)=="actor_works" && exists("actors")) for(const auto& actor:rows(source,"SELECT name FROM actors WHERE id=?",{old.value("actor_id",Json())})) {
-                auto current=relations(db_,id,"actors",""); auto next=current;
-                if(std::find(next.begin(),next.end(),actor["name"])==next.end()) next.push_back(actor["name"]);
-                mergeRelations(db_,id,"actors","",next,current);
-            }
-        }
-    }
+    // 发现页的演员/分类作品清单只是浏览缓存，已保存在 legacy_records；不进入片库。
+    const auto receipt=Json::to_cbor(Json{{"version",1},{"discoveryArchivedOnly",true}});
+    Query saved(db_,"INSERT INTO legacy_records(source_path,table_name,row_number,content) VALUES(?1,'__javm_discovery_repair_v1',0,?2)",Json::array({origin}));
+    saved.blob(2,std::string(receipt.begin(),receipt.end())); saved.next();
     if(exists("directories")) {
         Query dirs(source,"SELECT * FROM directories");
         while(dirs.next()) { stop(); const auto old=dirs.row(); const auto path=fs::path(pathFromText(stringValue(old,"path"))); if(!path.is_absolute()) continue;

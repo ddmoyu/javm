@@ -193,7 +193,7 @@ describe.runIf(enabled)("旧库启动引导与合并导入", () => {
       await host.request("library.legacy.start");
       const result = await finished(host);
       expect(result.state).toBe("completed");
-      expect(result.warning).toContain("未能移除");
+      expect(result.warning).toContain("原数据库及配套文件已保留");
       expect((await fs.stat(source)).isFile()).toBe(true);
       await host.close();
       host = await hostAt(root);

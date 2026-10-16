@@ -469,13 +469,46 @@ export class ScrapeService extends Observable<{
     this.publish({ paused });
     if (!paused) this.pump();
   }
-  async remove(id: string) {
-    await this.exclusive(async () => {
+  async remove(id: string, onlyFailed = false) {
+    return this.exclusive(async () => {
+      if (this.stopping) throw new Error("应用正在退出。");
       if (this.uncertainStop?.id === id) throw new Error("请先重试以确认资料请求进程已停止。");
       const task = this.find(id);
+      if (onlyFailed && task.status !== "failed") return false;
       if (activeScrape(task) || this.active?.id === id) throw new Error("请先停止刮削任务。");
       await this.discard(task);
+      return true;
     });
+  }
+  async removeMany(
+    ids: readonly string[],
+    options: {
+      onlyFailed?: boolean;
+      signal?: AbortSignal;
+      onProgress?: (completed: number, total: number) => void;
+    } = {},
+  ) {
+    await this.initialize();
+    const targets = [...new Set(ids)];
+    let removed = 0;
+    let completed = 0;
+    let error = "";
+    for (const id of targets) {
+      if (options.signal?.aborted || this.stopping) break;
+      try {
+        // 每条记录沿用版本校验与运行中保护，失败项保留并继续处理其余记录。
+        if (await this.remove(id, options.onlyFailed)) removed++;
+      } catch (reason) {
+        error ||= serviceError(reason);
+      }
+      completed++;
+      if (completed % 20 === 0) {
+        options.onProgress?.(completed, targets.length);
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+    }
+    options.onProgress?.(completed, targets.length);
+    return { removed, retained: targets.length - removed, error };
   }
   async shutdown() {
     this.stopping = true;

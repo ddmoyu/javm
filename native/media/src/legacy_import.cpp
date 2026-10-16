@@ -145,7 +145,7 @@ void copy(sqlite3* source,const fs::path& destination,const std::atomic_bool& ca
 fs::path sourcePath(const fs::path& target) { return target.parent_path().parent_path()/"com.ddmoyu.javm"/"javm.db"; }
 Json inspect(const fs::path& target) {
     // 启动探测只读文件及完成记录，不依赖当前片库成功升级，也不创建新库。
-    if(!fs::is_regular_file(sourcePath(target)) || !fs::exists(target)) return candidate(nullptr,target);
+    if(!fs::exists(target)) return candidate(nullptr,target);
     try {
         Connection current(target,SQLITE_OPEN_READONLY);
         return candidate(current.value,target);
@@ -156,10 +156,18 @@ Json inspect(const fs::path& target) {
 Json candidate(sqlite3* db,const fs::path& target) {
     const auto source=sourcePath(target);
     const bool hasReceipt=db && !one(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='javm_legacy_imports'").is_null();
+    if(hasReceipt && !one(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='legacy_records'").is_null()) {
+        const auto repair=one(db,R"SQL(SELECT i.source_path FROM javm_legacy_imports i
+WHERE NOT EXISTS(SELECT 1 FROM legacy_records r WHERE r.source_path=i.source_path AND r.table_name='__javm_discovery_repair_v1')
+AND EXISTS(SELECT 1 FROM legacy_records r WHERE r.source_path=i.source_path AND r.table_name IN ('actor_works','facet_works'))
+ORDER BY i.completed_at,i.source_path LIMIT 1)SQL");
+        if(!repair.is_null()) return {{"state","available"},{"operation","repair"},{"sourcePath",repair["source_path"]},
+            {"targetPath",pathText(target)},{"currentVideos",one(db,"SELECT COUNT(*) AS n FROM works")["n"]}};
+    }
     const bool imported=hasReceipt && !one(db,"SELECT source_path FROM javm_legacy_imports WHERE source_path=?",Json::array({pathKey(source)})).is_null();
     const bool found=!imported && fs::is_regular_file(source);
     const bool hasVideos=db && !one(db,"SELECT name FROM sqlite_master WHERE type='table' AND name='works'").is_null();
-    return {{"state",found ? "available" : "none"},{"sourcePath",pathText(source)},{"targetPath",pathText(target)},
+    return {{"state",found ? "available" : "none"},{"operation","import"},{"sourcePath",pathText(source)},{"targetPath",pathText(target)},
             {"bytes",found ? fs::file_size(source) : 0},{"currentVideos",hasVideos ? one(db,"SELECT COUNT(*) AS n FROM works")["n"] : Json(0)}};
 }
 Json importDatabase(sqlite3* db,const fs::path& target,const std::atomic_bool& cancelled,const Progress& progress,const std::function<int64_t(sqlite3*)>& importRows) {

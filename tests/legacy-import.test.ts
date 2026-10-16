@@ -11,6 +11,31 @@ const candidate: LegacyImportSnapshot = {
 afterEach(() => vi.useRealTimers());
 
 describe("旧库导入引导状态", () => {
+  it("发现已迁移库的修复候选时显示引导，用户开始后保留修复模式并刷新片库", async () => {
+    const refresh = vi.fn(async () => {});
+    const request = vi.fn(async (method: string) => {
+      if (method.endsWith("check")) return { ...candidate, operation: "repair" };
+      if (method.endsWith("status"))
+        return { state: "completed", operation: "repair", removedWorks: 20000 };
+      return {};
+    });
+    const service = new LegacyImportService({ request: request as never }, refresh);
+    await service.initialize();
+    expect(service.getSnapshot()).toMatchObject({
+      opened: true,
+      operation: "repair",
+      state: "available",
+    });
+    expect(request.mock.calls.some(([method]) => method.endsWith("start"))).toBe(false);
+    await service.start();
+    expect(service.getSnapshot()).toMatchObject({
+      state: "completed",
+      operation: "repair",
+      removedWorks: 20000,
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    await service.shutdown();
+  });
   it("初始化去重，稍后导入只关闭本次引导，浏览器预览不连接数据库", async () => {
     const request = vi.fn(async () => candidate);
     const service = new LegacyImportService({ request: request as never });
