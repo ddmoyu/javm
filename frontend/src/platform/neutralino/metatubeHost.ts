@@ -7,6 +7,7 @@ import { runPowerShell } from "./metadataHttp";
 import { NativeLibraryPort } from "./library";
 import { logEvent } from "../../services/logging/events";
 import { OutputLines } from "../../services/downloads/progress";
+import { metadataNetwork } from "../../services/metadata/diagnostics";
 import {
   applicationToolPath,
   applicationResourcePath,
@@ -106,7 +107,9 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
         (chunk) => {
           for (const line of lines.push(chunk)) {
             const diagnostic = metatubeDiagnostic(line);
-            if (diagnostic) logEvent(diagnostic.level, "metatube", "engine", diagnostic.message);
+            // stdout 不具备可靠的请求关联；新组件的逐来源诊断由对应 HTTP 响应提供。
+            if (diagnostic)
+              logEvent(diagnostic.level, "metatube", "legacy_engine", diagnostic.message);
           }
         },
         true,
@@ -117,6 +120,7 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
       return {
         endpoint: `http://127.0.0.1:${port}`,
         token,
+        network: metadataNetwork(proxy),
         exited,
         isNetworkCurrent: async () => proxy === (await network.getProxy()),
         async stop() {

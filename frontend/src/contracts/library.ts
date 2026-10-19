@@ -18,6 +18,25 @@ export interface MediaDirectory {
   error: string;
   scanned_at: string | null;
 }
+export type ScanIssueStage =
+  | "enumerate"
+  | "file"
+  | "probe"
+  | "fingerprint"
+  | "nfo"
+  | "artwork"
+  | "database"
+  | "finalize"
+  | "scan";
+export interface ScanIssue {
+  path: string;
+  message: string;
+  stage?: ScanIssueStage;
+  extension?: string;
+  sizeBytes?: number;
+  /** 失败阶段的耗时；probe 阶段包含等待探测名额和子进程清理。 */
+  elapsedMs?: number;
+}
 export interface ScanProgress {
   id: string;
   directoryId: string;
@@ -29,12 +48,17 @@ export interface ScanProgress {
   skipped: number;
   errors: number;
   current: string;
-  issues: { path: string; message: string }[];
+  issues: ScanIssue[];
   concurrency: number;
   activeProbes: number;
   peakProbes: number;
   warnings: number;
   notices: { path: string; message: string }[];
+  elapsedMs?: number;
+  probeTimeoutMs?: number;
+  probeTimeouts?: number;
+  storageKind?: "fixed" | "removable" | "remote" | "optical" | "ramdisk" | "unknown";
+  errorCounts?: Partial<Record<ScanIssueStage, number>>;
 }
 export interface LibraryStatus {
   recoveryError?: string;

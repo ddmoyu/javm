@@ -432,7 +432,7 @@ describe("MetaTube 按需启动与查询", () => {
       native,
       true,
     );
-    await expect(service.search("TEST")).rejects.toThrow("来源请求失败");
+    await expect(service.search("TEST")).rejects.toThrow("资料服务暂时异常，请稍后重试。");
     expect(service.getSnapshot().status).toBe("ready");
     expect(managed.stop).not.toHaveBeenCalled();
     await service.shutdown();

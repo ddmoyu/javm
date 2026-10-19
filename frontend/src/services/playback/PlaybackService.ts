@@ -1,4 +1,4 @@
-import { playbackRequest } from "./source";
+import { playbackRequest, playbackReproduction } from "./source";
 import type { PlaybackOptions, PlaybackRequest, PlaybackFormat } from "./source";
 import type { PlaybackProgress } from "./PlaybackHistory";
 import { logEvent } from "../logging/events";
@@ -61,7 +61,14 @@ export class PlaybackService {
   };
   private update(value: PlaybackSnapshot) {
     if (value.error && value.error !== this.snapshot.error)
-      logEvent("error", "playback", "failed", value.error);
+      logEvent(
+        "error",
+        "playback",
+        "failed",
+        value.error,
+        undefined,
+        playbackReproduction(value.request),
+      );
     if (value.opened !== this.snapshot.opened || value.preparing !== this.snapshot.preparing)
       logEvent(
         "info",

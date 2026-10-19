@@ -117,7 +117,7 @@ describe("统一日志的大小、保留期与并发写入", () => {
     const recent = await store.recent();
     expect(recent).toHaveLength(200);
     expect(recent[0]?.sequence).toBe(251);
-    expect(vi.mocked(port.tail).mock.calls.every((call) => call[1] === 65536)).toBe(true);
+    expect(vi.mocked(port.tail).mock.calls.every((call) => call[1] === 131072)).toBe(true);
   });
   it("部分写入失败后换文件重试，近期视图按记录标识去重", async () => {
     const { port, files } = memory();
@@ -154,7 +154,8 @@ describe("日志队列与脱敏", () => {
     setLogSink(write, flush, () => true);
     expect(await importDownloadLog(task)).toBe(true);
     expect(write).toHaveBeenCalledTimes(2);
-    expect(JSON.stringify(write.mock.calls)).not.toMatch(/private|token=secret/);
+    expect(JSON.stringify(write.mock.calls)).not.toMatch(/private/);
+    expect(JSON.stringify(write.mock.calls)).toContain(task.url);
     setLogSink(write, flush, () => false);
     expect(await importDownloadLog(task)).toBe(false);
     expect(await importDownloadLog(task, () => true)).toBe(false);
@@ -171,7 +172,7 @@ describe("日志队列与脱敏", () => {
     expect(await importDownloadLog(task)).toBe(true);
     expect(write).not.toHaveBeenCalled();
   });
-  it("统一隐藏链接、代理凭据、授权头与命名密钥，保留可用诊断", () => {
+  it("保留业务链接，隐藏代理凭据、授权头与独立命名密钥", () => {
     const result = cleanLog({
       ...input(
         'failed https://alice:password@host/video?token=abc Bearer sk-very-secret api_key="another-secret"',
@@ -179,7 +180,8 @@ describe("日志队列与脱敏", () => {
       context: { taskId: "123", token: "secret", headers: "Cookie: secret", count: 2 },
     });
     const text = JSON.stringify(result);
-    expect(text).not.toMatch(/alice|password|host\/video|abc|sk-very-secret|another-secret|Cookie/);
+    expect(text).not.toMatch(/alice|password|sk-very-secret|another-secret|Cookie/);
+    expect(text).toContain("https://host/video?token=abc");
     expect(result.context).toEqual({ taskId: "123", count: 2 });
     expect(redactText("\x1b[31m错误\x1b[0m\0")).toBe("错误");
     expect(redactText("123😀x", 4)).toBe("123…");
@@ -195,6 +197,24 @@ describe("日志队列与脱敏", () => {
     await service.shutdown();
     expect(files.size).toBe(1);
     expect((await service.recent()).map((item) => item.module)).toEqual(["library", "downloads"]);
+  });
+  it("独立凭据的引号、空格、转义和 URL 均完整隐藏，保留业务地址的签名", () => {
+    const url = "https://safe.invalid/DEMO-001?token=fictional&signature=safe-signature";
+    const text = [
+      'password="safe private password"',
+      "secret='safe private secret'",
+      String.raw`api_key="safe \"quoted\" key"`,
+      'access_token="https://credential.example.invalid/safe-private"',
+      '{"refresh_token":"safe refresh value"}',
+      "中文日志，token=private-token",
+      url,
+      'passwd="safe unfinished secret',
+    ].join("\n");
+    const result = redactText(text);
+    expect(result).not.toMatch(/private|quoted|refresh value|unfinished|credential\.example/);
+    expect(result).toContain(url);
+    expect(result.match(/\[已隐藏\]/g)).toHaveLength(7);
+    expect(redactText(result)).toBe(result);
   });
   it("慢磁盘下最多排队 500 条，错误优先，丢弃计数也会写入", async () => {
     const { port } = memory();
@@ -223,6 +243,44 @@ describe("日志队列与脱敏", () => {
     expect(service.getSnapshot().error).toBe("");
     expect(await service.recent()).toHaveLength(1);
     await service.shutdown();
+  });
+  it("失败批次重入已满队列时优先丢弃普通记录，保留新产生的错误", async () => {
+    vi.useFakeTimers();
+    const { port, files } = memory();
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const append = port.append;
+    port.append = vi
+      .fn()
+      .mockImplementationOnce(async () => {
+        started.resolve();
+        await release.promise;
+        throw new Error("模拟磁盘写入失败");
+      })
+      .mockImplementation(append);
+    const service = new LogService(new RotatingLogStore(port));
+    for (let i = 0; i < 16; i++) service.record(input(`旧记录 ${i}`));
+    const flushing = service.flush();
+    await started.promise;
+    for (let i = 0; i < 499; i++) service.record(input(`新记录 ${i}`));
+    service.record(input("新产生的关键错误", "error"));
+    release.resolve();
+    await flushing;
+    expect(service.getSnapshot().error).toContain("写入失败");
+    expect(service.getSnapshot().dropped).toBe(16);
+    await service.shutdown();
+    const entries = [...files.values()].flatMap((text) =>
+      text
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line) as LogEntry),
+    );
+    expect(entries).toHaveLength(501);
+    expect(entries.filter((item) => item.event === "test").map((item) => item.sequence)).toEqual(
+      Array.from({ length: 500 }, (_, i) => i + 17),
+    );
+    expect(entries.some((item) => item.message === "新产生的关键错误")).toBe(true);
+    expect(service.getSnapshot().error).toBe("");
   });
   it("退出等待正在写入的批次，并继续写入收尾期间的新记录", async () => {
     const { port } = memory();

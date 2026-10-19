@@ -33,6 +33,8 @@ export class OnlineWorksService extends Observable<Snapshot> {
   private cleanup?: () => Promise<void>;
   private cache = new Map<string, OnlineWorksPage>();
   private identities = new Map<string, { at: number; entities: OnlineEntity[] }>();
+  private requestUrl?: string;
+  private requestedPage = 1;
   constructor(
     private processor: CatalogProcessor,
     private fetch: ((url: string, signal: AbortSignal) => Promise<string>) | undefined,
@@ -61,6 +63,8 @@ export class OnlineWorksService extends Observable<Snapshot> {
       if (this.stopping || generation !== this.generation) return;
       const abort = new AbortController();
       this.abort = abort;
+      this.requestUrl = undefined;
+      this.requestedPage = this.snapshot.page;
       const timer = setTimeout(() => abort.abort(new Error("JavBus 读取超时，请重试。")), 60_000);
       this.active = Promise.resolve()
         .then(async () => {
@@ -92,11 +96,27 @@ export class OnlineWorksService extends Observable<Snapshot> {
             this.publish({ detail: { ...this.snapshot.detail, error: message, loading: false } });
           else this.publish({ error: message, ready: true });
           if (!(error instanceof NoMatchingEntity))
-            logEvent("error", "catalog", "works_failed", message, {
-              action: detail ? "work_detail" : "online_works",
-              page: this.snapshot.page,
-              dimension: this.snapshot.selection?.dimension ?? "",
-            });
+            logEvent(
+              "error",
+              "catalog",
+              "works_failed",
+              message,
+              {
+                action: detail ? "work_detail" : "online_works",
+                page: this.requestedPage,
+                dimension: this.snapshot.selection?.dimension ?? "",
+              },
+              {
+                action: detail ? "work_detail" : "online_works",
+                query: this.snapshot.selection?.name,
+                dimension: this.snapshot.selection?.dimension,
+                page: this.requestedPage,
+                source: "javbus",
+                code: detail ? this.snapshot.detail?.work.code : undefined,
+                pageUrl: detail ? this.snapshot.detail?.work.url : this.snapshot.entity?.url,
+                requestUrl: this.requestUrl,
+              },
+            );
         })
         .finally(() => {
           clearTimeout(timer);
@@ -110,6 +130,11 @@ export class OnlineWorksService extends Observable<Snapshot> {
     };
     if (this.active) this.pending = launch;
     else launch();
+  }
+  private request(url: string, signal: AbortSignal) {
+    // 外部 readDetails 可并发调用，不能覆盖当前交互的失败地址。
+    if (signal === this.abort?.signal) this.requestUrl = url;
+    return this.fetch!(url, signal);
   }
   select = (dimension: WorksDimension, name: string) => {
     if (this.snapshot.selection?.dimension === dimension && this.snapshot.selection.name === name) {
@@ -173,7 +198,7 @@ export class OnlineWorksService extends Observable<Snapshot> {
         for (const lane of ["censored", "uncensored"] as const) {
           signal.throwIfAborted();
           const url = javbusSearchUrl(selection.dimension, name, lane);
-          const html = await this.fetch!(url, signal);
+          const html = await this.request(url, signal);
           signal.throwIfAborted();
           if (actor) {
             const matches = await this.processor.run("javbusActors", { html, names: plan.names });
@@ -185,7 +210,7 @@ export class OnlineWorksService extends Observable<Snapshot> {
               signal.throwIfAborted();
               if (visited.has(work.url) || visited.size >= 4) continue;
               visited.add(work.url);
-              const detail = await this.fetch!(work.url, signal);
+              const detail = await this.request(work.url, signal);
               signal.throwIfAborted();
               // 同时验证详情番号；不从导航栏、广告或其他作品中推测来源身份。
               await this.processor.run("javbusDetails", { html: detail, work });
@@ -242,10 +267,11 @@ export class OnlineWorksService extends Observable<Snapshot> {
   ) {
     const dimension = this.snapshot.selection!.dimension;
     const url = javbusEntityUrl(entity, page);
+    this.requestedPage = page;
     const cached = force ? undefined : this.cache.get(url);
     let result = cached;
     if (!result) {
-      const html = await this.fetch!(url, signal);
+      const html = await this.request(url, signal);
       signal.throwIfAborted();
       result = await this.processor.run("javbusWorks", { html, url, page });
     }
@@ -300,7 +326,7 @@ export class OnlineWorksService extends Observable<Snapshot> {
     if (this.stopping || !this.fetch) throw new Error("在线作品服务暂不可用。");
     await this.prepare();
     signal.throwIfAborted();
-    const html = await this.fetch(work.url, signal);
+    const html = await this.request(work.url, signal);
     signal.throwIfAborted();
     const value = await this.processor.run("javbusDetails", { html, work });
     signal.throwIfAborted();

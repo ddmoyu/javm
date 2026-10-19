@@ -129,7 +129,10 @@ const service = new HttpService({
           exitCode: response.exitCode,
           bytes: response.bytes,
           connections: response.connections,
+          elapsedMs: response.elapsedMs,
+          timeoutMs: request.timeoutMs,
         },
+        { action: request.method ?? "GET", requestUrl: request.url },
       );
       return { ...response, path };
     } catch (error) {

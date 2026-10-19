@@ -2,6 +2,8 @@ import type { LogService } from "../logging/LogService";
 import { cleanLog } from "../logging/events";
 import type { LogEntry } from "../logging/events";
 import type { FailureInput } from "./events";
+import { cleanMetadataDiagnostics } from "../metadata/diagnostics";
+import { cleanReproduction } from "../logging/reproduction";
 import {
   diagnosticText,
   failureFromLog,
@@ -75,6 +77,8 @@ function cleanInput(input: FailureInput): FailureInput {
     message: diagnosticText(input.message),
     ...(input.taskId ? { taskId: diagnosticText(input.taskId, 100) } : {}),
     ...(input.url ? { url: feedbackUrl(input.url) } : {}),
+    ...(input.metadata ? { metadata: cleanMetadataDiagnostics(input.metadata) } : {}),
+    ...(input.reproduction ? { reproduction: cleanReproduction(input.reproduction) } : {}),
     details: context
       ? Object.fromEntries(
           Object.entries(context).map(([key, value]) => [
@@ -271,6 +275,9 @@ export class FeedbackService {
         item.module === failure.module &&
         item.taskId === failure.taskId &&
         item.message === failure.message &&
+        item.url === failure.url &&
+        JSON.stringify(item.reproduction) === JSON.stringify(failure.reproduction) &&
+        ((open && !failure.metadata) || item.metadata?.queryId === failure.metadata?.queryId) &&
         ((item.session === this.session.id && this.now() - Date.parse(item.time) < 60000) ||
           (open &&
             !!failure.taskId &&
@@ -300,6 +307,8 @@ export class FeedbackService {
           .getRecentEntries()
           .filter((entry) => Date.parse(entry.time) <= Date.parse(occurredAt)),
         failure.taskId,
+        undefined,
+        failure.metadata?.queryId,
       ),
       after: "",
     };
@@ -335,7 +344,7 @@ export class FeedbackService {
   private onLog = (entry: LogEntry) => {
     for (const id of this.collecting.keys()) {
       const report = this.snapshot.reports.find((item) => item.id === id);
-      if (!report || !relatedLog(entry, report.taskId)) continue;
+      if (!report || !relatedLog(entry, report.taskId, report.metadata?.queryId)) continue;
       const line = logLine(entry);
       if (report.after.length + line.length + 1 <= feedbackPolicy.after)
         this.update(id, { after: [report.after, line].filter(Boolean).join("\n") });

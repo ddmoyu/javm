@@ -106,9 +106,8 @@ describe("常驻 HTTP 官方 Extension 适配（安全 mock）", () => {
       "javm.database.request",
       expect.objectContaining({ method: "http.request", protocol: 1 }),
     );
-    expect(JSON.stringify(native.log.mock.calls)).not.toMatch(
-      /safe-secret|safe-password|Bearer|https:/,
-    );
+    expect(JSON.stringify(native.log.mock.calls)).not.toMatch(/safe-secret|safe-password|Bearer/);
+    expect(JSON.stringify(native.log.mock.calls)).toContain(request.url);
     await shutdownHttp();
     expect(native.off).toHaveBeenCalledOnce();
   });

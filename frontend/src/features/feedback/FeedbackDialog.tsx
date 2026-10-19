@@ -43,13 +43,11 @@ export function FeedbackDialog({ service }: { service: FeedbackService }) {
           <Text size="sm">
             {t("是否反馈此问题？点击“反馈问题”将复制系统信息和前后日志，并打开 GitHub Issues。")}
           </Text>
-          {report.url && (
-            <Text size="sm" c="dimmed">
-              {t(
-                "报告包含完整下载链接（包括可能存在的临时授权参数）。提交到公开 Issue 前，请确认下方内容。",
-              )}
-            </Text>
-          )}
+          <Text size="sm" c="dimmed">
+            {t(
+              "报告保留番号、查询内容、文件名及完整业务链接（可能含临时授权参数）。提交到公开 Issue 前，请检查下方预览。",
+            )}
+          </Text>
           <Text component="output" size="xs" c="dimmed" aria-live="polite">
             {report.complete ? t("诊断记录已整理。") : t("正在收集故障后的收尾日志…")}
             {report.count > 1 ? t(" 同类异常已合并 {0} 次。", t(report.count)) : ""}

@@ -431,7 +431,7 @@ describe("download direct-first proxy fallback", () => {
   it("redacts authenticated proxy URLs from persisted/displayed logs", () => {
     const f = fixture();
     expect(redactLog("proxy socks5://user:secret@localhost:1080 failed", f.task)).toBe(
-      "proxy [地址] failed",
+      "proxy [代理地址已隐藏] failed",
     );
   });
 });

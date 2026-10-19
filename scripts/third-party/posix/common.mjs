@@ -124,6 +124,11 @@ export async function specification(component, platform = target) {
       "scripts/build-metatube-lite.mjs",
       "scripts/metatube-lite-profile.mjs",
       "scripts/metatube-lite/source-lock.json",
+      "scripts/metatube-lite/diagnostics.mjs",
+      "scripts/metatube-lite/diagnostics/engine.go",
+      "scripts/metatube-lite/diagnostics/route.go",
+      "tests/fixtures/metatube-diagnostics/engine_test.go",
+      "tests/fixtures/metatube-diagnostics/route_test.go",
     ],
     neutralino: [
       "scripts/third-party/posix/patch-neutralino.mjs",

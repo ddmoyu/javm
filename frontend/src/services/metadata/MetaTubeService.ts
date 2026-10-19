@@ -3,6 +3,8 @@ import type { JsonHttp, Store } from "./shared";
 import type { EditableMetadata } from "../../contracts/metadata";
 import { StopUnconfirmedError } from "../downloads/ports";
 import { recordUsage } from "../analytics/events";
+import { withMetadataTrace } from "./diagnostics";
+import type { MetadataNetwork, MetadataQueryOptions, MetadataTrace } from "./diagnostics";
 
 export interface MetaTubeSettings {
   providers: string[];
@@ -20,6 +22,7 @@ export function validateMetaTubeSettings(value: unknown): MetaTubeSettings {
 export interface ManagedMetaTube {
   endpoint: string;
   token: string;
+  network?: MetadataNetwork;
   exited: Promise<void>;
   isNetworkCurrent?(): Promise<boolean>;
   stop(): Promise<void>;
@@ -130,7 +133,13 @@ export class MetaTubeService extends Observable<{
   private backgroundTask?: { abort: AbortController; done: Promise<unknown> };
   private managed?: ManagedMetaTube;
   private stopping?: ManagedMetaTube;
-  private connection?: { endpoint: string; token: string; providers: string[] };
+  private connection?: {
+    endpoint: string;
+    token: string;
+    providers: string[];
+    network: MetadataNetwork;
+    version: string;
+  };
   private initialized?: Promise<void>;
   private stopped = false;
   constructor(
@@ -284,6 +293,8 @@ export class MetaTubeService extends Observable<{
         endpoint: managed.endpoint,
         token: managed.token,
         providers: settings.providers,
+        network: managed.network ?? "unknown",
+        version: bundled.version,
       };
       this.publish({ status: "ready", providers, error: "" });
     } catch (error) {
@@ -371,76 +382,118 @@ export class MetaTubeService extends Observable<{
     path: string,
     connection: NonNullable<MetaTubeService["connection"]>,
     signal: AbortSignal,
+    trace: MetadataTrace,
+    provider = "MetaTube",
   ) {
+    const started = Date.now();
+    trace.request(connection.version, connection.network);
     try {
       const response = record(
         await this.http(
           {
-            url: `${connection.endpoint}/v1/${path}`,
+            url: `${connection.endpoint}/v1/${path}${path.includes("?") ? "&" : "?"}diagnostics=1`,
             headers: connection.token ? { Authorization: `Bearer ${connection.token}` } : {},
             timeout: 45,
+            metadataDiagnostics: true,
           },
           signal,
         ),
       );
-      if (response.error) throw new Error("MetaTube 来源请求失败，请重试或切换来源。");
+      if (response.error) throw new JsonHttpError(500, "资料服务请求失败。", response.diagnostics);
+      trace.response(
+        response.diagnostics,
+        provider,
+        Date.now() - started,
+        200,
+        Array.isArray(response.data) ? response.data.length : response.data ? 1 : 0,
+      );
       return response.data;
     } catch (error) {
-      if (error instanceof JsonHttpError && error.status === 404)
-        throw new Error("没有找到资料，请检查番号或网络代理。");
+      if (error instanceof JsonHttpError) {
+        trace.response(error.diagnostics, provider, Date.now() - started, error.status);
+        throw trace.error(error.status);
+      }
       throw error;
     }
   }
-  async search(query: string, signal?: AbortSignal) {
+  async search(query: string, signal?: AbortSignal, options?: MetadataQueryOptions) {
     const q = text(query, 200);
     if (!q) throw new Error("请输入番号或片名。");
     signal?.throwIfAborted();
-    return this.query(async (connection, signal) => {
-      recordUsage("search_designation_count");
-      const data: unknown[] = [];
-      let failed = false;
-      // v1.4.0 的 provider 只接受单个名称；按用户配置顺序查询，限制放大请求。
-      const providers = connection.providers.length ? connection.providers : [""];
-      for (const provider of providers) {
-        signal.throwIfAborted();
-        const params = new URLSearchParams({ q, fallback: "true" });
-        if (provider) params.set("provider", provider);
-        try {
-          const result = await this.get(`movies/search?${params}`, connection, signal);
-          if (!Array.isArray(result) || result.length > 500)
-            throw new Error("MetaTube 搜索结果格式无效。");
-          data.push(...result.slice(0, 500 - data.length));
-        } catch (error) {
-          if (error instanceof StopUnconfirmedError) throw error;
-          signal.throwIfAborted();
-          if (providers.length === 1) throw error;
-          failed = true;
-        }
-        if (data.length >= 500) break;
-      }
-      if (!data.length && failed) throw new Error("资料来源没有返回结果，请检查网络代理。");
-      return data.map((item) => {
-        const row = record(item);
-        return {
-          provider: text(row.provider, 100),
-          id: text(row.id, 200),
-          code: text(row.number ?? "", 80),
-          title: text(row.title ?? "", 2048),
-        };
-      });
-    }, signal);
-  }
-  details(candidate: MovieCandidate, signal?: AbortSignal) {
-    return this.query(
-      async (connection, signal) =>
-        movieDetails(
-          await this.get(
-            `movies/${encodeURIComponent(candidate.provider)}/${encodeURIComponent(candidate.id)}`,
-            connection,
-            signal,
-          ),
-        ),
+    return withMetadataTrace(
+      "search",
+      options,
       signal,
+      ({ trace }) =>
+        this.query(async (connection, signal) => {
+          recordUsage("search_designation_count");
+          const data: unknown[] = [];
+          let failure: unknown;
+          // v1.4.0 的 provider 只接受单个名称；按用户配置顺序查询，限制放大请求。
+          const providers = connection.providers.length ? connection.providers : [""];
+          for (const provider of providers) {
+            signal.throwIfAborted();
+            const params = new URLSearchParams({ q, fallback: "true" });
+            if (provider) params.set("provider", provider);
+            try {
+              const result = await this.get(
+                `movies/search?${params}`,
+                connection,
+                signal,
+                trace,
+                provider || "MetaTube",
+              );
+              if (!Array.isArray(result) || result.length > 500)
+                throw new Error("MetaTube 搜索结果格式无效。");
+              data.push(...result.slice(0, 500 - data.length));
+            } catch (error) {
+              if (error instanceof StopUnconfirmedError) throw error;
+              signal.throwIfAborted();
+              if (providers.length === 1) throw error;
+              failure = error;
+            }
+            if (data.length >= 500) break;
+          }
+          if (!data.length && failure)
+            throw trace.error(failure instanceof JsonHttpError ? failure.status : 500);
+          return data.map((item) => {
+            const row = record(item);
+            return {
+              provider: text(row.provider, 100),
+              id: text(row.id, 200),
+              code: text(row.number ?? "", 80),
+              title: text(row.title ?? "", 2048),
+            };
+          });
+        }, signal),
+      { action: "metadata_search", query: q, source: "MetaTube" },
+    );
+  }
+  details(candidate: MovieCandidate, signal?: AbortSignal, options?: MetadataQueryOptions) {
+    return withMetadataTrace(
+      "details",
+      options,
+      signal,
+      ({ trace }) =>
+        this.query(
+          async (connection, signal) =>
+            movieDetails(
+              await this.get(
+                `movies/${encodeURIComponent(candidate.provider)}/${encodeURIComponent(candidate.id)}`,
+                connection,
+                signal,
+                trace,
+                candidate.provider,
+              ),
+            ),
+          signal,
+        ),
+      {
+        action: "metadata_details",
+        code: candidate.code,
+        source: candidate.provider,
+        sourceId: candidate.id,
+      },
     );
   }
   cancel = () => {

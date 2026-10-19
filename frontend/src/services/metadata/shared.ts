@@ -82,12 +82,14 @@ export interface JsonRequest {
   headers?: Record<string, string>;
   body?: unknown;
   timeout?: number;
+  metadataDiagnostics?: boolean;
 }
 export type JsonHttp = (request: JsonRequest, signal: AbortSignal) => Promise<unknown>;
 export class JsonHttpError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    readonly diagnostics?: unknown,
   ) {
     super(message);
     this.name = "JsonHttpError";

@@ -40,6 +40,25 @@ bool regular(int fd) {
 }
 #endif
 }
+const char* storageKind(const fs::path& path) noexcept {
+#ifdef _WIN32
+    try {
+        std::wstring volume(32768, L'\0');
+        if (!GetVolumePathNameW(path.c_str(), volume.data(), static_cast<DWORD>(volume.size()))) return "unknown";
+        switch (GetDriveTypeW(volume.c_str())) {
+        case DRIVE_FIXED: return "fixed";
+        case DRIVE_REMOVABLE: return "removable";
+        case DRIVE_REMOTE: return "remote";
+        case DRIVE_CDROM: return "optical";
+        case DRIVE_RAMDISK: return "ramdisk";
+        default: return "unknown";
+        }
+    } catch (...) { return "unknown"; }
+#else
+    (void)path;
+    return "unknown";
+#endif
+}
 std::string fileIdentity(const fs::path& path) {
 #ifdef _WIN32
     Handle handle(CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,

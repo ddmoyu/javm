@@ -9,6 +9,12 @@ export function reportDownloadFailure(task: DownloadTask, open = false) {
       message: task.error || "下载未能完成，请查看诊断日志。",
       taskId: task.id,
       url: task.url,
+      reproduction: {
+        action: "download",
+        code: task.code,
+        mediaUrl: task.url,
+        filePath: task.output,
+      },
       occurredAt: open ? task.updatedAt : undefined,
       details: {
         phase: task.phase,

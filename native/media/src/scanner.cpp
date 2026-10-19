@@ -1,5 +1,7 @@
 #include "scanner.hpp"
 #include "work_queue.hpp"
+#include "file_platform.hpp"
+#include "../../probe/src/probe.hpp"
 #include <algorithm>
 #include <chrono>
 #include <map>
@@ -16,6 +18,9 @@ constexpr unsigned maxScanConcurrency = 16;
 const unsigned logicalProcessorCount = std::max(1u,std::thread::hardware_concurrency());
 const unsigned automaticScanConcurrency = logicalProcessorCount > 2
     ? std::min(logicalProcessorCount-2,maxScanConcurrency) : 1u;
+int64_t elapsedMs(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-start).count();
+}
 std::string extension(const fs::path& path) {
     auto result = lower(pathText(path.extension()));
     return result.empty() ? result : result.substr(1);
@@ -83,10 +88,20 @@ void LibraryService::refreshDirectories() {
     directories_ = std::move(directories);
     assetRoots_ = std::move(roots);
 }
-void LibraryService::issue(const fs::path& path, const std::string& message) {
+void LibraryService::issue(const fs::path& path, const std::string& message, const char* stage, Json details) {
     std::lock_guard lock(progressMutex_);
     progress_["errors"] = progress_["errors"].get<int>() + 1;
-    if (progress_["issues"].size() < 30) progress_["issues"].push_back({{"path",pathText(path)},{"message",message}});
+    auto& counts = progress_["errorCounts"];
+    counts[stage] = counts.value(stage,0) + 1;
+    if (message == "媒体探测超时") progress_["probeTimeouts"] = progress_["probeTimeouts"].get<int>() + 1;
+    if (progress_["issues"].size() < 30) {
+        details["path"] = pathText(path);
+        details["message"] = message;
+        details["stage"] = stage;
+        if (std::string_view(stage) != "enumerate" && std::string_view(stage) != "finalize" && std::string_view(stage) != "scan")
+            details["extension"] = extension(path);
+        progress_["issues"].push_back(std::move(details));
+    }
 }
 void LibraryService::notice(const fs::path& path, const std::string& message) {
     std::lock_guard lock(progressMutex_);
@@ -104,7 +119,9 @@ Json LibraryService::start(const Json& directory, unsigned concurrency) {
         std::lock_guard lock(progressMutex_);
         progress_ = {{"id",uuid()},{"directoryId",directory["id"]},{"state","scanning"},{"discovered",0},{"processed",0},
             {"imported",0},{"unchanged",0},{"skipped",0},{"errors",0},{"current",""},{"issues",Json::array()},
-            {"concurrency",concurrency},{"activeProbes",0},{"peakProbes",0},{"warnings",0},{"notices",Json::array()}};
+            {"concurrency",concurrency},{"activeProbes",0},{"peakProbes",0},{"warnings",0},{"notices",Json::array()},
+            {"elapsedMs",0},{"probeTimeoutMs",std::chrono::duration_cast<std::chrono::milliseconds>(javm::probe::defaultTimeout).count()},
+            {"probeTimeouts",0},{"storageKind","unknown"},{"errorCounts",Json::object()}};
     }
     busy_ = true;
     try { worker_ = std::thread([this,directory,concurrency] { scan(directory,concurrency); }); }
@@ -370,6 +387,7 @@ Json LibraryService::prepareScrape(const Json& params) {
         {"code",work["code"]},{"title",work["title"]},{"hasArtwork",artwork}};
 }
 void LibraryService::scan(Json directory, unsigned concurrency) {
+    const auto scanStarted = std::chrono::steady_clock::now();
     const auto root = fs::path(pathFromText(directory["path"]));
     auto allowed = builtins;
     if (!directory["formats"].empty()) { allowed.clear(); for (const auto& value: directory["formats"]) allowed.insert(value.get<std::string>()); }
@@ -379,15 +397,17 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
     std::mutex failureMutex;
     auto increment = [&](const char* key) { std::lock_guard lock(progressMutex_); progress_[key] = progress_[key].get<int>() + 1; };
     try {
+        const auto storage = storageKind(root);
+        { std::lock_guard lock(progressMutex_); progress_["storageKind"] = storage; }
         WorkQueue work(concurrency, 64);
         while (!pending.empty() && !cancelled_) {
             const auto [folder,depth] = pending.back(); pending.pop_back();
-            if (depth > 128) { complete = false; issue(folder,"子目录超过 128 层，已跳过"); continue; }
+            if (depth > 128) { complete = false; issue(folder,"子目录超过 128 层，已跳过","enumerate"); continue; }
             std::vector<fs::path> candidates,nfos;
             std::map<std::string,fs::path> siblings;
             std::error_code ec;
             fs::directory_iterator it(folder,ec), end;
-            if (ec) { complete = false; issue(folder,"无法读取目录：" + ec.message()); continue; }
+            if (ec) { complete = false; issue(folder,"无法读取目录：" + ec.message(),"enumerate"); continue; }
             for (; it != end && !cancelled_; it.increment(ec)) {
                 if (ec) break;
                 try {
@@ -401,9 +421,9 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                         if(!name.starts_with('.') && extension(path)=="nfo") nfos.push_back(path);
                         if (!name.starts_with('.') && allowed.contains(extension(path)) && it->file_size() > 0) candidates.push_back(path);
                     }
-                } catch (const std::exception& error) { complete = false; issue(it->path(),error.what()); }
+                } catch (const std::exception& error) { complete = false; issue(it->path(),error.what(),"enumerate"); }
             }
-            if (ec) { complete = false; issue(folder,"目录枚举中断：" + ec.message()); }
+            if (ec) { complete = false; issue(folder,"目录枚举中断：" + ec.message(),"enumerate"); }
             { std::lock_guard lock(progressMutex_); progress_["discovered"] = progress_["discovered"].get<int>() + static_cast<int>(candidates.size()+nfos.size()); }
             const auto folderFiles = std::make_shared<const std::map<std::string,fs::path>>(std::move(siblings));
             std::map<std::string,std::vector<fs::path>> nfoVideos;
@@ -416,6 +436,8 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                 if(cancelled_) break;
                 if(!work.submit([&,path,companions=nfoVideos[lower(pathText(path.filename()))]] {
                     if(cancelled_) return;
+                    auto stageStarted = std::chrono::steady_clock::now();
+                    const char* stage = "nfo";
                     try {
                         const auto signature=stamp(path); std::string original;
                         auto nfo=readNfo(path,&original);
@@ -433,8 +455,9 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                             const auto local=localArtwork(reference.get<std::string>(),path,root);
                             if(!local.empty()) { file[kind]=pathText(local); break; }
                         }
+                        stage = "database"; stageStarted = std::chrono::steady_clock::now();
                         store_.save(file,nfo,&original); increment("imported");
-                    } catch(const std::exception& error) { issue(path,error.what()); }
+                    } catch(const std::exception& error) { issue(path,error.what(),stage,{{"elapsedMs",elapsedMs(stageStarted)}}); }
                     increment("processed");
                 },cancelled_)) break;
             }
@@ -449,6 +472,8 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                 std::string nfoSource;
                 bool nfoRead = false;
                 bool unchanged = false;
+                const char* stage = "file";
+                auto stageStarted = std::chrono::steady_clock::now();
                 try {
                     const auto before = stamp(path);
                     old = store_.find(path);
@@ -465,6 +490,7 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                             progress_["peakProbes"] = std::max(active,progress_["peakProbes"].get<int>());
                         }
                         Json metadata;
+                        stage = "probe"; stageStarted = std::chrono::steady_clock::now();
                         try { metadata = probe(path,cancelled_); }
                         catch (...) { std::lock_guard lock(progressMutex_); progress_["activeProbes"] = progress_["activeProbes"].get<int>() - 1; throw; }
                         { std::lock_guard lock(progressMutex_); progress_["activeProbes"] = progress_["activeProbes"].get<int>() - 1; }
@@ -474,12 +500,14 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                         file["bitrate"] = metadata.value("bitrate",int64_t{0});
                     }
                     fs::path nfoPath;
+                    stage = "fingerprint"; stageStarted = std::chrono::steady_clock::now();
                     file["fast_hash"] = unchanged && old.value("fast_hash",Json()).is_string() && !old["fast_hash"].get<std::string>().empty()
                         ? old["fast_hash"] : Json(fastHash(path));
                     const auto stem = lower(pathText(path.stem()));
                     if (auto found = siblings.find(stem+".nfo"); found != siblings.end()) nfoPath = found->second;
                     else if (singleVideo) if (auto movie = siblings.find("movie.nfo"); movie != siblings.end()) nfoPath = movie->second;
                     if (!nfoPath.empty()) {
+                        stage = "nfo"; stageStarted = std::chrono::steady_clock::now();
                         const auto signature = stamp(nfoPath);
                         file["nfo_path"] = pathText(nfoPath);
                         file["nfo_stamp"] = old.value("nfo_stamp",std::string{});
@@ -511,6 +539,7 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                             } catch (const std::exception&) { /* 图片不可用不影响视频资料导入，源引用保留于快照。 */ }
                         }
                     }
+                    stage = "artwork"; stageStarted = std::chrono::steady_clock::now();
                     if (!file.contains("poster")) for (const auto* suffix: {"-poster.jpg","-poster.jpeg","-poster.png","-poster.webp"}) {
                         if (auto found = siblings.find(stem+suffix); found != siblings.end()) { file["poster"] = pathText(found->second); break; }
                     }
@@ -523,13 +552,19 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                         if (found != siblings.end()) { file[kind] = pathText(found->second); break; }
                     }
                     if(nfoPath.empty()) { const auto code=filenameCode(pathText(path.stem())); if(!code.empty()) nfo["num"]=code; }
+                    stage = "file"; stageStarted = std::chrono::steady_clock::now();
                     if (stamp(path) != before) throw std::runtime_error("视频正在变化，将在下次扫描重试");
                 } catch (const std::exception& error) {
-                    if (!cancelled_) { issue(path,error.what()); increment("processed"); }
+                    if (!cancelled_) {
+                        Json details = {{"elapsedMs",elapsedMs(stageStarted)}};
+                        if (file.is_object() && file.contains("size")) details["sizeBytes"] = file["size"];
+                        issue(path,error.what(),stage,std::move(details)); increment("processed");
+                    }
                     return;
                 }
                 if (cancelled_) return;
                 // 数据库失败会中止任务，不把失败写入伪装成逐文件跳过。
+                stageStarted = std::chrono::steady_clock::now();
                 try {
                     const bool sameSidecar = file.value("nfo_path",std::string{}) == old.value("nfo_path",std::string{}) &&
                         file.value("nfo_stamp",std::string{}) == old.value("nfo_stamp",std::string{});
@@ -539,7 +574,7 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
                 } catch (const std::exception& error) {
                     { std::lock_guard lock(failureMutex); if (failure.empty()) failure = error.what(); }
                     cancelled_ = true;
-                    issue(path,error.what());
+                    issue(path,error.what(),"database",{{"sizeBytes",file["size"]},{"elapsedMs",elapsedMs(stageStarted)}});
                     return;
                 }
                 increment(unchanged ? "unchanged" : "imported"); increment("processed");
@@ -557,11 +592,12 @@ void LibraryService::scan(Json directory, unsigned concurrency) {
         const bool online = fs::is_directory(root,ec) && !ec;
         store_.finish(directory,state,failure.empty() && errors ? std::to_string(errors)+" 项无法读取，已有资料已保留" : failure,complete && !cancelled_ && online,&cancelled_);
         refreshDirectories();
-    } catch (const std::exception& error) { failure = error.what(); issue(root,failure); }
+    } catch (const std::exception& error) { failure = error.what(); issue(root,failure,"finalize"); }
     {
         std::lock_guard lock(progressMutex_);
         progress_["state"] = !failure.empty() ? "failed" : cancelled_ ? "cancelled" : state;
         progress_["current"] = "";
+        progress_["elapsedMs"] = elapsedMs(scanStarted);
         ++revision_;
     }
     busy_ = false;

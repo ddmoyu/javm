@@ -9,6 +9,9 @@ import { mergeScrapeHistory, sameScrapeTarget, scrapeTarget } from "./taskIdenti
 import { StopUnconfirmedError } from "../downloads/ports";
 import type { MetadataPipeline } from "./MetadataPipeline";
 import type { ResolvedMovie } from "../metadata/MovieMetadataResolver";
+import { MetadataQueryError } from "../metadata/diagnostics";
+import type { MetadataDiagnostics, MetadataQueryOptions } from "../metadata/diagnostics";
+import { reportFailure } from "../feedback/events";
 
 export interface ScrapeTarget {
   id: string;
@@ -41,10 +44,18 @@ export interface ScrapeProvider {
   search(
     query: string,
     signal: AbortSignal,
-    options?: { refresh?: boolean },
+    options?: MetadataQueryOptions,
   ): Promise<MovieCandidate[]>;
-  details(candidate: MovieCandidate, signal: AbortSignal): Promise<MovieDetails>;
-  resolve?(candidate: MovieCandidate, signal: AbortSignal): Promise<ResolvedMovie>;
+  details(
+    candidate: MovieCandidate,
+    signal: AbortSignal,
+    options?: MetadataQueryOptions,
+  ): Promise<MovieDetails>;
+  resolve?(
+    candidate: MovieCandidate,
+    signal: AbortSignal,
+    options?: MetadataQueryOptions,
+  ): Promise<ResolvedMovie>;
 }
 class NeedsInput extends Error {}
 const limit = 1000;
@@ -136,7 +147,7 @@ export class ScrapeService extends Observable<{
     if (!task) throw new Error("刮削任务已不存在。");
     return task;
   }
-  private async write(task: ScrapeTask) {
+  private async write(task: ScrapeTask, metadata?: MetadataDiagnostics) {
     const previous = this.snapshot.tasks.find((item) => item.id === task.id);
     const next = { ...task, revision: task.revision + 1, updatedAt: new Date().toISOString() };
     await this.port.save(next, task.revision);
@@ -146,11 +157,38 @@ export class ScrapeService extends Observable<{
         ? this.snapshot.tasks.map((item) => (item.id === task.id ? next : item))
         : [...this.snapshot.tasks, next],
     });
-    if (previous?.status !== task.status && ["failed", "partial"].includes(task.status))
-      logEvent("error", "scraping", task.status, task.error || "刮削未能完整完成", {
-        taskId: task.id,
-        phase: task.phase,
-      });
+    if (previous?.status !== task.status && ["failed", "partial"].includes(task.status)) {
+      const reproduction = {
+        action: "scrape",
+        code: task.candidate?.code,
+        query: task.query,
+        source: task.candidate?.provider,
+        sourceId: task.candidate?.id,
+        filePath: task.path,
+      };
+      logEvent(
+        "error",
+        "scraping",
+        task.status,
+        task.error || "刮削未能完整完成",
+        {
+          taskId: task.id,
+          phase: task.phase,
+          ...(metadata ? { queryId: metadata.queryId, reported: true } : {}),
+        },
+        reproduction,
+      );
+      if (metadata)
+        reportFailure({
+          module: "scraping",
+          title: "刮削失败",
+          message: task.error,
+          taskId: task.id,
+          details: { phase: task.phase, queryId: metadata.queryId },
+          metadata,
+          reproduction,
+        });
+    }
   }
   private async discard(task: ScrapeTask) {
     await this.port.remove(task);
@@ -348,7 +386,7 @@ export class ScrapeService extends Observable<{
         throw new NeedsInput("未能识别唯一番号，请填写番号或手动选择来源结果。");
       let candidate = task.candidate;
       if (!candidate) {
-        const results = await this.provider.search(query!, signal);
+        const results = await this.provider.search(query!, signal, { taskId: id });
         const exact = results.filter((item) => normalizeCode(item.code) === normalizeCode(query!));
         if (!exact.length)
           throw new NeedsInput("没有找到番号一致的资料，请确认番号或在搜索结果中手动选择。");
@@ -363,8 +401,8 @@ export class ScrapeService extends Observable<{
       }
       await this.stage(id, "details", signal, { candidate });
       const resolved = this.provider.resolve
-        ? await this.provider.resolve(candidate, signal)
-        : { candidate, details: await this.provider.details(candidate, signal) };
+        ? await this.provider.resolve(candidate, signal, { taskId: id })
+        : { candidate, details: await this.provider.details(candidate, signal, { taskId: id }) };
       if (normalizeCode(resolved.candidate.code) !== normalizeCode(candidate.code))
         throw new NeedsInput("后备资料番号与候选不一致，请重新确认。");
       const sourceChanged =
@@ -417,7 +455,8 @@ export class ScrapeService extends Observable<{
             ? this.stopping
               ? "interrupted"
               : "cancelled"
-            : error instanceof NeedsInput
+            : error instanceof NeedsInput ||
+                (error instanceof MetadataQueryError && error.noResults)
               ? "needsInput"
               : "failed";
       const message =
@@ -426,7 +465,12 @@ export class ScrapeService extends Observable<{
           : signal.aborted
             ? "刮削已停止，已下载的视频及已保存资料保留。"
             : serviceError(error);
-      await this.exclusive(() => this.write({ ...this.find(id), status, error: message }));
+      await this.exclusive(() =>
+        this.write(
+          { ...this.find(id), status, error: message },
+          error instanceof MetadataQueryError ? error.diagnostics : undefined,
+        ),
+      );
       if (!signal.aborted && status === "needsInput")
         logEvent("warn", "scraping", status, message, { taskId: id });
     } finally {

@@ -102,7 +102,9 @@ describe("MetaTube 基础刮削", () => {
     expect(ids[0]).toBe(ids[1]);
     expect((await finished(service, "completed")).candidate).toEqual(candidate);
     expect(port.commit).toHaveBeenCalledTimes(1);
-    expect(provider.search).toHaveBeenCalledWith("TEST-001", expect.any(AbortSignal));
+    expect(provider.search).toHaveBeenCalledWith("TEST-001", expect.any(AbortSignal), {
+      taskId: ids[0],
+    });
     expect(service.getSnapshot().tasks).toHaveLength(1);
   });
   it("封面失败仍保存资料并允许单独重试", async () => {

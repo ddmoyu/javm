@@ -68,7 +68,7 @@ export function createCatalogHttp(
       );
       signal.throwIfAborted();
       const status = result.status;
-      // 不输出 stderr、网页、URL、Cookie 或代理地址，只记录固定阶段和数字状态。
+      // 保留请求地址用于复现，不复制 stderr、网页正文、Cookie 或代理配置。
       const diagnostic = {
         source: "javbus",
         subject,
@@ -77,7 +77,11 @@ export function createCatalogHttp(
         proxyEnabled: !!proxy,
       };
       if (result.exitCode) {
-        logEvent("warn", "catalog", "http_failed", `${subject}网络请求失败`, diagnostic);
+        logEvent("warn", "catalog", "http_failed", `${subject}网络请求失败`, diagnostic, {
+          source: "javbus",
+          requestUrl: url,
+          pageUrl: result.effectiveUrl,
+        });
         const reason: Record<number, string> = {
           5: "代理地址解析失败",
           6: "来源域名解析失败",
@@ -94,7 +98,11 @@ export function createCatalogHttp(
         );
       }
       if (status !== 200) {
-        logEvent("warn", "catalog", "http_rejected", `${subject}来源未返回正常响应`, diagnostic);
+        logEvent("warn", "catalog", "http_rejected", `${subject}来源未返回正常响应`, diagnostic, {
+          source: "javbus",
+          requestUrl: url,
+          pageUrl: result.effectiveUrl,
+        });
         if (status === 403)
           throw new Error(`${subject}来源拒绝访问（HTTP 403），请检查代理线路或稍后重试。`);
         if (status === 401) throw new Error(`${subject}来源要求登录（HTTP 401），已结束读取。`);

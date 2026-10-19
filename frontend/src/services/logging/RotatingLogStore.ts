@@ -118,11 +118,11 @@ export class RotatingLogStore {
       await this.prune();
       const entries: LogEntry[] = [];
       const seen = new Set<string>();
-      // 最多读取 10 个文件的各 64 KiB 尾部，逐文件让出事件循环。
+      // 最多读取 10 个文件的各 128 KiB 尾部，容纳带完整链接的诊断行。
       for (const file of [...this.files!].reverse()) {
-        const text = await this.port.tail(file.name, 64 * 1024);
+        const text = await this.port.tail(file.name, 128 * 1024);
         for (const line of text.split("\n").reverse()) {
-          if (!line || line.length > 12000) continue;
+          if (!line || line.length > 96000) continue;
           try {
             const entry = JSON.parse(line) as LogEntry;
             const key = `${entry.session}:${entry.sequence}`;

@@ -1,3 +1,6 @@
+import type { MetadataDiagnostics } from "../metadata/diagnostics";
+import type { ReproductionContext } from "../logging/reproduction";
+
 export interface FailureInput {
   module: string;
   title: string;
@@ -6,6 +9,8 @@ export interface FailureInput {
   url?: string;
   details?: Record<string, string | number | boolean>;
   occurredAt?: string;
+  metadata?: MetadataDiagnostics;
+  reproduction?: ReproductionContext;
 }
 
 let sink: ((failure: FailureInput, open?: boolean) => string) | undefined;

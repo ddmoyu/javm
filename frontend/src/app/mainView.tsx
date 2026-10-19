@@ -11,6 +11,8 @@ import { createMetadataServices } from "../platform/neutralino/metadataServices"
 import { createBackgroundSettings } from "../platform/neutralino/backgroundSettings";
 import { createApplicationLogs } from "../platform/neutralino/logging";
 import { observeLogState } from "../services/logging/observe";
+import { observeLibraryScan } from "../services/logging/libraryScan";
+import { playbackReproduction } from "../services/playback/source";
 import { NativeLibraryPort } from "../platform/neutralino/library";
 import { LegacyImportService } from "../services/library/LegacyImportService";
 import { createDiscoveryCatalogService } from "../platform/neutralino/discoveryCatalog";
@@ -88,6 +90,7 @@ export function createMainView(runtime: Runtime) {
   observeLogState("playback", playback, (value) => ({
     state: value.preparing ? "准备播放" : value.opened ? "播放中" : "播放已关闭",
     error: value.error,
+    reproduction: playbackReproduction(value.request),
   }));
   // 首次资料请求启动 MetaTube 前，先等待旧进程回收完成。
   const metadata = createMetadataServices(runtime, network, () => downloads.initialize());
@@ -165,19 +168,11 @@ export function createMainView(runtime: Runtime) {
     }),
   );
   observeLogState("library", library, (value) => ({
-    state: value.scan ? `扫描 ${value.scan.state}` : value.ready ? "媒体库就绪" : "正在读取媒体库",
-    error:
-      value.error ||
-      (value.scan && ["failed", "partial"].includes(value.scan.state)
-        ? value.scan.issues
-            .slice(-3)
-            .map((issue) => issue.message)
-            .join("；") || `扫描结束，${value.scan.errors} 项处理失败。`
-        : ""),
-    context: value.scan
-      ? { taskId: value.scan.id, processed: value.scan.processed, errors: value.scan.errors }
-      : undefined,
+    state: value.ready ? "媒体库就绪" : "正在读取媒体库",
+    error: value.error,
+    context: value.scan ? { taskId: value.scan.id } : undefined,
   }));
+  observeLibraryScan(library);
   observeLogState("network", network, (value) => ({
     state: value.testing ? "代理测试开始" : (value.testResult?.status ?? "网络设置就绪"),
     error: value.error || (value.testResult?.status === "failed" ? value.testResult.message : ""),
@@ -239,22 +234,6 @@ export function createMainView(runtime: Runtime) {
   }));
   observeLogState("resolution", resolution, (value) => ({
     state: value.cleanupPending ? "资源解析等待清理" : "资源解析就绪",
-    error: value.tasks
-      .filter(
-        (task) =>
-          task.state === "failed" &&
-          task.error &&
-          ![
-            "not_found",
-            "invalid_input",
-            "interaction_required",
-            "session_required",
-            "cancelled",
-          ].includes(task.error.code),
-      )
-      .slice(-3)
-      .map((task) => task.error!.message)
-      .join("；"),
   }));
   if (resourceSearch.magnets)
     observeLogState("magnets", resourceSearch.magnets, (value) => ({

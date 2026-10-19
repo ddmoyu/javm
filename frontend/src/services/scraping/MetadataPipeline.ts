@@ -7,6 +7,8 @@ import { StopUnconfirmedError } from "../downloads/ports";
 import type { EditableMetadata } from "../../contracts/metadata";
 import type { ResolvedMovie } from "../metadata/MovieMetadataResolver";
 import { requireMovieDetails } from "../metadata/movieSearch";
+import { MetadataQueryError, withMetadataTrace } from "../metadata/diagnostics";
+import type { MetadataQueryOptions } from "../metadata/diagnostics";
 
 export interface MetadataPipelineSettings {
   fusion: boolean;
@@ -55,10 +57,12 @@ export async function retryMetadata<T>(
       signal.throwIfAborted();
       if (
         attempt >= count ||
-        (error instanceof JsonHttpError &&
-          error.status !== 408 &&
-          error.status !== 429 &&
-          error.status < 500) ||
+        (error instanceof MetadataQueryError
+          ? !error.retryable
+          : error instanceof JsonHttpError &&
+            error.status !== 408 &&
+            error.status !== 429 &&
+            error.status < 500) ||
         error instanceof SyntaxError
       )
         throw error;
@@ -121,29 +125,44 @@ export class MetadataPipeline implements ScrapeProvider {
     this.settings = new Settings(store, defaultPipeline, validatePipeline, available);
     void this.settings.initialize();
   }
-  async search(query: string, signal: AbortSignal, options?: { refresh?: boolean }) {
+  async search(query: string, signal: AbortSignal, options?: MetadataQueryOptions) {
     const settings = await this.settings.require(),
       active = AbortSignal.any([signal, AbortSignal.timeout(90000)]);
-    return (
-      await retryMetadata(
-        () => this.metatube.search(query, active, options),
-        settings.retries,
-        active,
-      )
-    ).slice(0, 500);
+    return withMetadataTrace("search", options, active, async (traced) =>
+      (
+        await retryMetadata(
+          () => this.metatube.search(query, active, traced),
+          settings.retries,
+          active,
+        )
+      ).slice(0, 500),
+    );
   }
-  async details(candidate: MovieCandidate, signal: AbortSignal) {
-    return (await this.resolve(candidate, signal)).details;
+  async details(candidate: MovieCandidate, signal: AbortSignal, options?: MetadataQueryOptions) {
+    return (await this.resolve(candidate, signal, options)).details;
   }
-  async resolve(candidate: MovieCandidate, signal: AbortSignal): Promise<ResolvedMovie> {
+  async resolve(
+    candidate: MovieCandidate,
+    signal: AbortSignal,
+    options?: MetadataQueryOptions,
+  ): Promise<ResolvedMovie> {
+    return withMetadataTrace("details", options, signal, (traced) =>
+      this.resolveTraced(candidate, signal, traced),
+    );
+  }
+  private async resolveTraced(
+    candidate: MovieCandidate,
+    signal: AbortSignal,
+    options: MetadataQueryOptions,
+  ): Promise<ResolvedMovie> {
     const settings = await this.settings.require(),
       active = AbortSignal.any([signal, AbortSignal.timeout(120000)]);
     const load = async (item: MovieCandidate) => {
       const resolved = await retryMetadata(
         async () =>
           this.metatube.resolve
-            ? this.metatube.resolve(item, active)
-            : { candidate: item, details: await this.metatube.details(item, active) },
+            ? this.metatube.resolve(item, active, options)
+            : { candidate: item, details: await this.metatube.details(item, active, options) },
         settings.retries,
         active,
       );
@@ -165,7 +184,7 @@ export class MetadataPipeline implements ScrapeProvider {
     if (!settings.fusion) return primary;
     let candidates: MovieCandidate[];
     try {
-      candidates = await this.search(candidate.code, active, { refresh: true });
+      candidates = await this.search(candidate.code, active, { ...options, refresh: true });
     } catch (e) {
       if (e instanceof StopUnconfirmedError) throw e;
       active.throwIfAborted();

@@ -5,6 +5,7 @@ import type { ScrapeProvider } from "../scraping/ScrapeService";
 import { normalizeCode as identityCode } from "../scraping/identity";
 import { normalizeCode } from "../streamResolution/sources";
 import { StopUnconfirmedError } from "../downloads/ports";
+import type { MetadataQueryOptions } from "./diagnostics";
 
 export interface MovieCatalogLookup {
   available: boolean;
@@ -39,7 +40,7 @@ export class MovieMetadataResolver implements ScrapeProvider {
     this.cache.remember(details);
     return { candidate, details };
   }
-  async search(query: string, signal: AbortSignal, options?: { refresh?: boolean }) {
+  async search(query: string, signal: AbortSignal, options?: MetadataQueryOptions) {
     signal.throwIfAborted();
     const code = exactCode(query);
     const cached = code && !options?.refresh ? this.cache.code(code) : undefined;
@@ -47,7 +48,7 @@ export class MovieMetadataResolver implements ScrapeProvider {
     let results: MovieCandidate[] = [];
     let failure: unknown;
     try {
-      results = (await this.primary.search(query, signal)).filter(
+      results = (await this.primary.search(query, signal, options)).filter(
         (item) => item.provider.trim() && item.id.trim(),
       );
       signal.throwIfAborted();
@@ -66,20 +67,24 @@ export class MovieMetadataResolver implements ScrapeProvider {
     if (failure) throw failure;
     return results;
   }
-  async details(candidate: MovieCandidate, signal: AbortSignal) {
+  async details(candidate: MovieCandidate, signal: AbortSignal, options?: MetadataQueryOptions) {
     signal.throwIfAborted();
     const cached = this.cache.candidate(candidate);
     if (cached) return cached;
     const details =
       isCatalogCandidate(candidate) && this.catalog?.available
         ? await this.catalog.read(candidate.code, signal)
-        : await this.primary.details(candidate, signal);
+        : await this.primary.details(candidate, signal, options);
     signal.throwIfAborted();
     requireMovieDetails(details, candidate);
     this.cache.remember(details);
     return details;
   }
-  async resolve(candidate: MovieCandidate, signal: AbortSignal): Promise<ResolvedMovie> {
+  async resolve(
+    candidate: MovieCandidate,
+    signal: AbortSignal,
+    options?: MetadataQueryOptions,
+  ): Promise<ResolvedMovie> {
     signal.throwIfAborted();
     // 目录番号大小写等表示差异由真实返回身份统一，不能伪装成旧候选 ID。
     if (isCatalogCandidate(candidate) && this.catalog?.available) {
@@ -89,7 +94,7 @@ export class MovieMetadataResolver implements ScrapeProvider {
       return this.resolved(details, candidate.code);
     }
     try {
-      const details = await this.details(candidate, signal);
+      const details = await this.details(candidate, signal, options);
       signal.throwIfAborted();
       return this.resolved(details, candidate.code);
     } catch (error) {

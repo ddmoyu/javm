@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { metatubeRecipeHash, sha256, verifyMetatubeLite } from "./metatube-lite-profile.mjs";
+import { applyMovieDiagnostics } from "./metatube-lite/diagnostics.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const options = new Set(process.argv.slice(2));
@@ -106,6 +107,8 @@ await writeFile(
   "// JAVM 修改：移除未使用的图片加工、翻译和评论接口。\n" +
     route.replace(reviews, "").replace('\t"time"\n', ""),
 );
+
+await applyMovieDiagnostics(source);
 
 let database = await readFile(path.join(source, "database/database.go"), "utf8");
 const dbStart = database.indexOf("\tvar dialector gorm.Dialector");
@@ -212,8 +215,29 @@ async function run(command, args, extraEnv = {}) {
 }
 const goVersion = await run("go", ["version"]);
 if (!goVersion.includes(` ${lock.toolchain} `)) throw new Error(`Go 工具链不匹配：${goVersion}`);
-await run("go", ["fmt", "./route", "./database", "./common/random"]);
+await run("go", ["fmt", "./route", "./engine", "./database", "./common/random"]);
 await run("go", ["mod", "tidy"]);
+// 只运行自有安全夹具，不运行上游联网测试；各平台构建均验证诊断分类和请求隔离。
+for (const target of ["engine", "route"])
+  await copyFile(
+    path.join(root, "tests/fixtures/metatube-diagnostics", `${target}_test.go`),
+    path.join(source, target, "javm_diagnostics_test.go"),
+  );
+console.log(
+  await run(
+    "go",
+    [
+      "test",
+      "-mod=readonly",
+      "-tags=nomsgpack",
+      "-count=1",
+      "-run=^TestJAVMDiagnostics",
+      "./engine",
+      "./route",
+    ],
+    { GOPROXY: "off" },
+  ),
+);
 const binary = path.join(output, binaryName);
 const moduleName = "github.com/metatube-community/metatube-sdk-go";
 await run("go", [
@@ -343,6 +367,7 @@ await writeFile(
     "Modified route registration and database driver selection; omitted image/translation/review routes and face detection.\n" +
     "Narrowed GORM datatypes to upstream Date and JSON types with SQLite behavior; removed MySQL-specific branches.\n" +
     "Generated the unchanged upstream desktop User-Agent pool; built Gin without MessagePack.\n" +
+    "Added opt-in request-local movie diagnostics with error categories, result counts and missing field names; omitted raw search summaries.\n" +
     "All provider implementations, SQLite cache schema, image comparison/decoding and JavaScript parsing are preserved.\n",
 );
 await verifyMetatubeLite(output, dependency);

@@ -57,7 +57,7 @@ it("JavBus 搜索、实体和详情走常驻 HTTP，传入代理和导航请求�
   }
   expect(mock.remove).toHaveBeenCalledTimes(5);
 });
-it("JavBus 403 自动结束，不启动隐藏读取器；日志不带来源 URL", async () => {
+it("JavBus 403 自动结束，不启动隐藏读取器；日志保留来源 URL", async () => {
   mock.request.mockResolvedValue({
     exitCode: 0,
     status: 403,
@@ -73,7 +73,7 @@ it("JavBus 403 自动结束，不启动隐藏读取器；日志不带来源 URL"
   ).rejects.toThrow("作品来源拒绝访问（HTTP 403）");
   expect(mock.read).not.toHaveBeenCalled();
   expect(mock.remove).toHaveBeenCalledOnce();
-  expect(JSON.stringify(mock.log.mock.calls)).not.toContain("TEST-001");
+  expect(JSON.stringify(mock.log.mock.calls)).toContain("https://www.javbus.com/TEST-001");
 });
 it("拒绝跨站、超范围分页和磁力接口，不启动 HTTP", async () => {
   const fetch = createCatalogHttp(network, async () => {});

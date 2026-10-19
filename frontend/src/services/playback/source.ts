@@ -1,4 +1,5 @@
 import { windowsPath } from "../paths";
+import type { ReproductionContext } from "../logging/reproduction";
 export type PlaybackFormat = "video" | "hls";
 export interface PlaybackOptions {
   title?: string;
@@ -11,6 +12,15 @@ export interface PlaybackRequest extends PlaybackOptions {
   kind: "local" | "network";
   title: string;
   format?: PlaybackFormat;
+}
+
+export function playbackReproduction(request?: PlaybackRequest): ReproductionContext | undefined {
+  if (!request) return;
+  return {
+    action: "playback",
+    pageUrl: request.referer,
+    ...(request.kind === "network" ? { mediaUrl: request.source } : { filePath: request.source }),
+  };
 }
 
 const mediaExtension = /\.(mp4|m4v|webm|mov|mkv|avi|wmv|mpg|mpeg|ts|m2ts|mts|m3u8|ogv|3gp|flv)$/i;

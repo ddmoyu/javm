@@ -131,7 +131,8 @@ describe("download input and process boundary", () => {
       createDownloadTasks({ ...input(), headers: { Cookie: "a\nRange: bytes=1-" } }, []),
     ).toThrow();
     const task = { url: "https://example.com/v?secret=x", headers: { Cookie: "session=abc" } };
-    expect(redactLog(`failed ${task.url} session=abc`, task)).not.toMatch(/secret|session=abc/);
+    expect(redactLog(`failed ${task.url} session=abc`, task)).not.toContain("session=abc");
+    expect(redactLog(`failed ${task.url} session=abc`, task)).toContain(task.url);
   });
   it("keeps shell metacharacters in literal process arguments", () => {
     const payload = "https://example.com/a?x=%PATH%&y=$(whoami);'中文";

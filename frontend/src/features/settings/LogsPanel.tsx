@@ -115,7 +115,7 @@ export function LogsPanel() {
               {visible
                 .map(
                   (entry) =>
-                    `${new Date(entry.time).toLocaleString(getLocale(), { hour12: false })} [${levels[entry.level]}] [${entry.module}] ${entry.message}${entry.context ? " " + JSON.stringify(entry.context) : ""}`,
+                    `${new Date(entry.time).toLocaleString(getLocale(), { hour12: false })} [${levels[entry.level]}] [${entry.module}] ${entry.message}${entry.context ? " " + JSON.stringify(entry.context) : ""}${entry.reproduction ? " " + JSON.stringify(entry.reproduction) : ""}`,
                 )
                 .join("\n") || (loading ? "正在读取日志…" : "暂无符合条件的日志")}
             </Code>

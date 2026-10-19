@@ -117,6 +117,17 @@ export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
         signal,
       );
       signal.throwIfAborted();
+      if (result.exitCode !== 0 && request.metadataDiagnostics && local)
+        throw new JsonHttpError(0, "内置资料服务请求失败。", {
+          schema: 1,
+          sources: [
+            {
+              provider: "MetaTube",
+              category: result.exitCode === 28 ? "timeout" : "service",
+              elapsedMs: Math.round(result.elapsedMs),
+            },
+          ],
+        });
       if (result.exitCode !== 0)
         throw new Error(
           result.exitCode === 28
@@ -126,6 +137,22 @@ export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
               : "无法连接资料服务，请检查地址、网络与代理。",
         );
       const status = result.status;
+      if (request.metadataDiagnostics && local && (status < 200 || status >= 300)) {
+        let diagnostics: unknown;
+        try {
+          const stat = await filesystem.getStats(`${directory}/response`);
+          if (stat.isFile && stat.size <= 1048576) {
+            const body = JSON.parse(await filesystem.readFile(`${directory}/response`)) as {
+              diagnostics?: unknown;
+            };
+            diagnostics = body?.diagnostics;
+          }
+        } catch {
+          /* 诊断体缺失或损坏不覆盖原始 HTTP 状态。 */
+        }
+        signal.throwIfAborted();
+        throw new JsonHttpError(status, `资料服务返回 HTTP ${status || "未知"}。`, diagnostics);
+      }
       if (status === 401 || status === 403)
         throw new Error(
           request.headers?.Authorization
@@ -145,6 +172,17 @@ export function createMetadataHttp(network: NetworkSettingsService): JsonHttp {
       try {
         return JSON.parse(body) as unknown;
       } catch {
+        if (request.metadataDiagnostics && local)
+          throw new JsonHttpError(502, "资料服务返回的响应格式无效。", {
+            schema: 1,
+            sources: [
+              {
+                provider: "MetaTube",
+                category: "parse",
+                elapsedMs: Math.round(result.elapsedMs),
+              },
+            ],
+          });
         throw new Error("服务未返回有效 JSON。");
       }
     } catch (error) {

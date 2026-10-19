@@ -1,3 +1,8 @@
+import { redactText } from "./sanitize";
+import { cleanReproduction } from "./reproduction";
+import type { ReproductionContext } from "./reproduction";
+export { redactText } from "./sanitize";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 export interface LogInput {
   level: LogLevel;
@@ -5,6 +10,7 @@ export interface LogInput {
   event: string;
   message: string;
   context?: Record<string, string | number | boolean>;
+  reproduction?: ReproductionContext;
 }
 export interface LogEntry extends LogInput {
   time: string;
@@ -12,27 +18,6 @@ export interface LogEntry extends LogInput {
   sequence: number;
 }
 
-// 不接收请求体、设置对象或进程参数。文本仍统一脱敏，以覆盖异常中的地址和凭据。
-export function redactText(value: string, limit = 2000) {
-  const cleaned = value
-    .slice(0, 16000)
-    // oxlint-disable-next-line no-control-regex -- 删除工具输出中的 ANSI 控制序列。
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/(?:https?|socks5h?):\/\/[^\s<>"']+/gi, "[地址已隐藏]")
-    .replace(/\b(?:Bearer|Basic)\s+[^\s,"'}]+/gi, "[凭据已隐藏]")
-    .replace(
-      /((?:authorization|proxy-authorization|cookie|set-cookie)["']?\s*[:=]\s*)[^\r\n]+/gi,
-      "$1[已隐藏]",
-    )
-    .replace(
-      /((?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|password|passwd|secret)["']?\s*[:=]\s*)["']?[^\s,"';}]+["']?/gi,
-      "$1[已隐藏]",
-    )
-    // oxlint-disable-next-line no-control-regex -- 保留换行和制表符，清理其他控制字符。
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "");
-  const end = /[\ud800-\udbff]/.test(cleaned[limit - 1] ?? "") ? limit - 1 : limit;
-  return cleaned.length > end ? `${cleaned.slice(0, end)}…` : cleaned;
-}
 export function cleanLog(input: LogInput): LogInput {
   const context: NonNullable<LogInput["context"]> = {};
   for (const [key, value] of Object.entries(input.context ?? {}).slice(0, 8)) {
@@ -47,6 +32,7 @@ export function cleanLog(input: LogInput): LogInput {
     event: redactText(String(input.event), 60),
     message: redactText(String(input.message)),
     ...(Object.keys(context).length ? { context } : {}),
+    ...(input.reproduction ? { reproduction: cleanReproduction(input.reproduction) } : {}),
   };
 }
 
@@ -68,9 +54,10 @@ export function logEvent(
   event: string,
   message: string,
   context?: LogInput["context"],
+  reproduction?: ReproductionContext,
 ) {
   try {
-    sink?.(cleanLog({ level, module, event, message, context }));
+    sink?.(cleanLog({ level, module, event, message, context, reproduction }));
   } catch {
     /* 诊断不能中断业务。 */
   }

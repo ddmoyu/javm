@@ -134,7 +134,9 @@ describe("多 AI 供应商（安全 mock）", () => {
     try {
       await scraping.enqueue({ workId: "work", name: "虚构纪录片" });
       await vi.waitFor(() => expect(scraping.getSnapshot().tasks[0]?.status).toBe("needsInput"));
-      expect(search).toHaveBeenCalledWith("SAFE-001", expect.any(AbortSignal));
+      expect(search).toHaveBeenCalledWith("SAFE-001", expect.any(AbortSignal), {
+        taskId: scraping.getSnapshot().tasks[0]!.id,
+      });
       expect(port.commit).not.toHaveBeenCalled();
       expect(scraping.getSnapshot().tasks[0]?.query).toBe("SAFE-001");
     } finally {

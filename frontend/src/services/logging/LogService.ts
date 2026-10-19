@@ -109,8 +109,20 @@ export class LogService {
           try {
             await this.store!.append(batch);
           } catch (error) {
-            this.dropped += Math.max(0, batch.length + this.pending.length - 500);
-            this.pending = [...batch, ...this.pending].slice(0, 500);
+            this.pending = [...batch, ...this.pending];
+            let excess = Math.max(0, this.pending.length - 500);
+            this.dropped += excess;
+            // 写入期间队列可能已满；重试也优先保留错误，并维持剩余记录的顺序。
+            for (const level of ["debug", "info", "warn", "error"] as const) {
+              if (!excess) break;
+              this.pending = this.pending.filter((entry) => {
+                if (excess && entry.level === level) {
+                  excess--;
+                  return false;
+                }
+                return true;
+              });
+            }
             throw error;
           }
         }

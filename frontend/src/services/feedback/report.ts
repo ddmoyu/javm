@@ -1,6 +1,9 @@
 import { cleanLog, redactText } from "../logging/events";
 import type { LogEntry } from "../logging/events";
 import type { FailureInput } from "./events";
+import { cleanMetadataDiagnostics } from "../metadata/diagnostics";
+import { diagnosticUrl } from "../logging/sanitize";
+import { reproductionText } from "../logging/reproduction";
 
 export const feedbackPolicy = { reports: 8, days: 7, before: 14000, after: 4000, followMs: 3000 };
 export const issuesUrl = "https://github.com/ddmoyu/javm/issues/new";
@@ -17,39 +20,42 @@ export interface FailureReport extends FailureInput {
 }
 
 export function diagnosticText(value: string, limit = 4000) {
-  return redactText(value, limit)
-    .replace(/\b[A-Z]:[\\/]+Users[\\/]+[^\\/\r\n"'<>]+/gi, "C:/Users/[用户]")
-    .replace(/\/(?:home|Users)\/[^/\r\n"'<>]+/g, "/home/[用户]");
+  return redactText(value, limit);
 }
 
-// 用户明确要求报告保留完整下载链接；链接只放在独立字段，不进入普通日志。
-export function feedbackUrl(value: string) {
-  if (value.length > 8192) return "[链接超过 8192 字符，未包含]";
-  try {
-    const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol)
-      ? value.replace(/[\r\n\t]/g, "")
-      : "[不支持的链接类型]";
-  } catch {
-    return "[链接无效]";
-  }
-}
+export const feedbackUrl = diagnosticUrl;
 
 export function logLine(entry: LogEntry) {
   const clean = cleanLog(entry);
   return diagnosticText(
-    `${entry.time} ${clean.level.toUpperCase()} ${clean.module}/${clean.event} ${clean.message}${clean.context ? ` ${JSON.stringify(clean.context)}` : ""}`,
-    1800,
+    `${entry.time} ${clean.level.toUpperCase()} ${clean.module}/${clean.event} ${clean.message}${clean.context ? ` ${JSON.stringify(clean.context)}` : ""}${clean.reproduction ? ` ${JSON.stringify(clean.reproduction)}` : ""}`,
+    10000,
   );
 }
-export function relatedLog(entry: LogEntry, taskId?: string) {
-  return !taskId || !entry.context?.taskId || entry.context.taskId === taskId;
+export function relatedLog(entry: LogEntry, taskId?: string, queryId?: string) {
+  if (taskId && entry.context?.taskId && entry.context.taskId !== taskId) return false;
+  if (taskId && entry.context?.queryId && !entry.context.taskId) return false;
+  if (queryId && entry.context?.queryId && entry.context.queryId !== queryId) return false;
+  // 旧组件 stdout 和没有关联 ID 的 HTTP 摘录不能归因给本次查询。
+  if (
+    (taskId || queryId) &&
+    !entry.context?.queryId &&
+    ((entry.module === "metatube" && ["engine", "legacy_engine"].includes(entry.event)) ||
+      (entry.module === "network" && entry.context?.purpose === "metadata"))
+  )
+    return false;
+  return true;
 }
-export function logExcerpt(entries: LogEntry[], taskId?: string, limit = feedbackPolicy.before) {
+export function logExcerpt(
+  entries: LogEntry[],
+  taskId?: string,
+  limit = feedbackPolicy.before,
+  queryId?: string,
+) {
   const lines: string[] = [];
   let length = 0;
   for (const entry of entries.slice().reverse()) {
-    if (!relatedLog(entry, taskId)) continue;
+    if (!relatedLog(entry, taskId, queryId)) continue;
     const line = logLine(entry);
     if (length + line.length + 1 > limit) break;
     lines.push(line);
@@ -81,6 +87,7 @@ const titles: Record<string, string> = {
 };
 export function failureFromLog(entry: LogEntry): FailureInput | undefined {
   if (entry.module === "feedback" || entry.module === "logging") return;
+  if (entry.module === "scraping" && entry.context?.reported === true) return;
   // 工具的一次错误仍可能被重试修复；只在下载任务最终失败时由服务显式报告。
   if (
     entry.module === "downloads" &&
@@ -88,19 +95,54 @@ export function failureFromLog(entry: LogEntry): FailureInput | undefined {
   )
     return;
   const terminalWarning =
+    (entry.module === "library" && entry.event === "scan_partial") ||
     (entry.module === "scraping" && ["failed", "partial"].includes(entry.event)) ||
     (entry.module === "settings" && entry.event === "ui_preferences_failed");
   if (entry.level !== "error" && !terminalWarning) return;
   return {
     module: entry.module,
-    title: titles[entry.module] ?? "操作失败",
+    title:
+      entry.module === "library" && entry.event === "scan_partial"
+        ? "扫描部分完成"
+        : (titles[entry.module] ?? "操作失败"),
     message: entry.message,
     taskId: typeof entry.context?.taskId === "string" ? entry.context.taskId : undefined,
     details: entry.context,
+    reproduction: entry.reproduction,
   };
 }
 
 const block = (text: string) => `\`\`\`text\n${text.replaceAll("```", "ˋˋˋ")}\n\`\`\``;
+function metadataBlock(report: FailureReport) {
+  const diagnostic = cleanMetadataDiagnostics(report.metadata);
+  if (!diagnostic) return [];
+  const counts: Record<string, number> = {};
+  for (const item of diagnostic.sources)
+    counts[item.category] = (counts[item.category] ?? 0) + item.count;
+  return [
+    "",
+    "## 资料查询诊断",
+    block(
+      [
+        `查询 ID: ${diagnostic.queryId}`,
+        `阶段: ${diagnostic.operation}`,
+        `MetaTube: ${diagnostic.version}`,
+        `最后请求配置: ${diagnostic.network}；本次使用过: ${diagnostic.networks.join(", ") || "unknown"}（direct=应用直连；proxy/协议=应用代理；unknown=未取得）`,
+        `请求次数: ${diagnostic.attempts}；总耗时: ${diagnostic.elapsedMs} ms`,
+        `诊断完整性: ${diagnostic.detailed ? "组件提供了来源诊断" : "部分请求未提供来源诊断，不能据此断定无收录或代理未开启"}`,
+        `来源统计（含重试）: ${JSON.stringify(counts)}`,
+        ...(diagnostic.omitted ? [`超出限制或无效的来源记录: ${diagnostic.omitted}`] : []),
+        "来源明细（相同结果合并，耗时累计，结果数为最后一次；skipped 为不支持编号格式）:",
+        ...diagnostic.sources
+          .filter((item) => item.category !== "skipped")
+          .map(
+            (item) =>
+              `${item.provider}: ${item.category}；次数=${item.count}；耗时=${item.elapsedMs} ms；结果=${item.results ?? "未知"}${item.missingFields?.length ? `；缺少字段=${item.missingFields.join(",")}` : ""}`,
+          ),
+      ].join("\n"),
+    ),
+  ];
+}
 export function formatReport(report: FailureReport) {
   const context = Object.entries(report.details ?? {})
     .map(([key, value]) => `${key}: ${value}`)
@@ -113,6 +155,10 @@ export function formatReport(report: FailureReport) {
     block(
       `类型: ${report.title}\n时间: ${report.time}\n模块: ${report.module}\n报告 ID: ${report.id}\n会话 ID: ${report.session}\n重复次数: ${report.count}${report.taskId ? `\n任务 ID: ${report.taskId}` : ""}\n\n${report.message}${context ? `\n\n${context}` : ""}`,
     ),
+    ...(report.reproduction
+      ? ["", "## 复现信息", block(reproductionText(report.reproduction))]
+      : []),
+    ...metadataBlock(report),
     ...(report.url ? ["", "## 下载链接（完整地址）", block(report.url)] : []),
     "",
     "## 系统信息",
@@ -130,6 +176,6 @@ export function formatReport(report: FailureReport) {
       report.after || (report.complete ? "没有后续日志；进程退出时无法补采" : "尚在收集收尾日志"),
     ),
     "",
-    "日志已隐藏常见凭据与本机用户名；下载链接按用户选择保留完整地址。",
+    "番号、查询内容、文件名和业务链接保留；常见凭据与本机用户名已隐藏。链接保留查询参数及可能存在的临时签名，提交前请检查预览。",
   ].join("\n");
 }

@@ -6,6 +6,8 @@
 namespace media {
 // 这些操作只在原生后台线程调用；错误保留给任务的恢复流程处理。
 std::string fileIdentity(const fs::path& path);
+// 仅用于扫描诊断；无法判断时返回 unknown，不推断 SSD/HDD 或设备型号。
+const char* storageKind(const fs::path& path) noexcept;
 void createExclusiveFile(const fs::path& path, std::string_view content = {});
 void syncFile(const fs::path& path);
 void moveFile(const fs::path& from, const fs::path& to, bool replace = false);

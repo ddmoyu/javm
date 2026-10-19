@@ -140,10 +140,17 @@ export class OnlineActorSearchService extends Observable<
             this.publish({ loading: false });
             const errors = Object.values(this.snapshot.errors);
             if (errors.length)
-              logEvent("error", "catalog", "actor_search_failed", errors.join("；"), {
-                action: "actor_search",
-                page,
-              });
+              logEvent(
+                "error",
+                "catalog",
+                "actor_search_failed",
+                errors.join("；"),
+                {
+                  action: "actor_search",
+                  page,
+                },
+                { action: "actor_search", query, page, source: "javbus" },
+              );
           }
           this.active = undefined;
           this.abort = undefined;

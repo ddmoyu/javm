@@ -208,10 +208,17 @@ export class DownloadService {
     const failed = task.status === "failed" && previous?.status !== "failed";
     if (failed) {
       // 下载失败已发生，不能让随后数据库写入失败吞掉原始原因、链接与日志。
-      logEvent("error", "downloads", "state_changed", redactLog(task.error, task), {
-        taskId: task.id,
-        phase: task.phase,
-      });
+      logEvent(
+        "error",
+        "downloads",
+        "state_changed",
+        redactLog(task.error, task),
+        {
+          taskId: task.id,
+          phase: task.phase,
+        },
+        { action: "download", code: task.code, mediaUrl: task.url, filePath: task.output },
+      );
       reportDownloadFailure(saved);
     }
     try {

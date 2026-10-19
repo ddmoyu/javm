@@ -28,7 +28,7 @@ class LibraryService {
     uint64_t revision_ = 0;
     void scan(Json directory, unsigned concurrency);
     void refreshDirectories();
-    void issue(const fs::path& path, const std::string& message);
+    void issue(const fs::path& path, const std::string& message, const char* stage = "scan", Json details = Json::object());
     void notice(const fs::path& path, const std::string& message);
     Json start(const Json& directory, unsigned concurrency);
 public:

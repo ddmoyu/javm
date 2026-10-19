@@ -9,6 +9,7 @@ import { StopUnconfirmedError } from "../downloads/ports";
 import { ResolutionHttpSession } from "./http";
 import { resolveHttp } from "./resolve";
 import { bounds, check, failure, normalizeRequest, ResolutionError } from "./shared";
+import { logEvent } from "../logging/events";
 
 interface Job {
   request: ResolutionRequest;
@@ -260,6 +261,24 @@ export class ResolutionService {
         ? "cancelled"
         : "failed";
     job.task.error = outcome.ok ? undefined : outcome;
+    if (
+      !outcome.ok &&
+      ![
+        "not_found",
+        "invalid_input",
+        "interaction_required",
+        "session_required",
+        "cancelled",
+      ].includes(outcome.code)
+    )
+      logEvent(
+        "error",
+        "resolution",
+        "failed",
+        outcome.message,
+        { taskId: job.task.id, errorCode: outcome.code, requests: job.task.requests },
+        { action: "resolve_stream", source: job.request.provider, pageUrl: job.request.url },
+      );
     this.history = [...this.history.slice(-49), { ...job.task }];
     job.settle(outcome);
     this.publish(true);

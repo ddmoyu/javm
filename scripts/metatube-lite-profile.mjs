@@ -7,7 +7,15 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 export async function metatubeRecipeHash() {
   const hash = createHash("sha256");
-  for (const name of ["build-metatube-lite.mjs", "metatube-lite/source-lock.json"]) {
+  for (const name of [
+    "build-metatube-lite.mjs",
+    "metatube-lite/source-lock.json",
+    "metatube-lite/diagnostics.mjs",
+    "metatube-lite/diagnostics/engine.go",
+    "metatube-lite/diagnostics/route.go",
+    "../tests/fixtures/metatube-diagnostics/engine_test.go",
+    "../tests/fixtures/metatube-diagnostics/route_test.go",
+  ]) {
     hash.update(name).update("\0");
     hash.update(
       (await readFile(path.join(root, "scripts", name), "utf8")).replaceAll("\r\n", "\n"),

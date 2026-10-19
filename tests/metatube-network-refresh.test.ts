@@ -122,7 +122,7 @@ describe("MetaTube 代理刷新与查询错误", () => {
   });
 
   it.each(["search", "details"] as const)(
-    "%s 的 404 提示来源和网络问题，保留服务供重试",
+    "%s 的旧组件 404 说明详细原因未知，保留服务供重试",
     async (operation) => {
       const { service, stops } = fixture(async (request, signal) => {
         if (request.url.includes("movies/"))
@@ -139,7 +139,7 @@ describe("MetaTube 代理刷新与查询错误", () => {
                 code: "TEST-001",
                 title: "合成影片",
               });
-        await expect(pending).rejects.toThrow("没有找到资料，请检查番号或网络代理。");
+        await expect(pending).rejects.toThrow("当前组件未提供详细原因");
         expect(service.getSnapshot()).toMatchObject({ status: "ready", querying: false });
         expect(service.getSnapshot().error).not.toContain("基础地址");
         expect(stops[0]).not.toHaveBeenCalled();
@@ -149,14 +149,17 @@ describe("MetaTube 代理刷新与查询错误", () => {
     },
   );
 
-  it("其他 HTTP 错误保留原有含义", async () => {
+  it("其他 HTTP 错误保留状态并提供分类提示", async () => {
     const error = new JsonHttpError(500, "服务返回 HTTP 500。");
     const { service } = fixture(async (request, signal) => {
       if (request.url.includes("movies/")) throw error;
       return health(request, signal);
     });
     try {
-      await expect(service.search("TEST-001")).rejects.toBe(error);
+      await expect(service.search("TEST-001")).rejects.toMatchObject({
+        status: 500,
+        message: "资料服务暂时异常，请稍后重试。",
+      });
     } finally {
       await service.shutdown();
     }

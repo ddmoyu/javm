@@ -75,14 +75,18 @@ try {
       message: "安全桌面下载前日志",
       context: { taskId: "safe-download" },
     });
-    const url =
-      "https://media.example.invalid/demo.m3u8?token=full-safe-token&signature=safe-signature";
+    const url = `https://media.example.invalid/demo.m3u8?token=full-safe-token&signature=${"safe-signature".repeat(80)}`;
     const id = service.capture({
       module: "downloads",
       title: "安全下载失败",
       message: "安全样例缺少 2 个分片",
       taskId: "safe-download",
       url,
+      reproduction: {
+        code: "DEMO-001",
+        mediaUrl: url,
+        filePath: "C:/Users/Safe User/videos/DEMO-001.mp4",
+      },
     });
     logs.record({
       level: "info",
@@ -97,6 +101,11 @@ try {
       (key) => !!report.system[key] && report.system[key] !== "未能采集",
     );
     require(result.systemInformation === true, "系统信息采集不完整");
+    result.reproduction =
+      report.reproduction?.code === "DEMO-001" &&
+      report.reproduction.mediaUrl === url &&
+      report.reproduction.filePath === "C:/Users/[用户]/videos/DEMO-001.mp4";
+    require(result.reproduction === true, "复现信息未保留或用户名未隐藏");
     if ((await clipboard.getFormat()) === "text") {
       previousText = await clipboard.readText(); // 仅内存保留并原样恢复，不写日志或结果文件。
       const button = () =>
@@ -109,6 +118,9 @@ try {
       const text = await clipboard.readText();
       result.clipboard =
         text.includes(url) &&
+        text.includes("番号: DEMO-001") &&
+        text.includes("C:/Users/[用户]/videos/DEMO-001.mp4") &&
+        !text.includes("Safe User") &&
         text.includes("安全桌面下载前日志") &&
         text.includes("安全桌面下载后日志") &&
         text.includes(report.system.CPU!);
@@ -139,6 +151,15 @@ try {
         .reports.some((item) =>
           item.url?.includes("token=full-safe-token"),
         ), "损坏快照导致下载报告丢失");
+      require(service
+        .getSnapshot()
+        .reports.some(
+          (item) =>
+            item.reproduction?.code === "DEMO-001" &&
+            item.reproduction.mediaUrl === item.url &&
+            item.reproduction.filePath === "C:/Users/[用户]/videos/DEMO-001.mp4",
+        ), "恢复报告缺少复现信息");
+      result.reproduction = true;
       require(journal.warning().includes("不完整"), "未识别注入的中断写入");
       result.crashPrompt = true;
       result.previousLogs = true;

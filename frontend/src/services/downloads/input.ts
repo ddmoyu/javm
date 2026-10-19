@@ -4,6 +4,7 @@ import { keepTextTail } from "./text";
 import { identifyCode, normalizeCode } from "../scraping/identity";
 import { downloadCode, duplicateDownloadCodes, DuplicateDownloadError } from "./duplicates";
 import { windowsPath } from "../paths";
+import { redactText } from "../logging/sanitize";
 
 export function normalizeDownloadUrl(value: string) {
   let url: URL;
@@ -190,11 +191,10 @@ export function createDownloadTasks(
 }
 
 export function redactLog(line: string, task: Pick<DownloadTask, "url" | "headers">) {
-  let result = line
-    .replaceAll(task.url, "[视频地址]")
-    .replace(/(?:https?|socks5h?):\/\/[^\s<>"']+/gi, "[地址]");
-  for (const value of Object.values(task.headers)) {
-    if (value) result = result.replaceAll(value, "[请求头已隐藏]");
+  let result = line;
+  for (const [name, value] of Object.entries(task.headers)) {
+    if (value && !/^(referer|origin)$/i.test(name))
+      result = result.replaceAll(value, "[请求头已隐藏]");
   }
-  return keepTextTail(result, 1500);
+  return keepTextTail(redactText(result, 16000), 1500);
 }
