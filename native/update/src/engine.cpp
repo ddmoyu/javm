@@ -1,9 +1,9 @@
 #include "engine.hpp"
 #include "crypto.hpp"
+#include "download.hpp"
 #include "process.hpp"
 #include <array>
 #include <chrono>
-#include <curl/curl.h>
 #include <fstream>
 #include <random>
 #include <regex>
@@ -793,107 +793,16 @@ void Engine::download(Json request) {
   const auto proxy = request.value("proxy", "");
   if (proxy.find_first_of("\r\n") != std::string::npos)
     throw std::runtime_error("代理地址无效");
+  const auto sources = updateDownloadSources(request);
   auto fetch = [&](const Json &record, const Json &item, const fs::path &file) {
     validateAsset(item);
-    const auto expected = item.at("bytes").get<uint64_t>();
-    if (fs::exists(file) && fs::file_size(file) >= expected) {
-      if (fs::file_size(file) == expected &&
-          hashFile(file, &cancel_) == item.at("sha256").get<std::string>())
-        return;
-      fs::rename(file, fs::path(file).concat(".invalid-" + id()));
-    }
-    for (int attempt = 0; attempt < 2; ++attempt) {
-      const auto offset = fs::exists(file) ? fs::file_size(file) : 0;
-      if (offset > expected)
-        throw std::runtime_error("部分下载大小无效");
-      std::ofstream output(file, std::ios::binary | std::ios::app);
-      if (!output)
-        throw std::runtime_error("无法写入更新下载");
-      struct Transfer {
-        Engine *engine;
-        std::ofstream *stream;
-        uint64_t limit, written;
-        std::chrono::steady_clock::time_point last;
-        bool failed{};
-      } transfer{
-          this, &output, expected, offset, std::chrono::steady_clock::now(),
-          false};
-      CURL *curl = curl_easy_init();
-      if (!curl)
-        throw std::runtime_error("更新网络初始化失败");
-      const auto url = assetUrl(record, item);
-      curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-      curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-      curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 5L);
-      curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
-      curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
-      curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 20L);
-      curl_easy_setopt(curl, CURLOPT_TIMEOUT, 3600L);
-      curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
-      curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
-      curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
-      curl_easy_setopt(curl, CURLOPT_USERAGENT, "JAVM-Updater/1");
-#ifdef __APPLE__
-      curl_easy_setopt(curl, CURLOPT_SSL_OPTIONS, CURLSSLOPT_NATIVE_CA);
-#endif
-      curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-      curl_easy_setopt(curl, CURLOPT_PROXY, proxy.c_str());
-      curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE,
-                       static_cast<curl_off_t>(offset));
-      curl_easy_setopt(
-          curl, CURLOPT_WRITEFUNCTION,
-          +[](char *data, size_t size, size_t count, void *opaque) -> size_t {
-            auto &t = *static_cast<Transfer *>(opaque);
-            const auto bytes = size * count;
-            if (t.engine->cancel_ || bytes > t.limit - t.written)
-              return 0;
-            t.stream->write(data, static_cast<std::streamsize>(bytes));
-            if (!*t.stream)
-              return 0;
-            t.written += bytes;
-            return bytes;
-          });
-      curl_easy_setopt(curl, CURLOPT_WRITEDATA, &transfer);
-      curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-      curl_easy_setopt(
-          curl, CURLOPT_XFERINFOFUNCTION,
-          +[](void *opaque, curl_off_t, curl_off_t, curl_off_t,
-              curl_off_t) -> int {
-            auto &t = *static_cast<Transfer *>(opaque);
-            if (t.engine->cancel_)
-              return 1;
-            const auto now = std::chrono::steady_clock::now();
-            if (now - t.last > std::chrono::milliseconds(500)) {
-              try {
-                t.engine->publish({{"bytes", t.written}, {"total", t.limit}});
-              } catch (...) {
-                t.failed = true;
-                return 1;
-              }
-              t.last = now;
-            }
-            return 0;
-          });
-      curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &transfer);
-      const auto code = curl_easy_perform(curl);
-      long http = 0;
-      curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http);
-      curl_easy_cleanup(curl);
-      output.close();
-      if (cancel_)
-        throw std::runtime_error("更新下载已取消，可稍后继续");
-      if (transfer.failed)
-        throw std::runtime_error("更新进度保存失败");
-      if (offset && code == CURLE_RANGE_ERROR && attempt == 0) {
-        fs::resize_file(file, 0);
-        continue;
-      }
-      if (code != CURLE_OK || (http != 200 && http != 206))
-        throw std::runtime_error("更新下载失败，请检查网络后重试");
-      publish({{"phase", "verifying"}});
-      verifyFile(file, item, &cancel_);
-      return;
-    }
+    std::vector<std::string> urls;
+    for (const auto &prefix : sources) urls.push_back(prefix + assetUrl(record, item));
+    fetchUpdateFile(file, item, urls, proxy, cancel_,
+        [&](uint64_t bytes, uint64_t total, const std::string &source, bool verifying) {
+          publish({{"phase", verifying ? "verifying" : "downloading"},
+                   {"bytes", bytes}, {"total", total}, {"source", source}});
+        });
   };
   const auto package = transaction_ / packageName(kind);
   fetch(manifest, asset, package);

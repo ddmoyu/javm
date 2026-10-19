@@ -6,6 +6,8 @@ import type {
   UpdateInstallation,
 } from "../../contracts/updates";
 import { defaultUpdateChannel } from "./updateVersions";
+import { isUpdateMirror, normalizeUpdateMirror, type UpdateMirror } from "./updateSources";
+import { UpdateCheckDeferredError } from "./updateHttp";
 
 export interface UpdatePort {
   installation(): Promise<UpdateInstallation>;
@@ -23,6 +25,8 @@ export interface UpdatePreferences {
   channel: UpdateChannel;
   automatic: boolean;
   lastCheck: number;
+  mirror?: UpdateMirror;
+  customMirror?: string;
 }
 const interval = 24 * 60 * 60 * 1000;
 export class UpdateRestartRequiredError extends Error {}
@@ -31,6 +35,10 @@ export class UpdateService extends Observable<{
   initialized: boolean;
   channel: UpdateChannel;
   automatic: boolean;
+  mirror: UpdateMirror;
+  customMirror: string;
+  retryAt: number;
+  configuring: boolean;
   checking: boolean;
   checked: boolean;
   release: UpdateCandidate | null;
@@ -57,6 +65,10 @@ export class UpdateService extends Observable<{
       initialized: false,
       channel,
       automatic: true,
+      mirror: "auto",
+      customMirror: "",
+      retryAt: 0,
+      configuring: false,
       checking: false,
       checked: false,
       release: null,
@@ -65,7 +77,7 @@ export class UpdateService extends Observable<{
       reason: "",
       restartRequired: false,
     });
-    this.preferences = { channel, automatic: true, lastCheck: 0 };
+    this.preferences = { channel, automatic: true, lastCheck: 0, mirror: "auto", customMirror: "" };
   }
   initialize() {
     return (this.loading ??= (async () => {
@@ -77,12 +89,19 @@ export class UpdateService extends Observable<{
             typeof saved !== "object" ||
             Array.isArray(saved) ||
             (saved.channel !== "stable" && saved.channel !== "beta") ||
-            typeof saved.automatic !== "boolean"
+            typeof saved.automatic !== "boolean" ||
+            (saved.mirror !== undefined && !isUpdateMirror(saved.mirror)) ||
+            (saved.customMirror !== undefined && typeof saved.customMirror !== "string")
           )
             throw new Error("更新设置格式无效，原配置已保留，请检查数据目录后重新打开应用。");
           this.preferences = {
             channel: saved.channel,
             automatic: saved.automatic,
+            mirror: saved.mirror ?? "auto",
+            customMirror:
+              saved.customMirror || saved.mirror === "custom"
+                ? normalizeUpdateMirror(saved.customMirror ?? "")
+                : "",
             lastCheck: Number.isFinite(saved.lastCheck)
               ? Math.max(0, Math.min(saved.lastCheck!, Date.now()))
               : 0,
@@ -95,6 +114,8 @@ export class UpdateService extends Observable<{
           reason: install.reason ?? "",
           channel: this.preferences.channel,
           automatic: this.preferences.automatic,
+          mirror: this.preferences.mirror ?? "auto",
+          customMirror: this.preferences.customMirror ?? "",
         });
         if (install.available) this.publish({ status: await this.port.status() });
       } catch (error) {
@@ -113,39 +134,64 @@ export class UpdateService extends Observable<{
       void this.check(false);
     }, delay);
   }
-  async configure(channel: UpdateChannel, automatic: boolean) {
+  async configure(
+    channel: UpdateChannel,
+    automatic: boolean,
+    mirror: UpdateMirror = this.snapshot.mirror,
+    customMirror = this.snapshot.customMirror,
+  ) {
     await this.initialize();
     if (this.snapshot.restartRequired) throw new Error("请重新打开应用后继续更新。");
-    if (this.controller || ["waiting", "installing"].includes(this.snapshot.status.phase))
+    if (
+      this.snapshot.configuring ||
+      this.controller ||
+      ["waiting", "installing"].includes(this.snapshot.status.phase)
+    )
       throw new Error("请先取消当前更新操作。");
     if (channel !== "stable" && channel !== "beta") throw new Error("更新通道无效。");
-    if (channel !== this.preferences.channel && this.snapshot.status.phase === "ready")
-      await this.port.cancel();
-    const next = {
-      channel,
-      automatic,
-      lastCheck: channel === this.preferences.channel ? this.preferences.lastCheck : 0,
-    };
-    await this.store.write(next);
-    this.preferences = next;
-    this.publish(
-      channel === this.snapshot.channel
-        ? { channel, automatic, error: "" }
-        : {
-            channel,
-            automatic,
-            release: null,
-            checked: false,
-            status: { phase: "idle" },
-            error: "",
-          },
-    );
-    this.schedule();
+    if (!isUpdateMirror(mirror)) throw new Error("更新镜像选项无效。");
+    customMirror = customMirror || mirror === "custom" ? normalizeUpdateMirror(customMirror) : "";
+    const changed =
+      channel !== this.snapshot.channel ||
+      mirror !== this.snapshot.mirror ||
+      customMirror !== this.snapshot.customMirror;
+    this.publish({ configuring: true });
+    try {
+      if (changed && this.snapshot.status.phase === "ready") await this.port.cancel();
+      const next = {
+        channel,
+        automatic,
+        mirror,
+        customMirror,
+        lastCheck: changed ? 0 : this.preferences.lastCheck,
+      };
+      await this.store.write(next);
+      this.preferences = next;
+      this.publish(
+        !changed
+          ? { channel, automatic, error: "" }
+          : {
+              channel,
+              automatic,
+              mirror,
+              customMirror,
+              retryAt: 0,
+              release: null,
+              checked: false,
+              status: { phase: "idle" },
+              error: "",
+            },
+      );
+    } finally {
+      this.publish({ configuring: false });
+      this.schedule();
+    }
   }
   async check(manual = true) {
     await this.initialize();
     if (
       this.stopped ||
+      this.snapshot.configuring ||
       this.snapshot.restartRequired ||
       this.controller ||
       !this.snapshot.available ||
@@ -154,7 +200,7 @@ export class UpdateService extends Observable<{
       return;
     const controller = new AbortController();
     this.controller = controller;
-    this.publish({ checking: true, error: "" });
+    this.publish({ checking: true, error: "", retryAt: 0 });
     const work = (async () => {
       try {
         let release = await this.port.find(this.preferences.channel, controller.signal);
@@ -162,7 +208,11 @@ export class UpdateService extends Observable<{
         if (!manual && release?.version === this.failedVersion) release = null;
         this.publish({ release, checked: true });
       } catch (error) {
-        if (!controller.signal.aborted) this.publish({ error: message(error) });
+        if (!controller.signal.aborted)
+          this.publish({
+            error: message(error),
+            retryAt: error instanceof UpdateCheckDeferredError ? error.retryAt : 0,
+          });
       } finally {
         this.preferences = { ...this.preferences, lastCheck: Date.now() };
         try {
@@ -180,7 +230,14 @@ export class UpdateService extends Observable<{
   }
   async download() {
     const release = this.snapshot.release;
-    if (!release || this.controller || this.stopped || this.snapshot.restartRequired) return;
+    if (
+      !release ||
+      this.controller ||
+      this.stopped ||
+      this.snapshot.configuring ||
+      this.snapshot.restartRequired
+    )
+      return;
     const controller = new AbortController();
     this.controller = controller;
     this.publish({
@@ -220,7 +277,12 @@ export class UpdateService extends Observable<{
     this.publish({ status: { phase: "cancelled" } });
   }
   async install() {
-    if (this.snapshot.status.phase !== "ready" || this.controller || this.snapshot.restartRequired)
+    if (
+      this.snapshot.status.phase !== "ready" ||
+      this.controller ||
+      this.snapshot.configuring ||
+      this.snapshot.restartRequired
+    )
       return;
     this.publish({ error: "", status: { ...this.snapshot.status, phase: "waiting" } });
     try {

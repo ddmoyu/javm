@@ -4,6 +4,19 @@ import {
   type UpdatePreferences,
 } from "../../services/settings/UpdateService";
 import { updateReleases } from "../../services/settings/updateDiscovery";
+import {
+  acceptsVersion,
+  compareVersions,
+  parseVersion,
+} from "../../services/settings/updateVersions";
+import {
+  UpdateHttp,
+  UpdateCheckDeferredError,
+  type UpdateHttpState,
+} from "../../services/settings/updateHttp";
+import { updateSources } from "../../services/settings/updateSources";
+import { StopUnconfirmedError } from "../../services/downloads/ports";
+import { logEvent } from "../../services/logging/events";
 import type {
   NativeUpdateStatus,
   SignedUpdateManifest,
@@ -13,7 +26,6 @@ import type {
 import type { Runtime } from "./bootstrap";
 import type { NetworkSettingsService } from "../../services/network/NetworkSettingsService";
 import { createResolutionHttp } from "./resolutionHttp";
-import { bounds, ResolutionError } from "../../services/streamResolution/shared";
 import { nativeSettingsStorage } from "./settingsStorage";
 import {
   cancelUpdateHandoff,
@@ -29,49 +41,91 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
   if (updater) return updater;
   const desktop = runtime === "desktop";
   let installation: UpdateInstallation;
-  const getJson = async (url: string, signal: AbortSignal): Promise<unknown> => {
-    // Release 附件经 GitHub CDN 跳转；每次都校验 HTTPS，正文有上限。
-    for (let hop = 0; hop < 6; hop++) {
-      const target = new URL(url);
-      if (target.protocol !== "https:" || target.username || target.password || target.port)
-        throw new Error("更新请求地址无效。");
-      const response = await createResolutionHttp()(
-        {
-          url,
-          headers: { Accept: "application/vnd.github+json" },
-          maxBytes: 1024 * 1024,
-          timeoutMs: bounds.requestMs,
-          proxy: await network.getProxy(),
-        },
-        signal,
-      ).catch((error: unknown) => {
-        if (error instanceof ResolutionError) {
-          const message =
-            error.code === "timeout"
-              ? "检查更新超时，请检查网络或代理后重试。"
-              : error.code === "limit_exceeded"
-                ? "更新信息超过大小限制，请前往官方发布页面检查更新。"
-                : "检查更新请求失败，请检查网络或代理后重试。";
-          throw new Error(message, { cause: error });
+  const http = new UpdateHttp(
+    async (request, signal) =>
+      createResolutionHttp()({ ...request, proxy: await network.getProxy() }, signal),
+    desktop
+      ? nativeSettingsStorage<UpdateHttpState>("application-update-cache-v1")
+      : { read: async () => null, write: async () => {} },
+  );
+  const sources = () =>
+    updateSources(updater!.getSnapshot().mirror, updater!.getSnapshot().customMirror);
+  const fromSources = async <T>(
+    url: string,
+    signal: AbortSignal,
+    accept: (value: unknown) => Promise<T>,
+  ): Promise<T> => {
+    let failure: unknown;
+    let deferred: UpdateCheckDeferredError | undefined;
+    for (const prefix of sources()) {
+      signal.throwIfAborted();
+      const target = prefix + url;
+      try {
+        const value = await http.json(target, signal);
+        try {
+          const result = await accept(value);
+          logEvent(
+            "debug",
+            "update",
+            "source_verified",
+            "更新来源响应已验证",
+            {},
+            { requestUrl: target },
+          );
+          return result;
+        } catch (error) {
+          await http.discard(target);
+          throw error;
         }
-        throw error;
-      });
-      if ([301, 302, 303, 307, 308].includes(response.status) && response.headers.location) {
-        url = new URL(response.headers.location, url).href;
-        continue;
+      } catch (error) {
+        signal.throwIfAborted();
+        if (error instanceof StopUnconfirmedError) throw error;
+        logEvent(
+          "warn",
+          "update",
+          "source_failed",
+          "更新来源不可用",
+          { error: error instanceof Error ? error.message : "未知错误" },
+          { requestUrl: target },
+        );
+        failure = error;
+        if (
+          error instanceof UpdateCheckDeferredError &&
+          (!deferred || error.retryAt < deferred.retryAt)
+        )
+          deferred = error;
       }
-      if (response.status === 403 || response.status === 429)
-        throw new Error("官方更新服务暂时限流，请稍后重试。");
-      if (response.status !== 200) throw new Error(`更新检查失败（HTTP ${response.status}）。`);
-      return JSON.parse(new TextDecoder().decode(response.body));
     }
-    throw new Error("更新请求重定向过多。");
+    throw deferred ?? failure;
+  };
+  const verified = async (value: unknown, channel: "stable" | "beta", expected?: string) => {
+    const signed = value as SignedUpdateManifest;
+    if (!signed || typeof signed.payload !== "string" || typeof signed.signature !== "string")
+      throw new Error("更新清单格式无效。");
+    const { version } = JSON.parse(signed.payload) as { version?: unknown };
+    if (
+      typeof version !== "string" ||
+      version.startsWith("v") ||
+      !parseVersion(version) ||
+      !acceptsVersion(version, channel) ||
+      (expected && expected !== version)
+    )
+      throw new Error("更新版本或通道不匹配。");
+    // 包括缓存及当前版本清单，都必须先经原生验签，才可判断是否有更新。
+    const asset = await updateRpc.request<UpdateAsset | null>("update.verify", {
+      envelope: signed,
+      version,
+      channel,
+    });
+    return { envelope: signed, version, asset };
   };
   const envelope = (version: string, signal: AbortSignal) =>
-    getJson(
+    fromSources(
       `https://github.com/ddmoyu/javm/releases/download/v${version}/JAVM-update.json`,
       signal,
-    ) as Promise<SignedUpdateManifest>;
+      // 从 Beta 切换正式版时，当前安装的 Beta 回退包仍然有效。
+      async (value) => (await verified(value, "beta", version)).envelope,
+    );
   const status = () => updateRpc.request<NativeUpdateStatus>("update.status");
   updater = new UpdateService(
     packageInfo.version,
@@ -82,25 +136,42 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
           : { available: false, reason: "请在桌面安装版中检查更新。" });
       },
       async find(channel, signal) {
+        if (channel === "stable") {
+          const result = await fromSources(
+            "https://github.com/ddmoyu/javm/releases/latest/download/JAVM-update.json",
+            signal,
+            (value) => verified(value, channel),
+          );
+          if (!result.asset || compareVersions(result.version, packageInfo.version) <= 0)
+            return null;
+          return {
+            ...result,
+            asset: result.asset,
+            url: `https://github.com/ddmoyu/javm/releases/tag/v${result.version}`,
+            notes: "",
+          };
+        }
         const releases: unknown[] = [];
         for (let page = 1; page <= 20; page++) {
-          const items = await getJson(
+          const items = await fromSources(
             `https://api.github.com/repos/ddmoyu/javm/releases?per_page=30&page=${page}`,
             signal,
+            async (value) => {
+              if (!Array.isArray(value)) throw new Error("官方发布列表格式无效。");
+              return value as unknown[];
+            },
           );
-          if (!Array.isArray(items)) throw new Error("官方发布列表格式无效。");
           releases.push(...items);
           if (items.length < 30) break;
           if (page === 20) throw new Error("发布记录过多，请前往官方发布页面检查更新。");
         }
         for (const release of updateReleases(releases, packageInfo.version, channel)) {
-          const signed = await envelope(release.version, signal);
-          const asset = await updateRpc.request<UpdateAsset | null>("update.verify", {
-            envelope: signed,
-            version: release.version,
-            channel,
-          });
-          if (asset) return { ...release, envelope: signed, asset };
+          const result = await fromSources(
+            `https://github.com/ddmoyu/javm/releases/download/v${release.version}/JAVM-update.json`,
+            signal,
+            (value) => verified(value, channel, release.version),
+          );
+          if (result.asset) return { ...release, envelope: result.envelope, asset: result.asset };
         }
         return null;
       },
@@ -115,6 +186,7 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
           rollback,
           channel: updater!.getSnapshot().channel,
           proxy: await network.getProxy(),
+          sources: sources(),
         });
         let cancelled = false;
         for (;;) {

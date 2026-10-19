@@ -39,6 +39,16 @@ describe.runIf(process.env.JAVM_HTTP_INTEGRATION === "1")(
           res.end("Safe mock challenge");
           return;
         }
+        if (req.url === "/update-limited") {
+          res.writeHead(403, {
+            "X-RateLimit-Remaining": "0",
+            "X-RateLimit-Reset": "1800003600",
+            "Retry-After": "120",
+            ETag: '"safe-fixture"',
+          });
+          res.end("Safe rate limit fixture");
+          return;
+        }
         if (req.url === "/oversize") {
           res.writeHead(200);
           res.write("x".repeat(64));
@@ -148,6 +158,19 @@ describe.runIf(process.env.JAVM_HTTP_INTEGRATION === "1")(
       const post = start("/echo", { method: "POST", body: "safe-body" });
       expect(await post.done).toMatchObject({ status: 200, exitCode: 0 });
       expect(await readFile(post.output, "utf8")).toBe("POST:safe-body");
+    });
+    it("更新限流时间与缓存验证头完整透传给 TypeScript", async () => {
+      expect(await start("/update-limited").done).toMatchObject({
+        status: 403,
+        exitCode: 0,
+        headers: {
+          "x-ratelimit-remaining": "0",
+          "x-ratelimit-reset": "1800003600",
+          "retry-after": "120",
+          etag: '"safe-fixture"',
+        },
+      });
+      expect(calls).toEqual(["/update-limited"]);
     });
     it("未知长度响应传输中也受大小上限约束", async () => {
       const transfer = start("/oversize", { maxBytes: 80 });

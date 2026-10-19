@@ -4,6 +4,7 @@ import { Alert, Button, Group, Modal, Progress, Select, Stack, Switch, Text } fr
 import { useWorkspace } from "../../app/state";
 import { createApplicationUpdater } from "../../platform/neutralino/applicationUpdates";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
+import { UpdateMirrorSettings } from "./UpdateMirrorSettings";
 export function ApplicationUpdatePanel() {
   useLocale();
   const { runtime, network, notice } = useWorkspace(),
@@ -12,6 +13,7 @@ export function ApplicationUpdatePanel() {
   const [confirming, setConfirming] = useState(false);
   const phase = state.status.phase;
   const busy =
+    state.configuring ||
     state.restartRequired ||
     state.checking ||
     [
@@ -74,6 +76,15 @@ export function ApplicationUpdatePanel() {
         {state.channel === "beta" ? t("接收 Beta 和更新的正式版。") : t("仅接收正式版。")}
         {t("切换通道不会降级。发现更新后由你下载并确认重启安装。")}
       </Text>
+      <UpdateMirrorSettings
+        mirror={state.mirror}
+        customMirror={state.customMirror}
+        disabled={busy || !state.available}
+        save={(mirror, custom) => service.configure(state.channel, state.automatic, mirror, custom)}
+      />
+      <Text size="xs" c="dimmed">
+        {t("检查结果缓存 15 分钟，连续点击不会重复请求。")}
+      </Text>
       {!state.available && state.initialized && (
         <Text size="sm" c="dimmed">
           {state.reason || t("更新服务暂不可用。")}
@@ -84,6 +95,11 @@ export function ApplicationUpdatePanel() {
           {t(state.error || state.status.error)}
         </Alert>
       )}
+      {state.retryAt > 0 && (
+        <Text component="output" size="xs">
+          {t("可重试时间：{0}", new Date(state.retryAt).toLocaleString())}
+        </Text>
+      )}
       {phase !== "idle" && (
         <Text size="sm" role="status">
           {t(labels[phase])}
@@ -91,6 +107,11 @@ export function ApplicationUpdatePanel() {
         </Text>
       )}
       {phase === "downloading" && <Progress value={progress} aria-label={t("更新下载进度")} />}
+      {phase === "downloading" && state.status.source && (
+        <Text component="output" size="xs" c="dimmed">
+          {t("下载来源：{0}", state.status.source)}
+        </Text>
+      )}
       {state.release && phase === "idle" && (
         <Text size="sm">{t("发现新版本 {0}", state.release.version)}</Text>
       )}

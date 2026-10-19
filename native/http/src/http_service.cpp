@@ -85,7 +85,7 @@ struct Transfer {
             if (colon == std::string::npos) return length;
             const auto key = lower(line.substr(0, colon));
             if (key == "set-cookie") self.setCookie = true;
-            static const std::set<std::string> allowed{"content-type","content-length","content-range","content-encoding","location","cache-control","expires","age","etag","last-modified","vary","retry-after","cf-mitigated"};
+            static const std::set<std::string> allowed{"content-type","content-length","content-range","content-encoding","location","cache-control","expires","age","etag","last-modified","vary","retry-after","x-ratelimit-remaining","x-ratelimit-reset","cf-mitigated"};
             if (!allowed.contains(key)) return length;
             auto value = line.substr(colon + 1);
             value.erase(0, value.find_first_not_of(" \t"));

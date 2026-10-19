@@ -49,6 +49,7 @@ export interface NativeUpdateStatus {
   total?: number;
   error?: string;
   transaction?: string;
+  source?: string;
 }
 export interface UpdateInstallation {
   available: boolean;

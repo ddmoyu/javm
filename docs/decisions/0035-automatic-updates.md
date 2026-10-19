@@ -80,3 +80,18 @@ TypeScript 的应用级 `UpdateService` 管理设置、通道、GitHub Release �
 - [0.5.3 所用 updater 2.10.1 安装实现](https://github.com/tauri-apps/plugins-workspace/blob/updater-v2.10.1/plugins/updater/src/updater.rs)
 - [Tauri CLI 2.11.2 signer](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.2/crates/tauri-cli/src/signer/sign.rs)
 - [GitHub Actions secrets](https://docs.github.com/en/rest/actions/secrets)
+
+## 2026-10-19：静态正式清单、缓存与镜像
+
+用户授权在 1.0.12 优化更新检查并增加镜像。
+
+- 正式通道直接获取 `https://github.com/ddmoyu/javm/releases/latest/download/JAVM-update.json`，不再查询 Releases API。先用内置公钥验签，再按当前平台、安装形式和版本判断是否可更新；当前版或较旧版本也不能跳过验签。更新日志入口仍指向对应版本的官方 Release。
+- Beta 保留既有分页发现及数值版本排序规则，允许更高 Beta 或正式版，忽略 Alpha、组件、草稿和无清单的发布。两种通道共同使用有界缓存与退避。
+- 每个元数据地址缓存 15 分钟，过期通过 ETag / Last-Modified 条件请求；内存最多 24 条、按 UTF-16 估算不超过 3 MiB。持久化仅保留最近 12 份不超过 64 KiB 的清单响应和 8 个来源的退避记录；缓存内容每次消费仍须原生验签。过期缓存不能在网络失败时伪装成“暂无更新”。每次请求限制 1 MiB、10 秒和最多 6 跳 HTTPS。
+- 429，以及有 `X-RateLimit-Remaining: 0`、`Retry-After` 或限流错误正文的 403，才归为限流。遵守 Retry-After（秒数或 HTTP 日期）和 X-RateLimit-Reset；没有有效时间时按 30 秒指数增长，最长 1 小时，服务端时间最多保留 24 小时。临时网络错误与 5xx 同样退避，成功后清除；手动点击及重启不能绕过未到期的退避。
+- 默认官方优先，失败后依次尝试 `https://gh-proxy.com/` 和 `https://ghfast.top/`。用户可选择仅官方、指定社区镜像或自定义 HTTPS 前缀；指定镜像失败后尝试官方。界面明确标记社区来源。前缀后拼接原始 GitHub URL，只传输公开更新元数据和附件，不传账号令牌。社区服务由第三方运营，可在设置中停用或替换。
+- 检查、安装包和当前版本回退包使用相同来源配置。前端和原生均限制来源数量及 HTTPS 前缀格式，拒绝账号、端口、查询、片段和地址模板；下载重定向只允许 HTTPS。签名信任仍固定在官方公钥，不因镜像改变。安装前继续校验签名清单规定的大小和 SHA-256。
+- 原生下载记录部分文件的来源。同一来源可续传；切换来源会清空当前下载残片，防止拼接不同来源数据。镜像返回损坏文件时丢弃无效字节并尝试下一来源；不支持 Range 时同源最多从头重试一次。取消立即终止后续来源尝试，状态显示当前下载域名。
+- 本次只修改应用更新器及应用 HTTP 响应头透传。第三方组件配方、迁移映射与构建流程不变，完整发版继续消费已有组件 Release。
+
+社区服务的前缀用法参考 [GH-Proxy 文档](https://gh-proxy.com/docs/quick-start) 和 [GHFast](https://ghfast.top/)。2026-10-19 两个地址均实测返回 v1.0.11 清单，官方 P-256 验签通过且 SHA-256 与官方附件一致；这仅证明本次探测结果，不是长期可用性承诺。

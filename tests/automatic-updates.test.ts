@@ -149,4 +149,31 @@ describe("双通道自动更新", () => {
     expect(service.getSnapshot().status.phase).toBe("cancelled");
     await service.shutdown();
   });
+  it("保存镜像期间阻止检查，保存完成后使用新设置", async () => {
+    let finish!: () => void;
+    const { port } = fixture();
+    const find = vi.fn(async () => candidate);
+    port.find = find;
+    const service = new UpdateService("1.0.5", port, {
+      read: async () => ({ channel: "stable", automatic: false, lastCheck: 0 }),
+      write: () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await service.initialize();
+    const saving = service.configure("beta", false, "custom", "https://mirror.example.com");
+    await vi.waitFor(() => expect(service.getSnapshot().configuring).toBe(true));
+    await service.check();
+    expect(find).not.toHaveBeenCalled();
+    finish();
+    await saving;
+    expect(service.getSnapshot()).toMatchObject({
+      channel: "beta",
+      mirror: "custom",
+      customMirror: "https://mirror.example.com/",
+      configuring: false,
+    });
+    await service.shutdown();
+  });
 });

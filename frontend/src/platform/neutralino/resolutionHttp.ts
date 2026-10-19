@@ -108,6 +108,11 @@ export function createResolutionHttp(): ResolutionHttpPort {
             "content-range",
             "content-length",
             "content-encoding",
+            "etag",
+            "last-modified",
+            "retry-after",
+            "x-ratelimit-remaining",
+            "x-ratelimit-reset",
           ].includes(name),
         ),
       );
