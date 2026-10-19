@@ -13,6 +13,7 @@ on:
       - scripts/metatube-lite/**
       - scripts/metatube-lite-profile.mjs
       - scripts/verify-metatube-lite.mjs
+      - tests/fixtures/metatube-diagnostics/**
       - scripts/build-curl.ps1
       - scripts/verify-mediainfo-lite.mjs
       - native/media/mediainfo/**
@@ -21,7 +22,7 @@ on:
       component:
         description: 要检查并构建的组件
         type: choice
-        options: [all, ffmpeg, metatube, mediainfo, curl]
+        options: [all, ffmpeg, metatube, mediainfo, curl, neutralino]
         default: all
 
 permissions:
@@ -33,6 +34,7 @@ concurrency:
 
 jobs:
   plan:
+    if: inputs.component != 'neutralino'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -50,7 +52,7 @@ jobs:
           node-version-file: .node-version
           package-manager-cache: false
       - name: 验证依赖管理逻辑
-        run: node --test scripts/third-party/components.test.mjs
+        run: node --test scripts/third-party/components.test.mjs scripts/third-party/fingerprint.test.mjs
       - name: 按组件构建指纹跳过已有发布
         id: plan
         env:
@@ -130,3 +132,65 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           COMPONENT: ${{ matrix.component }}
         run: node scripts/third-party/release.mjs publish "$COMPONENT"
+
+  posix-plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      changed: ${{ steps.plan.outputs.changed }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: 验证组件隔离与只读消费
+        run: node --test scripts/third-party/fingerprint.test.mjs scripts/third-party/posix/artifact.test.mjs
+      - name: 按组件和平台复用已有发布
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPONENT: ${{ inputs.component || 'all' }}
+        run: node scripts/third-party/posix/release.mjs plan "$COMPONENT"
+
+  posix-build:
+    needs: posix-plan
+    if: needs.posix-plan.outputs.changed == 'true'
+    name: 独立组件 ${{ matrix.component }} / ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.posix-plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: matrix.component == 'metatube'
+        with:
+          go-version: "1.25.0"
+          cache: false
+      - name: 准备 Linux 组件构建依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build nasm libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+      - name: 准备 macOS 组件构建工具
+        if: runner.os == 'macOS'
+        run: |
+          for formula in ninja nasm; do
+            brew list --versions "$formula" >/dev/null || brew install "$formula"
+          done
+      - name: 独立构建、发布并回读校验组件
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMPONENT: ${{ matrix.component }}
+        run: node scripts/third-party/posix/release.mjs publish "$COMPONENT"

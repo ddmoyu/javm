@@ -1,0 +1,4 @@
+{
+  "sources": ["curl", "openssl"],
+  "files": ["scripts/third-party/posix/curl/CMakeLists.txt"]
+}

@@ -22,6 +22,8 @@ curl、MediaInfo、FFmpeg、MetaTube 和 Neutralino 各自记录系统、架构�
 
 完整桌面包消费精确匹配的组件。安装与桌面验证在隔离 CI 中使用合成数据，记录源码提交、GUI 结果、清单哈希和卸载保留数据结果。Alpha 汇总必须收齐 Windows 与三个 POSIX 目标的安装包、便携包和验证记录，失败时不公开不完整 Release。新增平台不修改既有已发布版本的附件。
 
+2026-10-19 起，组件构建与发布迁入独立的 `third-party.yml`，按组件和平台逐项判断是否缺少发布。`desktop-posix.yml` 仅以读取权限下载、核对清单和哈希、运行安全验证；移除 `--publish-missing`，缺包时提示先完成独立组件工作流。指纹隔离及现有发布的精确迁移见 [ADR 0029](0029-third-party-releases.md)。
+
 ## 验证边界
 
 最低编译目标和 CI 运行系统分别记录。macOS 15 CI 不能证明 macOS 13 真机表现；Xvfb 不能证明所有 Linux 桌面环境的托盘与图形行为。未签名开发发行不等于已完成 Developer ID、公证或商店发行。

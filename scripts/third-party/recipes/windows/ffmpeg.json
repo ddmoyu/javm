@@ -1,0 +1,8 @@
+{
+  "sources": ["ffmpeg", "ffmpegReference", "msysMake"],
+  "files": [
+    "scripts/build-ffmpeg-lite.ps1",
+    "scripts/build-ffmpeg-lite.sh",
+    "scripts/verify-ffmpeg-lite.mjs"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "sources": ["mediainfo"],
+  "files": [
+    "scripts/third-party/posix/mediainfo/CMakeLists.txt",
+    "native/media/mediainfo/CMakeLists.txt"
+  ]
+}

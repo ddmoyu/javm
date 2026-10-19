@@ -27,7 +27,7 @@ jobs:
   desktop-posix:
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.validation != 'core')
     permissions:
-      contents: write
+      contents: read
     uses: ./.github/workflows/desktop-posix.yml
     secrets: inherit
   build:

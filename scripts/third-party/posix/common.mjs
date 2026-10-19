@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { chmod, mkdir, readFile, readdir, lstat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonical } from "../components.mjs";
+import { componentSpecification } from "../fingerprint.mjs";
 
 export const root = fileURLToPath(new URL("../../../", import.meta.url));
 export const targets = ["linux-x64", "macos-x64", "macos-arm64"];
@@ -106,71 +106,5 @@ export async function verifyInventory(base, manifest) {
 export async function specification(component, platform = target) {
   if (!components.includes(component) || !targets.includes(platform))
     throw new Error("不支持的组件或平台");
-  const sources = await json(path.join(root, "scripts/offline-dependencies.json"));
-  const extra = await json(path.join(root, "scripts/third-party/posix/sources.json"));
-  const common = [
-    "scripts/third-party/posix/common.mjs",
-    "scripts/third-party/posix/build.mjs",
-    "scripts/third-party/posix/verify.mjs",
-  ];
-  const names = {
-    curl: ["scripts/third-party/posix/curl/CMakeLists.txt"],
-    mediainfo: [
-      "scripts/third-party/posix/mediainfo/CMakeLists.txt",
-      "native/media/mediainfo/CMakeLists.txt",
-    ],
-    ffmpeg: ["scripts/third-party/posix/ffmpeg.sh"],
-    metatube: [
-      "scripts/build-metatube-lite.mjs",
-      "scripts/metatube-lite-profile.mjs",
-      "scripts/metatube-lite/source-lock.json",
-      "scripts/metatube-lite/diagnostics.mjs",
-      "scripts/metatube-lite/diagnostics/engine.go",
-      "scripts/metatube-lite/diagnostics/route.go",
-      "tests/fixtures/metatube-diagnostics/engine_test.go",
-      "tests/fixtures/metatube-diagnostics/route_test.go",
-    ],
-    neutralino: [
-      "scripts/third-party/posix/patch-neutralino.mjs",
-      "scripts/third-party/posix/verify-host.mjs",
-    ],
-  };
-  const files = Object.fromEntries(
-    await Promise.all(
-      [...common, ...names[component]].map(async (name) => [
-        name,
-        sha256((await readFile(path.join(root, name), "utf8")).replaceAll("\r\n", "\n")),
-      ]),
-    ),
-  );
-  const inputs = {
-    schema: 1,
-    component,
-    platform,
-    baseline: platform.startsWith("macos") ? "macOS 13.0" : "Ubuntu 24.04",
-    environment: {
-      runner:
-        platform === "linux-x64"
-          ? "ubuntu-24.04"
-          : platform === "macos-x64"
-            ? "macos-15-intel"
-            : "macos-15",
-      configuration: "Release",
-      revision: 1,
-    },
-    sources: {
-      [component]: component === "neutralino" ? extra.neutralino : sources[component],
-      ...(component === "curl" ? { openssl: extra.openssl } : {}),
-      ...(component === "ffmpeg" ? { ffmpegReference: sources.ffmpegReference } : {}),
-    },
-    files,
-  };
-  const fingerprint = sha256(canonical(inputs));
-  return {
-    component,
-    platform,
-    fingerprint,
-    tag: `deps-${component}-${platform}-${fingerprint.slice(0, 16)}`,
-    inputs,
-  };
+  return componentSpecification(component, platform);
 }

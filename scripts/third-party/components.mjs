@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,92 +6,15 @@ export const root = fileURLToPath(new URL("../../", import.meta.url));
 export const repository = "ddmoyu/javm";
 export const platforms = ["windows-x64"];
 export const components = ["ffmpeg", "metatube", "mediainfo", "curl"];
-export const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 export const readJson = async (file) =>
   JSON.parse((await readFile(file, "utf8")).replace(/^\uFEFF/, ""));
-export const canonical = (value) =>
-  JSON.stringify(value, (_, item) =>
-    item && typeof item === "object" && !Array.isArray(item)
-      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
-      : item,
-  );
-
-const recipes = {
-  ffmpeg: {
-    sources: ["ffmpeg", "ffmpegReference", "msysMake"],
-    files: [
-      "scripts/build-ffmpeg-lite.ps1",
-      "scripts/build-ffmpeg-lite.sh",
-      "scripts/verify-ffmpeg-lite.mjs",
-    ],
-  },
-  metatube: {
-    sources: ["metatube"],
-    files: [
-      "scripts/build-metatube-lite.mjs",
-      "scripts/metatube-lite-profile.mjs",
-      "scripts/metatube-lite/source-lock.json",
-      "scripts/metatube-lite/diagnostics.mjs",
-      "scripts/metatube-lite/diagnostics/engine.go",
-      "scripts/metatube-lite/diagnostics/route.go",
-      "tests/fixtures/metatube-diagnostics/engine_test.go",
-      "tests/fixtures/metatube-diagnostics/route_test.go",
-      "scripts/verify-metatube-lite.mjs",
-    ],
-  },
-  mediainfo: {
-    sources: ["mediainfo"],
-    files: [
-      "scripts/third-party/mediainfo/CMakeLists.txt",
-      "native/media/mediainfo/CMakeLists.txt",
-      "native/media/mediainfo/write-receipt.cmake",
-      "scripts/verify-mediainfo-lite.mjs",
-      "scripts/third-party/verify-mediainfo.ps1",
-    ],
-  },
-  curl: {
-    sources: ["curl"],
-    files: ["scripts/build-curl.ps1"],
-  },
-};
+export { canonical, sha256 } from "./identity.mjs";
+import { canonical, sha256 } from "./identity.mjs";
+import { componentSpecification } from "./fingerprint.mjs";
 
 export async function specification(component) {
   if (!components.includes(component)) throw new Error("未知第三方组件：" + component);
-  const dependencies = await readJson(path.join(root, "scripts/offline-dependencies.json"));
-  const recipe = recipes[component];
-  const files = {};
-  for (const name of [
-    ...recipe.files,
-    "scripts/third-party/components.mjs",
-    "scripts/third-party/build.ps1",
-    "scripts/third-party/package.mjs",
-    "scripts/third-party/verify.mjs",
-  ]) {
-    files[name] = sha256((await readFile(path.join(root, name), "utf8")).replaceAll("\r\n", "\n"));
-  }
-  const inputs = {
-    schema: 1,
-    component,
-    platforms,
-    environment: {
-      runner: "windows-2025",
-      compiler: "MSVC",
-      configuration: "Release",
-      nasm: "2.16.03",
-      revision: 1,
-    },
-    sources: Object.fromEntries(recipe.sources.map((name) => [name, dependencies[name]])),
-    files,
-  };
-  const fingerprint = sha256(canonical(inputs));
-  const version = dependencies[component].version.replace(/^v/, "");
-  return {
-    component,
-    version,
-    fingerprint,
-    tag: "deps-" + component + "-" + version + "-" + fingerprint.slice(0, 12),
-    inputs,
-  };
+  return componentSpecification(component, "windows-x64");
 }
 
 export function safePath(base, relative) {

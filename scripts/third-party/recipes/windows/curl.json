@@ -1,0 +1,4 @@
+{
+  "sources": ["curl"],
+  "files": ["scripts/build-curl.ps1"]
+}

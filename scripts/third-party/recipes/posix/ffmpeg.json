@@ -1,0 +1,4 @@
+{
+  "sources": ["ffmpeg", "ffmpegReference"],
+  "files": ["scripts/third-party/posix/ffmpeg.sh"]
+}

@@ -1,0 +1,960 @@
+{
+  "schema": 1,
+  "entries": {
+    "windows-x64/ffmpeg": {
+      "recipeFingerprint": "0ef716abf1693e3f5ba75633b2e0315692473a039cd8cb0fbe2113235eeb5ec3",
+      "specification": {
+        "component": "ffmpeg",
+        "version": "8.0.1-javm-lite-3",
+        "fingerprint": "3459608e46af6409087c3592a85ff75ebd5bea5274df1093e8eec2172f63bca9",
+        "tag": "deps-ffmpeg-8.0.1-javm-lite-3-3459608e46af",
+        "inputs": {
+          "schema": 1,
+          "component": "ffmpeg",
+          "platforms": ["windows-x64"],
+          "environment": {
+            "runner": "windows-2025",
+            "compiler": "MSVC",
+            "configuration": "Release",
+            "nasm": "2.16.03",
+            "revision": 1
+          },
+          "sources": {
+            "ffmpeg": {
+              "version": "8.0.1-javm-lite-3",
+              "profile": "javm-lite-3",
+              "file": "ffmpeg-8.0.1.tar.xz",
+              "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
+              "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
+              "directory": "ffmpeg-8.0.1"
+            },
+            "ffmpegReference": {
+              "version": "javm-ffmpeg-n8.0.1-20260315-153157",
+              "buildOnly": true,
+              "file": "javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "url": "https://github.com/ddmoyu/ffmepg/releases/download/javm-ffmpeg-n8.0.1-20260315-153157/javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "sha256": "da3fc84e6e5a6fd8447658c8fd6f96807932d67e7d76a52d3698c7cbf171e2ff",
+              "directory": "javm-ffmpeg-windows-x64"
+            },
+            "msysMake": {
+              "version": "4.4.1-3",
+              "buildOnly": true,
+              "file": "make-4.4.1-3-x86_64.pkg.tar.zst",
+              "url": "https://repo.msys2.org/msys/x86_64/make-4.4.1-3-x86_64.pkg.tar.zst",
+              "mirrors": [
+                "https://mirrors.tuna.tsinghua.edu.cn/msys2/msys/x86_64/make-4.4.1-3-x86_64.pkg.tar.zst"
+              ],
+              "sha256": "af0bdba17f06fe037f0194069adaa31a8fe45f1a11381501896aea1fae37bd5d",
+              "directory": "usr/bin"
+            }
+          },
+          "files": {
+            "scripts/build-ffmpeg-lite.ps1": "95b43220f11b6692635c7cedbf41366f32e517394f04e85b12d3bb1da6f8925c",
+            "scripts/build-ffmpeg-lite.sh": "40643fa6e403a6a9eb7e770800e7164bdf1283fe4539037ee9e80dc80dd1bb44",
+            "scripts/verify-ffmpeg-lite.mjs": "50b9dcbbac8c2435331ee41af48176009c3640cc1e42873817cf47bdc6a30e02",
+            "scripts/third-party/components.mjs": "cd03282c06074baefcae1ead2b5833fe213af7bf9b5d9e8a49055116727b5789",
+            "scripts/third-party/build.ps1": "9dc7135e31fdafce997d838007b5b7e8b242db5a028fd8d21d3f0b983f6a28d3",
+            "scripts/third-party/package.mjs": "998c9512479d5c088627374b05eb3c0b67bdff1b733364b4d7ed13259837ae46",
+            "scripts/third-party/verify.mjs": "b32aa75e631d346cda2596a3eaad795fcdb751429996de5391c1d660fa0edcee"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-ffmpeg-8.0.1-javm-lite-3-3459608e46af",
+        "manifest": {
+          "name": "component-manifest.json",
+          "sha256": "522eeee99fc620ea65afbcb2810e9a6990c7009b8c5c9b9eacc250629f03cbf8"
+        }
+      }
+    },
+    "windows-x64/metatube": {
+      "recipeFingerprint": "6f9637d42638526b4e0a29967dd21283a1bb3451eea03c306293ff7ba799c5dd",
+      "specification": {
+        "component": "metatube",
+        "version": "1.4.0",
+        "fingerprint": "802a7eb05d93bd5a6905412c88f0a92db62130c462fe853afb744e346063ac1a",
+        "tag": "deps-metatube-1.4.0-802a7eb05d93",
+        "inputs": {
+          "schema": 1,
+          "component": "metatube",
+          "platforms": ["windows-x64"],
+          "environment": {
+            "runner": "windows-2025",
+            "compiler": "MSVC",
+            "configuration": "Release",
+            "nasm": "2.16.03",
+            "revision": 1
+          },
+          "sources": {
+            "metatube": {
+              "version": "v1.4.0",
+              "profile": "javm-lite-1",
+              "sourceCommit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
+              "toolchain": "go1.25.0",
+              "file": "metatube-server-v1.4.0-windows-amd64.zip",
+              "url": "https://github.com/metatube-community/metatube-server-releases/releases/download/v1.4.0/metatube-server-windows-amd64.zip",
+              "sha256": "2c08b0cec781030504c4cd70ececd3618dbf18847ed488ab5e12783dd1d267e6",
+              "directory": "."
+            }
+          },
+          "files": {
+            "scripts/build-metatube-lite.mjs": "dfd869aa3ecef592894d6d08b3e33886845374a9771c622b6f73977d505c5b2f",
+            "scripts/metatube-lite-profile.mjs": "fde3e0c6a4a2cfcd79eaec8ee8976ea4848fd06e9fc0c4672038d2334df061c4",
+            "scripts/metatube-lite/source-lock.json": "c19fda87ef3e20a71a77333e8dd78220254a8d36c786670be5f3741c3e28e3aa",
+            "scripts/metatube-lite/diagnostics.mjs": "2a468429585c1a34668292ac53e960a7758d1ed3dc9c01e389d24d55e576a085",
+            "scripts/metatube-lite/diagnostics/engine.go": "c7b0b98f991745a244b1de3ddc7c8f377d867dc1bca58dbfb55a85713a7ce49d",
+            "scripts/metatube-lite/diagnostics/route.go": "96577e6f3868d1eaad30cbe326e02576d5b83f4e86e682df4827867921ce558b",
+            "tests/fixtures/metatube-diagnostics/engine_test.go": "a8d83f1fcbe5d7b49708e4291c4f2bc166aa455c54cce8f682b1fd71fd06c77f",
+            "tests/fixtures/metatube-diagnostics/route_test.go": "f861e596f9bb4b5696209fd8b958d374e6ecdd6d42985eee1313b5686594b061",
+            "scripts/verify-metatube-lite.mjs": "b800def6918244e56f410065f179a1c9bc4189b67df017d379a2955f8996c312",
+            "scripts/third-party/components.mjs": "cd03282c06074baefcae1ead2b5833fe213af7bf9b5d9e8a49055116727b5789",
+            "scripts/third-party/build.ps1": "9dc7135e31fdafce997d838007b5b7e8b242db5a028fd8d21d3f0b983f6a28d3",
+            "scripts/third-party/package.mjs": "998c9512479d5c088627374b05eb3c0b67bdff1b733364b4d7ed13259837ae46",
+            "scripts/third-party/verify.mjs": "b32aa75e631d346cda2596a3eaad795fcdb751429996de5391c1d660fa0edcee"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-metatube-1.4.0-802a7eb05d93",
+        "manifest": {
+          "name": "component-manifest.json",
+          "sha256": "f2d97c7a39e4acb283af28d831fb6b0e40e06d4f8f4b536647b16dc29c0d057c"
+        }
+      }
+    },
+    "windows-x64/mediainfo": {
+      "recipeFingerprint": "351508bf077da19691350a49ad9fc4b41c4e312e820d1485bda182551bfa70d6",
+      "specification": {
+        "component": "mediainfo",
+        "version": "26.10",
+        "fingerprint": "7db445bf4f20f2ce106a7f3da6c6e2f7338b52bc026f0b4c9c165b99b90b6685",
+        "tag": "deps-mediainfo-26.10-7db445bf4f20",
+        "inputs": {
+          "schema": 1,
+          "component": "mediainfo",
+          "platforms": ["windows-x64"],
+          "environment": {
+            "runner": "windows-2025",
+            "compiler": "MSVC",
+            "configuration": "Release",
+            "nasm": "2.16.03",
+            "revision": 1
+          },
+          "sources": {
+            "mediainfo": {
+              "version": "26.10",
+              "profile": "javm-lite-1",
+              "file": "libmediainfo_26.10_AllInclusive.7z",
+              "url": "https://mediaarea.net/download/source/libmediainfo/26.10/libmediainfo_26.10_AllInclusive.7z",
+              "sha256": "4af638ec0da9a81736a0ff02294f55edd91acf385cb4e3f8a0dd0b2f2d88fbed",
+              "zenlibVersion": "0.4.41",
+              "zlibVersion": "1.3.2",
+              "disabledFeatures": ["LIBCURL", "LIBMMS", "EXPORT", "GRAPHVIZ", "TRACE"]
+            }
+          },
+          "files": {
+            "scripts/third-party/mediainfo/CMakeLists.txt": "28de9cc06fd88a013d28e6d6491c77b4789040e2af0ffaa072ca394b63278a1b",
+            "native/media/mediainfo/CMakeLists.txt": "bdbee679e5f4c83ea88d3b0f3de9401b9363becd103b8387450a3b1fb0c7c549",
+            "native/media/mediainfo/write-receipt.cmake": "c544954fd003f66d9b97685dc6ef9dddaf62f2f764669f30d0f03dcba2fe6f07",
+            "scripts/verify-mediainfo-lite.mjs": "ba1c37402ca4e8d4ffe7e8b094476ed97a1708c43f672e9959b58bd65073d3c7",
+            "scripts/third-party/verify-mediainfo.ps1": "c022b945ca1eb9f82252f398bd04db4cfa562f030e61e39dbc43ba8c2ec23a3e",
+            "scripts/third-party/components.mjs": "cd03282c06074baefcae1ead2b5833fe213af7bf9b5d9e8a49055116727b5789",
+            "scripts/third-party/build.ps1": "9dc7135e31fdafce997d838007b5b7e8b242db5a028fd8d21d3f0b983f6a28d3",
+            "scripts/third-party/package.mjs": "998c9512479d5c088627374b05eb3c0b67bdff1b733364b4d7ed13259837ae46",
+            "scripts/third-party/verify.mjs": "b32aa75e631d346cda2596a3eaad795fcdb751429996de5391c1d660fa0edcee"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-mediainfo-26.10-7db445bf4f20",
+        "manifest": {
+          "name": "component-manifest.json",
+          "sha256": "ad2942691dfc72f64ed6b9a9343f12b9a9455e91001ebbaa610b5b551ef07df0"
+        }
+      }
+    },
+    "windows-x64/curl": {
+      "recipeFingerprint": "2eb141fff5dc4e9689e0b6b386f7cedd3859c69a8dcee8162ae5e88785a973a3",
+      "specification": {
+        "component": "curl",
+        "version": "8.22.0-msvc-unicode-schannel",
+        "fingerprint": "841b418b119de2c45bcbe9067be4f9fd153e5ce2c1ad91facb09a050c787098b",
+        "tag": "deps-curl-8.22.0-msvc-unicode-schannel-841b418b119d",
+        "inputs": {
+          "schema": 1,
+          "component": "curl",
+          "platforms": ["windows-x64"],
+          "environment": {
+            "runner": "windows-2025",
+            "compiler": "MSVC",
+            "configuration": "Release",
+            "nasm": "2.16.03",
+            "revision": 1
+          },
+          "sources": {
+            "curl": {
+              "version": "8.22.0-msvc-unicode-schannel",
+              "file": "curl-8.22.0.tar.xz",
+              "url": "https://curl.se/download/curl-8.22.0.tar.xz",
+              "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7",
+              "directory": "curl-8.22.0"
+            }
+          },
+          "files": {
+            "scripts/build-curl.ps1": "e6872e1459dd50711470141682dc18e9bd2e6a562da2f0fc43ee944bcd9a7384",
+            "scripts/third-party/components.mjs": "cd03282c06074baefcae1ead2b5833fe213af7bf9b5d9e8a49055116727b5789",
+            "scripts/third-party/build.ps1": "9dc7135e31fdafce997d838007b5b7e8b242db5a028fd8d21d3f0b983f6a28d3",
+            "scripts/third-party/package.mjs": "998c9512479d5c088627374b05eb3c0b67bdff1b733364b4d7ed13259837ae46",
+            "scripts/third-party/verify.mjs": "b32aa75e631d346cda2596a3eaad795fcdb751429996de5391c1d660fa0edcee"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-curl-8.22.0-msvc-unicode-schannel-841b418b119d",
+        "manifest": {
+          "name": "component-manifest.json",
+          "sha256": "2d24aafc48edab35e5744bcbd11902cd245b54150135fb7f912f5aa393d2d0fa"
+        }
+      }
+    },
+    "linux-x64/curl": {
+      "recipeFingerprint": "8e47547000760eb59be9af104c22f6484e73e3a9e21df06789c941dee5fae3e3",
+      "specification": {
+        "component": "curl",
+        "platform": "linux-x64",
+        "fingerprint": "886a2f754d4442dfcc2055fd2fd6ae143a3b5b9a16bb5332adbdd242bc454dbe",
+        "tag": "deps-curl-linux-x64-886a2f754d4442df",
+        "inputs": {
+          "schema": 1,
+          "component": "curl",
+          "platform": "linux-x64",
+          "baseline": "Ubuntu 24.04",
+          "environment": {
+            "runner": "ubuntu-24.04",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "curl": {
+              "version": "8.22.0-msvc-unicode-schannel",
+              "file": "curl-8.22.0.tar.xz",
+              "url": "https://curl.se/download/curl-8.22.0.tar.xz",
+              "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7",
+              "directory": "curl-8.22.0"
+            },
+            "openssl": {
+              "version": "3.5.8",
+              "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz",
+              "file": "openssl-3.5.8.tar.gz",
+              "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/curl/CMakeLists.txt": "9cd1d510de1b4219370a677d90f4591f71df2a99f6edfe910e06ea2a92afa546"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-curl-linux-x64-886a2f754d4442df",
+        "manifest": {
+          "name": "deps-curl-linux-x64-886a2f754d4442df.json",
+          "sha256": "ebf289a1e63c159419eeb6d987c905c3937078a4e2cb07cdaf21cf9eb7956c88"
+        }
+      }
+    },
+    "linux-x64/mediainfo": {
+      "recipeFingerprint": "3d355acc750e9ee3c6fc6f7fc40b697d2da492bf69c963235ffc58ac643fee7e",
+      "specification": {
+        "component": "mediainfo",
+        "platform": "linux-x64",
+        "fingerprint": "129f5b73e0a7bf7d0d3ce5de899aefe414e40f8e217238b4f1c5b935e34c6701",
+        "tag": "deps-mediainfo-linux-x64-129f5b73e0a7bf7d",
+        "inputs": {
+          "schema": 1,
+          "component": "mediainfo",
+          "platform": "linux-x64",
+          "baseline": "Ubuntu 24.04",
+          "environment": {
+            "runner": "ubuntu-24.04",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "mediainfo": {
+              "version": "26.10",
+              "profile": "javm-lite-1",
+              "file": "libmediainfo_26.10_AllInclusive.7z",
+              "url": "https://mediaarea.net/download/source/libmediainfo/26.10/libmediainfo_26.10_AllInclusive.7z",
+              "sha256": "4af638ec0da9a81736a0ff02294f55edd91acf385cb4e3f8a0dd0b2f2d88fbed",
+              "zenlibVersion": "0.4.41",
+              "zlibVersion": "1.3.2",
+              "disabledFeatures": ["LIBCURL", "LIBMMS", "EXPORT", "GRAPHVIZ", "TRACE"]
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/mediainfo/CMakeLists.txt": "2d06c06be7237219f590e86f87b57e22630640a8947fbe29f910d79fbb23759a",
+            "native/media/mediainfo/CMakeLists.txt": "bdbee679e5f4c83ea88d3b0f3de9401b9363becd103b8387450a3b1fb0c7c549"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-mediainfo-linux-x64-129f5b73e0a7bf7d",
+        "manifest": {
+          "name": "deps-mediainfo-linux-x64-129f5b73e0a7bf7d.json",
+          "sha256": "85c2f801ec532801472285048f6ffed3bd70ac9b97b3fa5d33ca6d365437df66"
+        }
+      }
+    },
+    "linux-x64/ffmpeg": {
+      "recipeFingerprint": "57ba4a3d4ac903c39a8d26d4d9bd396cc70fefbabae9a29c90caa9b75437faea",
+      "specification": {
+        "component": "ffmpeg",
+        "platform": "linux-x64",
+        "fingerprint": "82b9f1ae71d8b564fdccf6746a038e3dcfeebc04afa75de4d14e7fad8ad4c6e9",
+        "tag": "deps-ffmpeg-linux-x64-82b9f1ae71d8b564",
+        "inputs": {
+          "schema": 1,
+          "component": "ffmpeg",
+          "platform": "linux-x64",
+          "baseline": "Ubuntu 24.04",
+          "environment": {
+            "runner": "ubuntu-24.04",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "ffmpeg": {
+              "version": "8.0.1-javm-lite-3",
+              "profile": "javm-lite-3",
+              "file": "ffmpeg-8.0.1.tar.xz",
+              "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
+              "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
+              "directory": "ffmpeg-8.0.1"
+            },
+            "ffmpegReference": {
+              "version": "javm-ffmpeg-n8.0.1-20260315-153157",
+              "buildOnly": true,
+              "file": "javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "url": "https://github.com/ddmoyu/ffmepg/releases/download/javm-ffmpeg-n8.0.1-20260315-153157/javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "sha256": "da3fc84e6e5a6fd8447658c8fd6f96807932d67e7d76a52d3698c7cbf171e2ff",
+              "directory": "javm-ffmpeg-windows-x64"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/ffmpeg.sh": "4e7e9397bcfe6c4b942294a87661453de9eb987d10ffd253e6b218bc8e552553"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-ffmpeg-linux-x64-82b9f1ae71d8b564",
+        "manifest": {
+          "name": "deps-ffmpeg-linux-x64-82b9f1ae71d8b564.json",
+          "sha256": "a7b7af09542eb114ed462e80f690add1daa021d67dc1bb9cae5f16a1be102724"
+        }
+      }
+    },
+    "linux-x64/metatube": {
+      "recipeFingerprint": "68dc41643c1b9a336c18e0582a38e59045b4621cc2092bbb13e0ef7d8da4112f",
+      "specification": {
+        "component": "metatube",
+        "platform": "linux-x64",
+        "fingerprint": "6676b8aaab4db5cde83b3e322e8262027204713ee1335019cd028efd5df39a8b",
+        "tag": "deps-metatube-linux-x64-6676b8aaab4db5cd",
+        "inputs": {
+          "schema": 1,
+          "component": "metatube",
+          "platform": "linux-x64",
+          "baseline": "Ubuntu 24.04",
+          "environment": {
+            "runner": "ubuntu-24.04",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "metatube": {
+              "version": "v1.4.0",
+              "profile": "javm-lite-1",
+              "sourceCommit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
+              "toolchain": "go1.25.0",
+              "file": "metatube-server-v1.4.0-windows-amd64.zip",
+              "url": "https://github.com/metatube-community/metatube-server-releases/releases/download/v1.4.0/metatube-server-windows-amd64.zip",
+              "sha256": "2c08b0cec781030504c4cd70ececd3618dbf18847ed488ab5e12783dd1d267e6",
+              "directory": "."
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/build-metatube-lite.mjs": "dfd869aa3ecef592894d6d08b3e33886845374a9771c622b6f73977d505c5b2f",
+            "scripts/metatube-lite-profile.mjs": "fde3e0c6a4a2cfcd79eaec8ee8976ea4848fd06e9fc0c4672038d2334df061c4",
+            "scripts/metatube-lite/source-lock.json": "c19fda87ef3e20a71a77333e8dd78220254a8d36c786670be5f3741c3e28e3aa",
+            "scripts/metatube-lite/diagnostics.mjs": "2a468429585c1a34668292ac53e960a7758d1ed3dc9c01e389d24d55e576a085",
+            "scripts/metatube-lite/diagnostics/engine.go": "c7b0b98f991745a244b1de3ddc7c8f377d867dc1bca58dbfb55a85713a7ce49d",
+            "scripts/metatube-lite/diagnostics/route.go": "96577e6f3868d1eaad30cbe326e02576d5b83f4e86e682df4827867921ce558b",
+            "tests/fixtures/metatube-diagnostics/engine_test.go": "a8d83f1fcbe5d7b49708e4291c4f2bc166aa455c54cce8f682b1fd71fd06c77f",
+            "tests/fixtures/metatube-diagnostics/route_test.go": "f861e596f9bb4b5696209fd8b958d374e6ecdd6d42985eee1313b5686594b061"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-metatube-linux-x64-6676b8aaab4db5cd",
+        "manifest": {
+          "name": "deps-metatube-linux-x64-6676b8aaab4db5cd.json",
+          "sha256": "013c5828dcff9c02964be0ff51315ca762f3a72f706dabb7e8336a04bbd8ab2b"
+        }
+      }
+    },
+    "linux-x64/neutralino": {
+      "recipeFingerprint": "500103c24a0706d281a359a2ed6a546241452fe979240d6179325b2a2509a156",
+      "specification": {
+        "component": "neutralino",
+        "platform": "linux-x64",
+        "fingerprint": "dd1e38dac089d3ea99d53b8e0dd49b48d9c88ee69680a8e9393687d6b2187fd0",
+        "tag": "deps-neutralino-linux-x64-dd1e38dac089d3ea",
+        "inputs": {
+          "schema": 1,
+          "component": "neutralino",
+          "platform": "linux-x64",
+          "baseline": "Ubuntu 24.04",
+          "environment": {
+            "runner": "ubuntu-24.04",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "neutralino": {
+              "version": "6.10.0",
+              "commit": "4361b63eb1157fc7dedb29b92815a08ec0002767",
+              "url": "https://codeload.github.com/neutralinojs/neutralinojs/tar.gz/refs/tags/v6.10.0",
+              "file": "neutralinojs-6.10.0.tar.gz",
+              "sha256": "fa8397f7ed8bb3fe877245ed7a2063c8b03cc6234e9c40aa8cf177fbe9051bda"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/patch-neutralino.mjs": "aa931cb1527da40bbeac4097f1f902b66bc9cb00afd98a4b8195cf5d8153afab",
+            "scripts/third-party/posix/verify-host.mjs": "929bcdaf82458025fb6fe378fb8e00d66c684744b71e210923030d29ff060047"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-neutralino-linux-x64-dd1e38dac089d3ea",
+        "manifest": {
+          "name": "deps-neutralino-linux-x64-dd1e38dac089d3ea.json",
+          "sha256": "9603d7f1258e7f0e67b21036fa8115403ea790bb1c6cb17282b8cdc7a1dd0540"
+        }
+      }
+    },
+    "macos-x64/curl": {
+      "recipeFingerprint": "4c2cec594b98252874065967ca71d3b5210c96cf3870e96773a6f338309fd990",
+      "specification": {
+        "component": "curl",
+        "platform": "macos-x64",
+        "fingerprint": "f7f0fd392ae15b812af045f2cea32c6b0f9ac5042dc60e079eadf60d6366a95f",
+        "tag": "deps-curl-macos-x64-f7f0fd392ae15b81",
+        "inputs": {
+          "schema": 1,
+          "component": "curl",
+          "platform": "macos-x64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15-intel",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "curl": {
+              "version": "8.22.0-msvc-unicode-schannel",
+              "file": "curl-8.22.0.tar.xz",
+              "url": "https://curl.se/download/curl-8.22.0.tar.xz",
+              "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7",
+              "directory": "curl-8.22.0"
+            },
+            "openssl": {
+              "version": "3.5.8",
+              "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz",
+              "file": "openssl-3.5.8.tar.gz",
+              "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/curl/CMakeLists.txt": "9cd1d510de1b4219370a677d90f4591f71df2a99f6edfe910e06ea2a92afa546"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-curl-macos-x64-f7f0fd392ae15b81",
+        "manifest": {
+          "name": "deps-curl-macos-x64-f7f0fd392ae15b81.json",
+          "sha256": "36737824f11715bb6efbe7328931a6bc4df69f92c0518f02b4d545156bff90cb"
+        }
+      }
+    },
+    "macos-x64/mediainfo": {
+      "recipeFingerprint": "49b534fe307b4ad400a2ee8b75b12efbc40fdd76d709361c6ba95373b6661769",
+      "specification": {
+        "component": "mediainfo",
+        "platform": "macos-x64",
+        "fingerprint": "170085d7ab4db4c72f4fd8a15dc8b8c9914371839caa628180e47c650ad2123b",
+        "tag": "deps-mediainfo-macos-x64-170085d7ab4db4c7",
+        "inputs": {
+          "schema": 1,
+          "component": "mediainfo",
+          "platform": "macos-x64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15-intel",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "mediainfo": {
+              "version": "26.10",
+              "profile": "javm-lite-1",
+              "file": "libmediainfo_26.10_AllInclusive.7z",
+              "url": "https://mediaarea.net/download/source/libmediainfo/26.10/libmediainfo_26.10_AllInclusive.7z",
+              "sha256": "4af638ec0da9a81736a0ff02294f55edd91acf385cb4e3f8a0dd0b2f2d88fbed",
+              "zenlibVersion": "0.4.41",
+              "zlibVersion": "1.3.2",
+              "disabledFeatures": ["LIBCURL", "LIBMMS", "EXPORT", "GRAPHVIZ", "TRACE"]
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/mediainfo/CMakeLists.txt": "2d06c06be7237219f590e86f87b57e22630640a8947fbe29f910d79fbb23759a",
+            "native/media/mediainfo/CMakeLists.txt": "bdbee679e5f4c83ea88d3b0f3de9401b9363becd103b8387450a3b1fb0c7c549"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-mediainfo-macos-x64-170085d7ab4db4c7",
+        "manifest": {
+          "name": "deps-mediainfo-macos-x64-170085d7ab4db4c7.json",
+          "sha256": "6af1505e4aa49e2008b7734735d6bd7102bc2394aba79859997ffd362a888448"
+        }
+      }
+    },
+    "macos-x64/ffmpeg": {
+      "recipeFingerprint": "661b08be14e49e2e0aeb9cb72f409ba563ea375e2370651a19f127284b9e2688",
+      "specification": {
+        "component": "ffmpeg",
+        "platform": "macos-x64",
+        "fingerprint": "463349fae7b3dd0be4890d79d28a6ec2947d76e10b31c01751e9e872b0ba042a",
+        "tag": "deps-ffmpeg-macos-x64-463349fae7b3dd0b",
+        "inputs": {
+          "schema": 1,
+          "component": "ffmpeg",
+          "platform": "macos-x64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15-intel",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "ffmpeg": {
+              "version": "8.0.1-javm-lite-3",
+              "profile": "javm-lite-3",
+              "file": "ffmpeg-8.0.1.tar.xz",
+              "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
+              "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
+              "directory": "ffmpeg-8.0.1"
+            },
+            "ffmpegReference": {
+              "version": "javm-ffmpeg-n8.0.1-20260315-153157",
+              "buildOnly": true,
+              "file": "javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "url": "https://github.com/ddmoyu/ffmepg/releases/download/javm-ffmpeg-n8.0.1-20260315-153157/javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "sha256": "da3fc84e6e5a6fd8447658c8fd6f96807932d67e7d76a52d3698c7cbf171e2ff",
+              "directory": "javm-ffmpeg-windows-x64"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/ffmpeg.sh": "4e7e9397bcfe6c4b942294a87661453de9eb987d10ffd253e6b218bc8e552553"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-ffmpeg-macos-x64-463349fae7b3dd0b",
+        "manifest": {
+          "name": "deps-ffmpeg-macos-x64-463349fae7b3dd0b.json",
+          "sha256": "748c1d3239c00095babc10570f41334b77b36924a118e793a098121d88d7c739"
+        }
+      }
+    },
+    "macos-x64/metatube": {
+      "recipeFingerprint": "c185d2818cab9ec8cdd9703a19efd4c7647467ae46e6e3e11ac860ec0011027a",
+      "specification": {
+        "component": "metatube",
+        "platform": "macos-x64",
+        "fingerprint": "caafd89c0f5793594e500826ba639fb79b8a8d5f17c224b699192900dba265f6",
+        "tag": "deps-metatube-macos-x64-caafd89c0f579359",
+        "inputs": {
+          "schema": 1,
+          "component": "metatube",
+          "platform": "macos-x64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15-intel",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "metatube": {
+              "version": "v1.4.0",
+              "profile": "javm-lite-1",
+              "sourceCommit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
+              "toolchain": "go1.25.0",
+              "file": "metatube-server-v1.4.0-windows-amd64.zip",
+              "url": "https://github.com/metatube-community/metatube-server-releases/releases/download/v1.4.0/metatube-server-windows-amd64.zip",
+              "sha256": "2c08b0cec781030504c4cd70ececd3618dbf18847ed488ab5e12783dd1d267e6",
+              "directory": "."
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/build-metatube-lite.mjs": "dfd869aa3ecef592894d6d08b3e33886845374a9771c622b6f73977d505c5b2f",
+            "scripts/metatube-lite-profile.mjs": "fde3e0c6a4a2cfcd79eaec8ee8976ea4848fd06e9fc0c4672038d2334df061c4",
+            "scripts/metatube-lite/source-lock.json": "c19fda87ef3e20a71a77333e8dd78220254a8d36c786670be5f3741c3e28e3aa",
+            "scripts/metatube-lite/diagnostics.mjs": "2a468429585c1a34668292ac53e960a7758d1ed3dc9c01e389d24d55e576a085",
+            "scripts/metatube-lite/diagnostics/engine.go": "c7b0b98f991745a244b1de3ddc7c8f377d867dc1bca58dbfb55a85713a7ce49d",
+            "scripts/metatube-lite/diagnostics/route.go": "96577e6f3868d1eaad30cbe326e02576d5b83f4e86e682df4827867921ce558b",
+            "tests/fixtures/metatube-diagnostics/engine_test.go": "a8d83f1fcbe5d7b49708e4291c4f2bc166aa455c54cce8f682b1fd71fd06c77f",
+            "tests/fixtures/metatube-diagnostics/route_test.go": "f861e596f9bb4b5696209fd8b958d374e6ecdd6d42985eee1313b5686594b061"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-metatube-macos-x64-caafd89c0f579359",
+        "manifest": {
+          "name": "deps-metatube-macos-x64-caafd89c0f579359.json",
+          "sha256": "db8791beaa33070f489bf920e96bbe36f83562881d0c68945e158f744f4f685a"
+        }
+      }
+    },
+    "macos-x64/neutralino": {
+      "recipeFingerprint": "b14bb4d6e962ee9265defedc86acc6cb266e9e14d50613ab3064be9fb4f78495",
+      "specification": {
+        "component": "neutralino",
+        "platform": "macos-x64",
+        "fingerprint": "6efca39d012c2d39f9932f7fd9e8b897a4daaf780646ba5c82f6cdbfed82115a",
+        "tag": "deps-neutralino-macos-x64-6efca39d012c2d39",
+        "inputs": {
+          "schema": 1,
+          "component": "neutralino",
+          "platform": "macos-x64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15-intel",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "neutralino": {
+              "version": "6.10.0",
+              "commit": "4361b63eb1157fc7dedb29b92815a08ec0002767",
+              "url": "https://codeload.github.com/neutralinojs/neutralinojs/tar.gz/refs/tags/v6.10.0",
+              "file": "neutralinojs-6.10.0.tar.gz",
+              "sha256": "fa8397f7ed8bb3fe877245ed7a2063c8b03cc6234e9c40aa8cf177fbe9051bda"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/patch-neutralino.mjs": "aa931cb1527da40bbeac4097f1f902b66bc9cb00afd98a4b8195cf5d8153afab",
+            "scripts/third-party/posix/verify-host.mjs": "929bcdaf82458025fb6fe378fb8e00d66c684744b71e210923030d29ff060047"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-neutralino-macos-x64-6efca39d012c2d39",
+        "manifest": {
+          "name": "deps-neutralino-macos-x64-6efca39d012c2d39.json",
+          "sha256": "aa9e731e757ae26b29e1db45e565f67fab814349af4e102ed6548c0a0c224289"
+        }
+      }
+    },
+    "macos-arm64/curl": {
+      "recipeFingerprint": "e27924b331982de010a60b5e29e50f79f85a3d79e05f070d294039a1ae79db1e",
+      "specification": {
+        "component": "curl",
+        "platform": "macos-arm64",
+        "fingerprint": "205514d5580a35031f87672fc397afb51c3cac611ebcc797775e70aa96edf40c",
+        "tag": "deps-curl-macos-arm64-205514d5580a3503",
+        "inputs": {
+          "schema": 1,
+          "component": "curl",
+          "platform": "macos-arm64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "curl": {
+              "version": "8.22.0-msvc-unicode-schannel",
+              "file": "curl-8.22.0.tar.xz",
+              "url": "https://curl.se/download/curl-8.22.0.tar.xz",
+              "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7",
+              "directory": "curl-8.22.0"
+            },
+            "openssl": {
+              "version": "3.5.8",
+              "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz",
+              "file": "openssl-3.5.8.tar.gz",
+              "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/curl/CMakeLists.txt": "9cd1d510de1b4219370a677d90f4591f71df2a99f6edfe910e06ea2a92afa546"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-curl-macos-arm64-205514d5580a3503",
+        "manifest": {
+          "name": "deps-curl-macos-arm64-205514d5580a3503.json",
+          "sha256": "526254f149931567deb8d0785cba3b81d4e4e5249003584f24b30ddfb6fe2a04"
+        }
+      }
+    },
+    "macos-arm64/mediainfo": {
+      "recipeFingerprint": "862e0dbbd1cfa44ca6a826ca436cee23917b00be117bd293cfe170d1b781ad6d",
+      "specification": {
+        "component": "mediainfo",
+        "platform": "macos-arm64",
+        "fingerprint": "799dd746302643f93da2f2e78701eb9db421d51bbe2f0cc3b50207e5441916eb",
+        "tag": "deps-mediainfo-macos-arm64-799dd746302643f9",
+        "inputs": {
+          "schema": 1,
+          "component": "mediainfo",
+          "platform": "macos-arm64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "mediainfo": {
+              "version": "26.10",
+              "profile": "javm-lite-1",
+              "file": "libmediainfo_26.10_AllInclusive.7z",
+              "url": "https://mediaarea.net/download/source/libmediainfo/26.10/libmediainfo_26.10_AllInclusive.7z",
+              "sha256": "4af638ec0da9a81736a0ff02294f55edd91acf385cb4e3f8a0dd0b2f2d88fbed",
+              "zenlibVersion": "0.4.41",
+              "zlibVersion": "1.3.2",
+              "disabledFeatures": ["LIBCURL", "LIBMMS", "EXPORT", "GRAPHVIZ", "TRACE"]
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/mediainfo/CMakeLists.txt": "2d06c06be7237219f590e86f87b57e22630640a8947fbe29f910d79fbb23759a",
+            "native/media/mediainfo/CMakeLists.txt": "bdbee679e5f4c83ea88d3b0f3de9401b9363becd103b8387450a3b1fb0c7c549"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-mediainfo-macos-arm64-799dd746302643f9",
+        "manifest": {
+          "name": "deps-mediainfo-macos-arm64-799dd746302643f9.json",
+          "sha256": "46b305c2fb7817f25e46fcbe83e2e34bb6e265fb5041393ec4347f3f8b7ad39e"
+        }
+      }
+    },
+    "macos-arm64/ffmpeg": {
+      "recipeFingerprint": "85a8b9851e073af7f8e4f46329a1c0790024cf27fdf49928f31b98a11ae891a6",
+      "specification": {
+        "component": "ffmpeg",
+        "platform": "macos-arm64",
+        "fingerprint": "414863ca025b59597bb802e02e277cc755e390b432a303396ad707ba57b24973",
+        "tag": "deps-ffmpeg-macos-arm64-414863ca025b5959",
+        "inputs": {
+          "schema": 1,
+          "component": "ffmpeg",
+          "platform": "macos-arm64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "ffmpeg": {
+              "version": "8.0.1-javm-lite-3",
+              "profile": "javm-lite-3",
+              "file": "ffmpeg-8.0.1.tar.xz",
+              "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
+              "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
+              "directory": "ffmpeg-8.0.1"
+            },
+            "ffmpegReference": {
+              "version": "javm-ffmpeg-n8.0.1-20260315-153157",
+              "buildOnly": true,
+              "file": "javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "url": "https://github.com/ddmoyu/ffmepg/releases/download/javm-ffmpeg-n8.0.1-20260315-153157/javm-ffmpeg-windows-x64-n8.0.1-20260315-153157.zip",
+              "sha256": "da3fc84e6e5a6fd8447658c8fd6f96807932d67e7d76a52d3698c7cbf171e2ff",
+              "directory": "javm-ffmpeg-windows-x64"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/ffmpeg.sh": "4e7e9397bcfe6c4b942294a87661453de9eb987d10ffd253e6b218bc8e552553"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-ffmpeg-macos-arm64-414863ca025b5959",
+        "manifest": {
+          "name": "deps-ffmpeg-macos-arm64-414863ca025b5959.json",
+          "sha256": "42dfd8b128f59b6ca355ed6c4d8de24e4e832e7924f9e8943c0ba107af2a40de"
+        }
+      }
+    },
+    "macos-arm64/metatube": {
+      "recipeFingerprint": "7d2fbd605969784bf20ebaf59a55a29f9f45d74a7b5aac0c7593f8d8d26bf091",
+      "specification": {
+        "component": "metatube",
+        "platform": "macos-arm64",
+        "fingerprint": "c165a63cb1a1ecd76e1c2ac07cabebee45f3c6f95e8dc26861798f200993eae8",
+        "tag": "deps-metatube-macos-arm64-c165a63cb1a1ecd7",
+        "inputs": {
+          "schema": 1,
+          "component": "metatube",
+          "platform": "macos-arm64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "metatube": {
+              "version": "v1.4.0",
+              "profile": "javm-lite-1",
+              "sourceCommit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
+              "toolchain": "go1.25.0",
+              "file": "metatube-server-v1.4.0-windows-amd64.zip",
+              "url": "https://github.com/metatube-community/metatube-server-releases/releases/download/v1.4.0/metatube-server-windows-amd64.zip",
+              "sha256": "2c08b0cec781030504c4cd70ececd3618dbf18847ed488ab5e12783dd1d267e6",
+              "directory": "."
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/build-metatube-lite.mjs": "dfd869aa3ecef592894d6d08b3e33886845374a9771c622b6f73977d505c5b2f",
+            "scripts/metatube-lite-profile.mjs": "fde3e0c6a4a2cfcd79eaec8ee8976ea4848fd06e9fc0c4672038d2334df061c4",
+            "scripts/metatube-lite/source-lock.json": "c19fda87ef3e20a71a77333e8dd78220254a8d36c786670be5f3741c3e28e3aa",
+            "scripts/metatube-lite/diagnostics.mjs": "2a468429585c1a34668292ac53e960a7758d1ed3dc9c01e389d24d55e576a085",
+            "scripts/metatube-lite/diagnostics/engine.go": "c7b0b98f991745a244b1de3ddc7c8f377d867dc1bca58dbfb55a85713a7ce49d",
+            "scripts/metatube-lite/diagnostics/route.go": "96577e6f3868d1eaad30cbe326e02576d5b83f4e86e682df4827867921ce558b",
+            "tests/fixtures/metatube-diagnostics/engine_test.go": "a8d83f1fcbe5d7b49708e4291c4f2bc166aa455c54cce8f682b1fd71fd06c77f",
+            "tests/fixtures/metatube-diagnostics/route_test.go": "f861e596f9bb4b5696209fd8b958d374e6ecdd6d42985eee1313b5686594b061"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-metatube-macos-arm64-c165a63cb1a1ecd7",
+        "manifest": {
+          "name": "deps-metatube-macos-arm64-c165a63cb1a1ecd7.json",
+          "sha256": "12441752895f78fd9792a20f23f619a9cd18c366b21f4e9c7334df17291ac676"
+        }
+      }
+    },
+    "macos-arm64/neutralino": {
+      "recipeFingerprint": "4386160aa1f480da4be05ee117adf8f1c3a17a96f551ad28808b25a2e56beffb",
+      "specification": {
+        "component": "neutralino",
+        "platform": "macos-arm64",
+        "fingerprint": "15582feb64b4e57ad3430f3661d704889f4b3aeac83682d163b30157292a4bbf",
+        "tag": "deps-neutralino-macos-arm64-15582feb64b4e57a",
+        "inputs": {
+          "schema": 1,
+          "component": "neutralino",
+          "platform": "macos-arm64",
+          "baseline": "macOS 13.0",
+          "environment": {
+            "runner": "macos-15",
+            "configuration": "Release",
+            "revision": 1
+          },
+          "sources": {
+            "neutralino": {
+              "version": "6.10.0",
+              "commit": "4361b63eb1157fc7dedb29b92815a08ec0002767",
+              "url": "https://codeload.github.com/neutralinojs/neutralinojs/tar.gz/refs/tags/v6.10.0",
+              "file": "neutralinojs-6.10.0.tar.gz",
+              "sha256": "fa8397f7ed8bb3fe877245ed7a2063c8b03cc6234e9c40aa8cf177fbe9051bda"
+            }
+          },
+          "files": {
+            "scripts/third-party/posix/common.mjs": "3d24c5d71b086029f2a0858151123b15e06e58f4266e29c351abd018e4c0a12c",
+            "scripts/third-party/posix/build.mjs": "d5470dfb5c03b5d3a89832ad556485dd4a729a29331a62d88b7db526a378496d",
+            "scripts/third-party/posix/verify.mjs": "c82a4019e286536703c23b2a68a087335b919e9138dc643aaeaffdd8472640c5",
+            "scripts/third-party/posix/patch-neutralino.mjs": "aa931cb1527da40bbeac4097f1f902b66bc9cb00afd98a4b8195cf5d8153afab",
+            "scripts/third-party/posix/verify-host.mjs": "929bcdaf82458025fb6fe378fb8e00d66c684744b71e210923030d29ff060047"
+          }
+        }
+      },
+      "provenance": {
+        "sourceCommit": "e88a1f23c69ff2fc4302c85c9456dfe6d2be0dc3",
+        "releaseUrl": "https://github.com/ddmoyu/javm/releases/tag/deps-neutralino-macos-arm64-15582feb64b4e57a",
+        "manifest": {
+          "name": "deps-neutralino-macos-arm64-15582feb64b4e57a.json",
+          "sha256": "11a616e540020c0dfaede19e012f0a84b5e0464aa723678c656ea02be2e2ea67"
+        }
+      }
+    }
+  }
+}

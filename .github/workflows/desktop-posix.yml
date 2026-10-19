@@ -9,9 +9,9 @@ concurrency:
   cancel-in-progress: false
 jobs:
   desktop:
-    name: ${{ matrix.target }} 组件与桌面
+    name: ${{ matrix.target }} 桌面
     permissions:
-      contents: write
+      contents: read
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -32,24 +32,18 @@ jobs:
       - name: 核对发布标签来源
         if: startsWith(github.ref, 'refs/tags/v')
         run: node scripts/release-alpha.mjs verify-source
-      - uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # v6.1.0
-        with:
-          go-version: "1.25.0"
-          cache: false
       - run: pnpm install --frozen-lockfile
       - name: 准备 Linux 构建依赖
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build nasm libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-dev gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad libayatana-appindicator3-dev patchelf squashfs-tools desktop-file-utils xvfb gnome-keyring dbus-x11 policykit-1
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libicu-dev libsecret-1-dev libgtk-3-dev libx11-dev libxrandr-dev libxtst-dev libxcb1-dev libpng-dev libwebkit2gtk-4.1-dev gstreamer1.0-libav gstreamer1.0-plugins-good gstreamer1.0-plugins-bad libayatana-appindicator3-dev patchelf squashfs-tools desktop-file-utils xvfb gnome-keyring dbus-x11 policykit-1
       - name: 准备 macOS 构建工具
         if: runner.os == 'macOS'
         run: |
-          for formula in ninja nasm; do
-            brew list --versions "$formula" >/dev/null || brew install "$formula"
-          done
-      - name: 构建、发布并回读校验精确配方组件
+          brew list --versions ninja >/dev/null || brew install ninja
+      - name: 下载并校验已发布组件
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/third-party/posix/resolve.mjs --publish-missing
+        run: node scripts/third-party/posix/resolve.mjs
       - run: pnpm desktop:setup --verified-posix-host
       - name: 编译完整原生扩展
         id: native
