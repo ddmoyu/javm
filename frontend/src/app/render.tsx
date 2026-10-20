@@ -1,0 +1,148 @@
+import "@mantine/core/styles.css";
+import "../styles/global.css";
+import { StrictMode, useEffect } from "react";
+import { createRoot } from "react-dom/client";
+import { MantineProvider } from "@mantine/core";
+import { cssVariablesResolver, theme } from "./theme";
+import { initializePlatform } from "../platform/neutralino/bootstrap";
+import { playerWindowId } from "../services/playback/windowChannel";
+import { createApplicationLogs } from "../platform/neutralino/logging";
+import { logEvent } from "../services/logging/events";
+import { failStartup, finishStartup } from "./startup";
+import { confirmUpdateStartup, prepareUpdateStartup } from "../platform/neutralino/updateStartup";
+import { createUiPreferences, uiColorSchemeManager } from "./preferences";
+import type { UiPreferencesService } from "../services/settings/UiPreferencesService";
+import { createApplicationFeedback } from "../platform/neutralino/feedback";
+import { FeedbackBoundary } from "../features/feedback/FeedbackBoundary";
+import { FeedbackDialog } from "../features/feedback/FeedbackDialog";
+import { setLocale, translate } from "../i18n/core";
+import { createPrivacyService } from "../platform/neutralino/privacy";
+import { PrivacyBoundary } from "../features/privacy/PrivacyBoundary";
+import { initializePrivacyInput, setPrivacySession } from "../services/privacy/session";
+import { useLocale } from "../i18n";
+import { useMemo } from "react";
+import type { ReactNode } from "react";
+
+function LocalizedTheme({
+  preferences,
+  children,
+}: {
+  preferences: UiPreferencesService;
+  children: ReactNode;
+}) {
+  const language = useLocale();
+  const localizedTheme = useMemo(
+    () => ({
+      ...theme,
+      components: {
+        ...theme.components,
+        Modal: {
+          ...theme.components?.Modal,
+          defaultProps: {
+            ...theme.components?.Modal?.defaultProps,
+            closeButtonProps: { "aria-label": translate("关闭对话框", language) },
+          },
+        },
+        Drawer: {
+          ...theme.components?.Drawer,
+          defaultProps: {
+            ...theme.components?.Drawer?.defaultProps,
+            closeButtonProps: { "aria-label": translate("关闭面板", language) },
+          },
+        },
+      },
+    }),
+    [language],
+  );
+  const colorSchemeManager = useMemo(() => uiColorSchemeManager(preferences), [preferences]);
+  return (
+    <MantineProvider
+      theme={localizedTheme}
+      cssVariablesResolver={cssVariablesResolver}
+      defaultColorScheme="dark"
+      colorSchemeManager={colorSchemeManager}
+    >
+      {children}
+    </MantineProvider>
+  );
+}
+
+let frontendLoadedAt = 0;
+let viewLoadedAt = 0;
+
+function StartupReady({ preferences, main }: { preferences: UiPreferencesService; main: boolean }) {
+  useEffect(() => {
+    void confirmUpdateStartup()
+      .then(() => {
+        // 先完成更新试运行，再落盘迁移值；不能在界面挂载前等待写入门闩。
+        if (main) return preferences.flush();
+      })
+      .catch(failStartup);
+    if (!finishStartup()) return;
+    logEvent("info", "app", "ui_ready", "界面已挂载", {
+      frontendLoadMs: Math.round(frontendLoadedAt),
+      viewLoadMs: Math.round(viewLoadedAt - frontendLoadedAt),
+      renderMs: Math.round(performance.now() - viewLoadedAt),
+      totalMs: Math.round(performance.now()),
+    });
+  }, [preferences, main]);
+  return null;
+}
+
+export async function start() {
+  // 宿主初始化属于应用生命周期，不放进 React 组件的 effect。
+  const runtime = initializePlatform();
+  document.documentElement.dataset.runtime = runtime;
+  const root = document.getElementById("root");
+  if (!root) throw new Error("缺少应用根节点");
+  const id = runtime === "desktop" ? playerWindowId() : undefined;
+  setPrivacySession({ protected: true });
+  initializePrivacyInput();
+  if (runtime === "desktop" && !id) {
+    if ((await prepareUpdateStartup()) === false) return;
+    const { claimApplicationInstance } = await import("../platform/neutralino/applicationInstance");
+    if (!(await claimApplicationInstance())) return;
+  }
+  if (!id) createApplicationLogs(runtime);
+  const feedback = !id ? createApplicationFeedback(runtime) : undefined;
+  const preferences = createUiPreferences(runtime);
+  await preferences.initialize();
+  const privacy = !id ? createPrivacyService(runtime) : undefined;
+  if (privacy) await privacy.initialize();
+  const synchronizeLanguage = () => setLocale(preferences.getSnapshot().value.language);
+  synchronizeLanguage();
+  const unsubscribeLanguage = preferences.subscribe(synchronizeLanguage);
+  window.addEventListener("pagehide", unsubscribeLanguage, { once: true });
+  const scheme = preferences.getSnapshot().value.colorScheme;
+  document.documentElement.dataset.mantineColorScheme =
+    scheme === "auto"
+      ? matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light"
+      : scheme;
+  frontendLoadedAt = performance.now();
+  logEvent("info", "app", "frontend_loaded", "前端基础模块已加载", {
+    elapsedMs: Math.round(frontendLoadedAt),
+  });
+  const module = id ? await import("../features/player/PlayerApp") : await import("./mainView");
+  viewLoadedAt = performance.now();
+  const view =
+    "createPlayerView" in module
+      ? module.createPlayerView(id!, runtime)
+      : module.createMainView(runtime);
+  createRoot(root, { onUncaughtError: failStartup }).render(
+    <StrictMode>
+      <LocalizedTheme preferences={preferences}>
+        {privacy ? (
+          <PrivacyBoundary service={privacy} runtime={runtime}>
+            <FeedbackBoundary service={feedback}>{view}</FeedbackBoundary>
+            {feedback && <FeedbackDialog service={feedback} />}
+          </PrivacyBoundary>
+        ) : (
+          <FeedbackBoundary>{view}</FeedbackBoundary>
+        )}
+        <StartupReady preferences={preferences} main={!id} />
+      </LocalizedTheme>
+    </StrictMode>,
+  );
+}

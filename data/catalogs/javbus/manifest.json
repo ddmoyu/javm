@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "source": "javbus",
+  "started_at": "2026-10-11T06:33:53.603Z",
+  "status": "cancelled",
+  "requested_fields": ["entity_id", "entity_name", "video_count"],
+  "requests": 475,
+  "details_inspected": 0,
+  "directory_pages": [],
+  "files": {
+    "actresses.csv": {
+      "rows": 75303,
+      "known_counts": 7804,
+      "sha256": "003f5fd392a1391f763b243232b8a70f4372abd43b05151ba0acb7a366b5d784"
+    },
+    "male-actors.csv": {
+      "rows": 0,
+      "known_counts": 0,
+      "sha256": "830da0262837425b382fae2653b41718898429765614162fbbcde56e3beb2fef"
+    },
+    "directors.csv": {
+      "rows": 0,
+      "known_counts": 0,
+      "sha256": "830da0262837425b382fae2653b41718898429765614162fbbcde56e3beb2fef"
+    },
+    "studios.csv": {
+      "rows": 94,
+      "known_counts": 94,
+      "sha256": "34dc12dbe8f6459948e06db7de2346f72e15f75d7b09a3b4fd11e0eda1463a08"
+    },
+    "labels.csv": {
+      "rows": 137,
+      "known_counts": 137,
+      "sha256": "16e78af1c50dd336faec0dfefa24c88a385af4ff8b2d75a421ca5d285298e6dc"
+    },
+    "series.csv": {
+      "rows": 0,
+      "known_counts": 0,
+      "sha256": "830da0262837425b382fae2653b41718898429765614162fbbcde56e3beb2fef"
+    },
+    "genres.csv": {
+      "rows": 731,
+      "known_counts": 704,
+      "sha256": "2f687923b5825bdf6b332cecfc52f76c565e41ed5be48ccf67a8fc3a99eefb9e"
+    }
+  },
+  "coverage": "已保存身份及已有影片资料的制作商、发行商；并非全站完整名单",
+  "runtime_csv_updated_at": "2026-10-11T06:39:10.879Z",
+  "updated_at": "2026-10-11T06:39:10.879Z",
+  "unnamed_actor_ids": [
+    {
+      "lane": "censored",
+      "id": "113l"
+    },
+    {
+      "lane": "uncensored",
+      "id": "8kn"
+    },
+    {
+      "lane": "uncensored",
+      "id": "8e7"
+    },
+    {
+      "lane": "uncensored",
+      "id": "8ei"
+    },
+    {
+      "lane": "uncensored",
+      "id": "89c"
+    }
+  ],
+  "missing_entities": 29,
+  "count_progress": {
+    "completed": 446,
+    "total": 67943
+  },
+  "failure": {
+    "reason": "cancelled",
+    "status": 0,
+    "system_code": "ABORT_ERR"
+  }
+}

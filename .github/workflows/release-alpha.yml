@@ -1,0 +1,163 @@
+name: 应用发布与跨平台验收
+run-name: ${{ startsWith(github.ref, 'refs/tags/v') && format('发布 {0}', github.ref_name) || format('手动验收 {0} · {1}', github.ref_name, inputs.validation) }}
+
+on:
+  push:
+    tags: ["v[0-9]*.[0-9]*.[0-9]*"]
+  workflow_dispatch:
+    inputs:
+      validation:
+        description: 非标签运行的验证范围
+        type: choice
+        options: [core, desktop, all]
+        default: core
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  portability:
+    # 非标签的手动运行检查跨平台源码；标签发布继续走现有发布任务。
+    if: github.event_name == 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') && inputs.validation != 'desktop'
+    uses: ./.github/workflows/portability-checks.yml
+  desktop-posix:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.validation != 'core')
+    permissions:
+      contents: read
+    uses: ./.github/workflows/desktop-posix.yml
+    secrets: inherit
+  build:
+    name: Windows x64 安装包与便携包
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: "false"
+      - name: 核对版本标签和 main 源码
+        run: node scripts/release-alpha.mjs verify-source
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - name: 验证更新日志和下载表格
+        run: node --test scripts/release-notes.test.mjs
+      - name: 验证旧版兼容签名和安装交接
+        run: node --test scripts/legacy-update.test.mjs scripts/legacy-installer.test.mjs
+      - name: 执行默认测试集
+        run: |
+          New-Item -ItemType Directory -Force -Path .tmp | Out-Null
+          pnpm test
+      - name: 下载并校验已发布组件
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm offline:setup
+      - run: pnpm desktop:setup
+      - name: 构建完整便携包
+        run: |
+          pnpm desktop:build
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop build failed' }
+          node scripts/package-offline.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Portable packaging failed' }
+      - name: 验证预编译 libcurl 的实际传输
+        env:
+          JAVM_HTTP_INTEGRATION: "1"
+        run: pnpm exec vp test run tests/http-native.integration.test.ts
+      - name: 验证自动更新和数据回退安全夹具
+        env:
+          JAVM_UPDATE_FIXTURES: build/native/windows-release/update-fixtures
+        run: |
+          pnpm native:build --release --update-tests
+          if ($LASTEXITCODE -ne 0) { throw 'Updater fixture build failed' }
+          node --disable-warning=ExperimentalWarning --test scripts/update-native.test.mjs scripts/update-setup.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Updater installation validation failed' }
+      - name: 验证封面与资料的原生写入
+        env:
+          JAVM_MEDIA_INTEGRATION: "1"
+        run: pnpm exec vp test run tests/artwork-native.integration.test.ts tests/metadata-fusion-native.integration.test.ts
+      - name: 验证旧库导入与发现页缓存修复
+        env:
+          JAVM_MEDIA_INTEGRATION: "1"
+        run: pnpm exec vp test run tests/legacy-discovery-repair-native.integration.test.ts tests/legacy-1.0-native.integration.test.ts tests/legacy-import-preservation-native.integration.test.ts
+      - name: 解压运行并验证安全样例
+        run: pnpm test:offline
+      - name: 使用 Inno Setup 构建 Windows 安装包
+        run: node scripts/package-installer.mjs
+      - name: 验证安装、覆盖安装与卸载
+        run: ./scripts/verify-installer.ps1
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/update/tests/legacy-tauri/target
+          key: legacy-updater-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('native/update/tests/legacy-tauri/Cargo.lock') }}
+      - name: 编译 0.5.3 原更新插件安全驱动
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        run: cargo build --locked --manifest-path native/update/tests/legacy-tauri/Cargo.toml
+      - name: 验证 0.5.3 到当前发布的签名安装与新宿主启动
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/verify-legacy-upgrade.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !contains(github.ref, '-alpha.') }}
+        with:
+          name: javm-upgrade-windows-x64
+          path: build/legacy-upgrade-windows-x64.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: 整理发布附件和验证记录
+        run: node scripts/release-alpha.mjs prepare
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: javm-alpha-windows-x64
+          path: build/alpha-release/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: 校验附件并发布
+    needs: [build, desktop-posix]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: "false"
+          cache: "false"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: javm-alpha-windows-x64
+          path: build/alpha-release
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: javm-development-*
+          path: build/posix-artifacts
+      - name: 合并已验证的跨平台附件
+        env:
+          JAVM_UPDATE_PRIVATE_KEY: ${{ secrets.JAVM_UPDATE_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: node scripts/release-alpha.mjs merge-posix
+      - name: 上传、回读验证并公开对应通道 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-alpha.mjs publish

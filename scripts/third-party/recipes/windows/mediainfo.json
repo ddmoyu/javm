@@ -1,0 +1,10 @@
+{
+  "sources": ["mediainfo"],
+  "files": [
+    "scripts/third-party/mediainfo/CMakeLists.txt",
+    "native/media/mediainfo/CMakeLists.txt",
+    "native/media/mediainfo/write-receipt.cmake",
+    "scripts/verify-mediainfo-lite.mjs",
+    "scripts/third-party/verify-mediainfo.ps1"
+  ]
+}

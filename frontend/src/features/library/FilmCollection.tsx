@@ -1,0 +1,478 @@
+import { t, useLocale } from "../../i18n/index";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { ActionIcon, Badge, Group, Skeleton, Table, Text, UnstyledButton } from "@mantine/core";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type { Film } from "../../contracts/media";
+import type { FilmLayout } from "../../contracts/library";
+import { Poster } from "../../components/Cover";
+import { Icon } from "../../components/icons";
+import { IconButton, Pill } from "../../components/ui";
+import { FilmMenuItems } from "../films/FilmMenu";
+import { FilmDeleteDialog } from "../films/FilmDeleteDialog";
+import { ObjectMenu, ObjectMenuButton, objectMenuKey } from "../../components/ObjectMenu";
+import { useWorkspace } from "../../app/state";
+
+interface CollectionProps {
+  items: ReadonlyMap<number, Film>;
+  count: number;
+  onRangeChange: (first: number, last: number) => void;
+  layout: FilmLayout;
+  active: boolean;
+  openFilm: (film: Film) => void;
+  play: (film: Film) => void;
+  toggleFavorite: (film: Film) => void;
+  /** 卡片最小宽度（像素）；未提供时按版式使用默认值。 */
+  cardWidth?: number;
+}
+
+const GAP = 18;
+const META_HEIGHT = 98;
+
+const FilmCard = memo(function FilmCard({
+  film,
+  index,
+  total,
+  activateFilm,
+  toggleFavorite,
+  cardClickToPlay,
+  deleteVideo,
+  top,
+  left,
+  width,
+  height,
+}: {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  film: Film;
+  index: number;
+  total: number;
+  activateFilm: CollectionProps["openFilm"];
+  toggleFavorite: CollectionProps["toggleFavorite"];
+  cardClickToPlay: boolean;
+  deleteVideo: (film: Film) => void;
+}) {
+  useLocale();
+  const statsId = useId();
+  cardClickToPlay =
+    cardClickToPlay &&
+    (film.files?.some((file) => file.kind === "video" && !file.missing) ?? false);
+  return (
+    <ObjectMenu items={<FilmMenuItems film={film} deleteVideo={() => deleteVideo(film)} />}>
+      <li
+        style={{ transform: `translateY(${top}px)`, left, width, height }}
+        aria-posinset={index + 1}
+        aria-setsize={total}
+        data-film-id={film.id}
+        className="film-card"
+      >
+        <UnstyledButton
+          className="film-card-open"
+          aria-label={`${t(cardClickToPlay ? "播放" : "查看详情")} ${film.code} ${film.title}`}
+          aria-describedby={statsId}
+          title={t("{0} · 右键管理", cardClickToPlay ? t("单击播放") : t("单击查看详情"))}
+          onKeyDown={objectMenuKey}
+          onClick={() => activateFilm(film)}
+        >
+          <span className="film-cover">
+            <Poster film={film} />
+            <span className="cover-hover">
+              <span className="cover-hint">{cardClickToPlay ? t("播放影片") : t("查看详情")}</span>
+              <span className="cover-stats" id={statsId}>
+                <span className={film.rating == null ? undefined : "cover-rating"}>
+                  <Icon name="star" size={14} filled={film.rating != null} />
+                  {film.rating == null ? t("暂无评分") : t(`${film.rating.toFixed(1)} / 5`)}
+                </span>
+                <span>
+                  <Icon name="clock" size={14} />
+                  {film.duration > 0 ? t("{0} 分钟", t(film.duration)) : t("时长未知")}
+                </span>
+              </span>
+            </span>
+            <Badge
+              className="cover-quality"
+              size="xs"
+              radius="sm"
+              variant="filled"
+              color={film.quality === "4K" ? "champagne.5" : "dark.6"}
+              c={film.quality === "4K" ? "dark.9" : "gray.2"}
+            >
+              {film.availability === "metadata_only"
+                ? t("未下载")
+                : film.availability === "unavailable"
+                  ? t("文件不可用")
+                  : t(film.quality)}
+            </Badge>
+            {film.missing && (
+              <Badge
+                className="cover-warning"
+                size="sm"
+                radius="sm"
+                variant="filled"
+                color="dark.8"
+                c="champagne.4"
+                leftSection={<Icon name="warning" size={11} />}
+              >
+                {t("资料待补全")}
+              </Badge>
+            )}
+          </span>
+          <Text span size="xs" c="dimmed" ff="monospace" className="film-code">
+            {film.code}
+          </Text>
+          <Text span fw={600} size="sm" truncate className="film-title">
+            {film.title}
+          </Text>
+          <span className="film-meta">
+            <Text span size="xs" c="dimmed" truncate>
+              {film.actor}
+            </Text>
+            <Text span size="xs" c="dimmed" style={{ flex: "none" }}>
+              {film.year} · {film.genre}
+            </Text>
+          </span>
+        </UnstyledButton>
+        <ActionIcon
+          className="cover-favorite"
+          radius="xl"
+          size={30}
+          variant={film.favorite ? "filled" : "transparent"}
+          color={film.favorite ? "rouge" : "dark"}
+          aria-label={`${t(film.favorite ? "取消收藏" : "收藏")} ${film.code}`}
+          aria-pressed={film.favorite}
+          onClick={() => toggleFavorite(film)}
+        >
+          <Icon name="heart" size={16} filled={film.favorite} />
+        </ActionIcon>
+        <div className="film-card-menu" style={{ top: width * 1.39 + 6 }}>
+          <ObjectMenuButton label={t("{0} 更多操作", film.code)} />
+        </div>
+      </li>
+    </ObjectMenu>
+  );
+});
+
+const FilmRow = memo(function FilmRow({
+  film,
+  index,
+  activateFilm,
+  cardClickToPlay,
+  play,
+  deleteVideo,
+}: {
+  film: Film;
+  index: number;
+  activateFilm: (film: Film) => void;
+  cardClickToPlay: boolean;
+  play: (film: Film) => void;
+  deleteVideo: (film: Film) => void;
+}) {
+  useLocale();
+  return (
+    <ObjectMenu items={<FilmMenuItems film={film} deleteVideo={() => deleteVideo(film)} />}>
+      <Table.Tr
+        aria-rowindex={index + 2}
+        data-film-id={film.id}
+        className="clickable-row"
+        style={{ height: 72 }}
+        tabIndex={0}
+        onClick={(event) => {
+          const target = event.target;
+          if (!(target instanceof Element) || target.closest("button, input, label")) return;
+          activateFilm(film);
+        }}
+        onKeyDown={(event) => {
+          if (objectMenuKey(event)) return;
+          if (
+            (event.key === "Enter" || event.key === " ") &&
+            event.target === event.currentTarget
+          ) {
+            event.preventDefault();
+            activateFilm(film);
+          }
+        }}
+      >
+        <Table.Td>
+          <Group gap="sm" wrap="nowrap">
+            <UnstyledButton
+              className="mini-poster"
+              aria-label={t("{0} {1} 封面", cardClickToPlay ? t("播放") : t("查看详情"), film.code)}
+              onKeyDown={objectMenuKey}
+              onClick={() => activateFilm(film)}
+            >
+              <Poster film={film} compact />
+            </UnstyledButton>
+            <UnstyledButton
+              onClick={() => activateFilm(film)}
+              onKeyDown={objectMenuKey}
+              style={{ minWidth: 0 }}
+            >
+              <Text size="sm" fw={600} truncate>
+                {film.title}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {film.code} · {film.year}
+              </Text>
+            </UnstyledButton>
+          </Group>
+        </Table.Td>
+        <Table.Td>
+          <Text size="sm" truncate>
+            {film.actor}
+          </Text>
+        </Table.Td>
+        <Table.Td>
+          <Text size="sm">
+            {film.availability === "metadata_only"
+              ? t("未下载")
+              : film.availability === "unavailable"
+                ? t("文件不可用")
+                : t(film.quality)}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {film.size}
+          </Text>
+        </Table.Td>
+        <Table.Td>
+          <Pill tone={film.missing ? "warning" : "success"}>
+            {film.missing ? t("待补全") : t("完整")}
+          </Pill>
+        </Table.Td>
+        <Table.Td>
+          <Group gap={2} wrap="nowrap">
+            <IconButton
+              icon="play"
+              label={t("播放 {0}", film.code)}
+              disabled={!film.files?.some((file) => file.kind === "video" && !file.missing)}
+              onClick={() => play(film)}
+            />
+            <ObjectMenuButton label={t("{0} 更多操作", film.code)} />
+          </Group>
+        </Table.Td>
+      </Table.Tr>
+    </ObjectMenu>
+  );
+});
+
+export function FilmCollection({
+  items,
+  count,
+  onRangeChange,
+  layout,
+  active,
+  openFilm,
+  play,
+  toggleFavorite,
+  cardWidth: minCardWidth,
+}: CollectionProps) {
+  useLocale();
+  const { cardClickToPlay } = useWorkspace();
+  const activateFilm = useCallback(
+    (film: Film) =>
+      cardClickToPlay && film.files?.some((file) => file.kind === "video" && !file.missing)
+        ? play(film)
+        : openFilm(film),
+    [cardClickToPlay, play, openFilm],
+  );
+  const [deletingVideo, setDeletingVideo] = useState<Film | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [geometry, setGeometry] = useState({ width: 900, margin: 0 });
+  const poster = layout !== "list";
+  const landscape = layout === "landscape";
+  const columns = poster
+    ? Math.max(
+        landscape ? 1 : 2,
+        Math.min(
+          minCardWidth ? 16 : 8,
+          Math.floor((geometry.width + GAP) / (minCardWidth ?? (landscape ? 300 : 188))),
+        ),
+      )
+    : 1;
+  const cardWidth = (geometry.width - (columns - 1) * GAP) / columns;
+  const coverHeight = cardWidth * (landscape ? 9 / 16 : 1.39);
+  const rowHeight = poster ? coverHeight + META_HEIGHT : 72;
+  const getScrollElement = useCallback(
+    () => rootRef.current?.closest<HTMLElement>(".page-content") ?? null,
+    [],
+  );
+  const measureGeometry = useCallback(() => {
+    const element = rootRef.current;
+    const scrollElement = getScrollElement();
+    if (!active || !element || !scrollElement || element.clientWidth === 0) return;
+    const width = element.clientWidth;
+    const margin =
+      element.getBoundingClientRect().top -
+      scrollElement.getBoundingClientRect().top +
+      scrollElement.scrollTop +
+      (poster ? 0 : 40);
+    setGeometry((previous) =>
+      previous.width === width && previous.margin === margin ? previous : { width, margin },
+    );
+  }, [active, getScrollElement, poster]);
+  // 筛选条件、工具栏换行、主题和窗口大小都可能改变列表起点。
+  useLayoutEffect(measureGeometry);
+  useLayoutEffect(() => {
+    const scrollElement = getScrollElement();
+    if (!active || !rootRef.current || !scrollElement) return;
+    const observer = new ResizeObserver(measureGeometry);
+    observer.observe(rootRef.current);
+    observer.observe(scrollElement);
+    return () => observer.disconnect();
+  }, [active, getScrollElement, measureGeometry]);
+  const getItemKey = useCallback((index: number) => `${columns}:${index}`, [columns]);
+  // oxlint-disable-next-line react/incompatible-library -- TanStack Virtual 官方 API，当前工程未启用 React Compiler。
+  const virtualizer = useVirtualizer({
+    count: Math.ceil(count / columns),
+    getScrollElement,
+    estimateSize: () => rowHeight,
+    getItemKey,
+    overscan: poster ? 2 : 6,
+    scrollMargin: geometry.margin,
+    enabled: active,
+  });
+  useLayoutEffect(() => {
+    virtualizer.measure();
+  }, [rowHeight, virtualizer]);
+  const rows = virtualizer.getVirtualItems();
+  const first = rows[0];
+  const last = rows.at(-1);
+  const totalHeight = virtualizer.getTotalSize();
+  const firstIndex = first?.index ?? 0;
+  const lastIndex = last?.index ?? 0;
+  useEffect(() => {
+    if (active && count)
+      onRangeChange(firstIndex * columns, Math.min(count - 1, (lastIndex + 1) * columns - 1));
+  }, [active, count, columns, firstIndex, lastIndex, onRangeChange]);
+  return (
+    <>
+      <div
+        ref={rootRef}
+        className={poster ? "virtual-posters" : "table-shell"}
+        data-cover-layout={landscape ? "landscape" : "portrait"}
+      >
+        {poster ? (
+          <ul className="virtual-canvas" aria-label={t("影片海报")} style={{ height: totalHeight }}>
+            {rows.flatMap((row) =>
+              Array.from(
+                { length: Math.min(columns, count - row.index * columns) },
+                (_, offset) => {
+                  const index = row.index * columns + offset;
+                  const film = items.get(index);
+                  if (!film)
+                    return (
+                      <li
+                        key={`loading:${index}`}
+                        className="film-card"
+                        aria-label={t("正在加载影片")}
+                        aria-busy="true"
+                        style={{
+                          transform: `translateY(${row.start - geometry.margin}px)`,
+                          left: offset * (cardWidth + GAP),
+                          width: cardWidth,
+                          height: rowHeight,
+                        }}
+                      >
+                        <Skeleton height={coverHeight} />
+                        <Skeleton height={14} mt={12} width="80%" />
+                        <Skeleton height={12} mt={10} width="60%" />
+                      </li>
+                    );
+                  return (
+                    <FilmCard
+                      key={film.id}
+                      film={film}
+                      index={row.index * columns + offset}
+                      total={count}
+                      activateFilm={activateFilm}
+                      toggleFavorite={toggleFavorite}
+                      cardClickToPlay={cardClickToPlay}
+                      deleteVideo={setDeletingVideo}
+                      top={row.start - geometry.margin}
+                      left={offset * (cardWidth + GAP)}
+                      width={cardWidth}
+                      height={rowHeight}
+                    />
+                  );
+                },
+              ),
+            )}
+          </ul>
+        ) : (
+          <Table
+            aria-label={t("影片列表")}
+            aria-rowcount={count + 1}
+            highlightOnHover
+            verticalSpacing={10}
+            horizontalSpacing="md"
+            layout="fixed"
+          >
+            <Table.Thead>
+              <Table.Tr aria-rowindex={1}>
+                <Table.Th w="38%">{t("影片")}</Table.Th>
+                <Table.Th w="16%">{t("演员")}</Table.Th>
+                <Table.Th w="17%">{t("画质 / 大小")}</Table.Th>
+                <Table.Th w="15%">{t("资料状态")}</Table.Th>
+                <Table.Th w="14%">{t("操作")}</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {first && (
+                <Table.Tr aria-hidden="true">
+                  <Table.Td
+                    colSpan={5}
+                    p={0}
+                    style={{ height: Math.max(0, first.start - geometry.margin), border: 0 }}
+                  />
+                </Table.Tr>
+              )}
+              {rows.map((row) => {
+                const film = items.get(row.index);
+                if (!film)
+                  return (
+                    <Table.Tr
+                      key={`loading:${row.index}`}
+                      aria-rowindex={row.index + 2}
+                      aria-busy="true"
+                      style={{ height: 72 }}
+                    >
+                      <Table.Td colSpan={5}>
+                        <Skeleton height={36} aria-label={t("正在加载影片")} />
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                return (
+                  <FilmRow
+                    key={film.id}
+                    film={film}
+                    index={row.index}
+                    activateFilm={activateFilm}
+                    cardClickToPlay={cardClickToPlay}
+                    play={play}
+                    deleteVideo={setDeletingVideo}
+                  />
+                );
+              })}
+              {totalHeight > 0 && (
+                <Table.Tr aria-hidden="true">
+                  <Table.Td
+                    colSpan={5}
+                    p={0}
+                    style={{
+                      // 重新启用时可见行尚未测量，也要保留总高度供滚动位置恢复。
+                      height: Math.max(0, totalHeight - (last ? last.end - geometry.margin : 0)),
+                      border: 0,
+                    }}
+                  />
+                </Table.Tr>
+              )}
+            </Table.Tbody>
+          </Table>
+        )}
+      </div>
+      {deletingVideo && (
+        <FilmDeleteDialog film={deletingVideo} onClose={() => setDeletingVideo(null)} />
+      )}
+    </>
+  );
+}

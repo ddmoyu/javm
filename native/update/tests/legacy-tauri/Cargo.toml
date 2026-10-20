@@ -1,0 +1,13 @@
+[package]
+name = "javm-legacy-update-fixture"
+version = "0.5.3"
+edition = "2021"
+publish = false
+
+[dependencies]
+tauri = { version = "=2.11.2", default-features = false, features = ["test"] }
+tauri-plugin-updater = "=2.10.1"
+serde_json = "1"
+
+[profile.dev]
+debug = 0

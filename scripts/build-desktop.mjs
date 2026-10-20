@@ -1,0 +1,93 @@
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import { desktopHostFile } from "./desktop-host.mjs";
+
+// neu uses and removes cwd/.tmp. Never expose the workspace's fixtures, local
+// databases or dependency downloads to that packaging scratch directory.
+const hostName = desktopHostFile();
+const archiveEnabled = !process.argv.includes("--no-archive");
+const root = fileURLToPath(new URL("../", import.meta.url));
+const buildRoot = path.resolve(root, "build");
+await mkdir(buildRoot, { recursive: true });
+const stage = await mkdtemp(path.join(buildRoot, "desktop-package-"));
+const require = createRequire(import.meta.url);
+const config = JSON.parse(await readFile(path.join(root, "neutralino.config.json"), "utf8"));
+if (process.platform !== "win32") {
+  config.modes.window.webviewArgs = "--javm-managed";
+  config.cli.copyItems = [
+    "bin/javm_database",
+    "bin/javm_updater",
+    "bin/javm_process",
+    process.platform === "darwin" ? "bin/libmediainfo.0.dylib" : "bin/libmediainfo.so.0",
+    "bin/licenses",
+    "bin/tools",
+  ];
+}
+config.cli.distributionPath = "/dist/desktop";
+// Vite's public directory also holds distribution-only documents. The native
+// icon is embedded separately by neu; its public-root copy is unused by the UI.
+const distributionOnly = String.raw`(?:^|[/\\])dist[/\\]frontend[/\\](?:licenses(?:[/\\]|$)|offline(?:[/\\]|$)|\.gitkeep$|icon\.png$)`;
+config.cli.resourcesExclude = config.cli.resourcesExclude
+  ? `(?:${config.cli.resourcesExclude})|${distributionOnly}`
+  : distributionOnly;
+delete config.cli.frontendLibrary;
+const copy = async (relative) => {
+  const source = path.resolve(root, relative);
+  const target = path.resolve(stage, relative);
+  if (!source.startsWith(path.resolve(root) + path.sep) || !target.startsWith(stage + path.sep)) {
+    throw new Error(`Package input must stay inside the project: ${relative}`);
+  }
+  await cp(source, target, { recursive: true });
+};
+try {
+  await copy("dist/frontend");
+  await copy(`bin/${hostName}`);
+  // neu 将窗口/托盘图标及 EXE 图标嵌入主程序，只需放入构建暂存区。
+  await copy("resources/icon.png");
+  for (const item of config.cli.copyItems || []) await copy(item);
+  await writeFile(path.join(stage, "neutralino.config.json"), JSON.stringify(config, null, 2));
+  const cli = require.resolve("@neutralinojs/neu/bin/neu.js");
+  const args = [cli, "build", "--embed-resources"];
+  if (archiveEnabled) args.push("--release");
+  const bundled = spawnSync(process.execPath, args, {
+    cwd: stage,
+    stdio: "inherit",
+    windowsHide: true,
+  });
+  if (bundled.error) throw bundled.error;
+  if (bundled.status !== 0) throw new Error(`Desktop packaging failed: ${bundled.status}`);
+  await cp(path.join(stage, "dist/desktop"), path.join(root, "dist/desktop"), {
+    recursive: true,
+    force: true,
+  });
+  // Retire obsolete generated files left by older desktop builds.
+  for (const file of [
+    "bin/tools/ffprobe.exe",
+    "bin/licenses/ffmpeg-lite/ffprobe.exe-version.txt",
+    "resources/icon.png",
+  ])
+    await rm(path.join(root, "dist/desktop/javm", file), { force: true });
+  const resourcesDirectory = path.join(root, "dist/desktop/javm/resources");
+  try {
+    if ((await readdir(resourcesDirectory)).length === 0) await rmdir(resourcesDirectory);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  console.log(
+    `${process.platform} desktop package: dist/desktop/javm` +
+      (archiveEnabled ? " and dist/desktop/javm-release.zip" : ""),
+  );
+} finally {
+  const resolved = path.resolve(stage);
+  if (
+    path.dirname(resolved) === buildRoot &&
+    path.basename(resolved).startsWith("desktop-package-")
+  ) {
+    await rm(resolved, { recursive: true, force: true });
+  } else {
+    console.error("Refusing cleanup outside the owned package staging directory.");
+  }
+}

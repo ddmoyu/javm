@@ -1,0 +1,23 @@
+name: 准备 JAVM 工程环境
+description: 按仓库版本配置 Node.js、pnpm 和锁文件缓存，按需安装依赖
+inputs:
+  install:
+    description: 是否安装工程依赖
+    default: "true"
+  cache:
+    description: 是否缓存 pnpm store
+    default: "true"
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@d9184bf108216479bc5a137cc391f4d7b14c870b # v6.1.0
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version-file: .node-version
+        cache: ${{ inputs.cache == 'true' && 'pnpm' || '' }}
+        cache-dependency-path: pnpm-lock.yaml
+        package-manager-cache: false
+    - name: 安装锁定依赖
+      if: inputs.install == 'true'
+      shell: bash
+      run: pnpm install --frozen-lockfile

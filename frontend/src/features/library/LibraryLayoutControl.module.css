@@ -1,0 +1,41 @@
+.root {
+  --sc-color: var(--mantine-primary-color-light);
+  --sc-label-color: var(--mantine-primary-color-light-color);
+  flex-shrink: 0;
+  padding: 3px;
+  border: 1px solid var(--velvet-line);
+  background: var(--velvet-sunken);
+}
+
+.label {
+  min-width: 68px;
+  padding: 5px 10px;
+  color: var(--mantine-color-text);
+  font-weight: 500;
+}
+
+.label[data-active] {
+  color: var(--mantine-primary-color-light-color);
+  font-weight: 600;
+}
+
+.indicator {
+  border: 1px solid var(--mantine-color-rouge-5);
+  box-shadow: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 20px;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .indicator,
+  .label {
+    transition: none;
+  }
+}
