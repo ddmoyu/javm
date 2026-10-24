@@ -18,6 +18,9 @@ import type {
 import { playbackError } from "../../services/playback/PlaybackService";
 import { createHlsLoader } from "../../services/playback/hlsLoader";
 import { bindPlaybackProgress } from "../../services/playback/PlaybackHistory";
+import { bindPlayerVolume } from "../../services/playback/playerVolume";
+import type { PlayerPreferences } from "../../services/playback/PlayerPreferences";
+import { createPlayerPreferences } from "../../platform/neutralino/playerPreferences";
 import { Icon } from "../../components/icons";
 import { window as nativeWindow } from "@neutralinojs/lib";
 import { startPlayerDrag } from "../../platform/neutralino/playerFrame";
@@ -31,12 +34,20 @@ import {
   toggleWindowAlwaysOnTop,
 } from "../../platform/neutralino/windowFrame";
 
-function Media({ media }: { media: PreparedPlayback }) {
+function Media({
+  media,
+  preferences,
+}: {
+  media: PreparedPlayback;
+  preferences: PlayerPreferences;
+}) {
   const language = useLocale();
   const [error, setError] = useState("");
   const [progressError, setProgressError] = useState("");
+  const [preferencesError, setPreferencesError] = useState("");
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
+  const volumeReady = useRef<Promise<void>>(Promise.resolve());
   const attemptedAutoplay = useRef(false);
   const [autoplayRevision] = useState(privacyRevision);
   const cleanup = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -58,6 +69,12 @@ function Media({ media }: { media: PreparedPlayback }) {
     if (video.current && media.progress)
       return bindPlaybackProgress(video.current, media.progress, setProgressError);
   }, [media]);
+  useLayoutEffect(() => {
+    if (!video.current) return;
+    const volume = bindPlayerVolume(video.current, preferences, setPreferencesError);
+    volumeReady.current = volume.ready;
+    return volume.dispose;
+  }, [preferences]);
   useEffect(() => {
     clearTimeout(cleanup.current);
     const element = video.current;
@@ -71,14 +88,19 @@ function Media({ media }: { media: PreparedPlayback }) {
     };
   }, []);
   const start = () => {
-    if (!video.current) return;
-    if (getPrivacySession().protected) {
-      silenceMedia(video.current);
-      return;
-    }
-    void video.current
-      .play()
-      .then(() => setAutoplayBlocked(false))
+    const element = video.current;
+    if (!element) return;
+    const revision = privacyRevision();
+    void volumeReady.current
+      .then(async () => {
+        if (element !== video.current) return;
+        if (getPrivacySession().protected || revision !== privacyRevision()) {
+          silenceMedia(element);
+          return;
+        }
+        await element.play();
+        setAutoplayBlocked(false);
+      })
       .catch((reason: unknown) => {
         if (reason instanceof DOMException && reason.name === "NotAllowedError")
           setAutoplayBlocked(true);
@@ -152,6 +174,11 @@ function Media({ media }: { media: PreparedPlayback }) {
           {t(progressError)}
         </Alert>
       )}
+      {preferencesError && (
+        <Alert color="yellow" className="playback-feedback" role="alert">
+          {t(preferencesError)}
+        </Alert>
+      )}
       {autoplayBlocked && (
         <Group className="playback-feedback" justify="space-between">
           <Text size="sm">{t("请点击播放以开始视频。")}</Text>
@@ -170,22 +197,38 @@ export default function PlaybackWindow({
   notice,
   native = false,
   onClose,
+  onMoveEnd,
 }: {
   service: PlaybackController;
   snapshot: PlaybackSnapshot;
   notice: (message: string) => void;
   native?: boolean;
   onClose?: () => Promise<void>;
+  onMoveEnd?: () => Promise<void>;
 }) {
   useLocale();
   const [expanded, setExpanded] = useState(false);
   const { maximized, alwaysOnTop } = useSyncExternalStore(subscribeWindowState, getWindowState);
   const isExpanded = native ? maximized : expanded;
   const [position, setPosition] = useState({ x: 24, y: 70 });
+  const [preferences] = useState(() => createPlayerPreferences(native ? "desktop" : "browser"));
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const nativeDrag = useRef<ReturnType<typeof startPlayerDrag> | undefined>(undefined);
   const root = useRef<HTMLDialogElement>(null);
   const toolbar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (native) return;
+    let active = true;
+    void preferences.read().then(
+      (value) => {
+        if (active && value.position) setPosition(value.position);
+      },
+      () => {},
+    );
+    return () => {
+      active = false;
+    };
+  }, [native, preferences]);
   useEffect(() => {
     if (root.current && toolbar.current)
       return bindToolbarVisibility(root.current, toolbar.current);
@@ -206,9 +249,9 @@ export default function PlaybackWindow({
       setExpanded((value) => !value);
       return;
     }
-    await ((await nativeWindow.isMaximized())
-      ? nativeWindow.unmaximize()
-      : nativeWindow.maximize());
+    const maximized = await nativeWindow.isMaximized();
+    if (!maximized) await onMoveEnd?.().catch((error: unknown) => notice(playbackError(error)));
+    await (maximized ? nativeWindow.unmaximize() : nativeWindow.maximize());
     await refreshWindowState();
   };
   return (
@@ -244,8 +287,13 @@ export default function PlaybackWindow({
           onPointerDown={(event) => {
             if (native) {
               if (event.button === 0) {
-                nativeDrag.current = startPlayerDrag(event, maximized, () =>
-                  notice("窗口拖动失败，请重试。"),
+                nativeDrag.current = startPlayerDrag(
+                  event,
+                  maximized,
+                  () => notice("窗口拖动失败，请重试。"),
+                  () => {
+                    if (onMoveEnd) report(onMoveEnd());
+                  },
                 );
                 event.currentTarget.setPointerCapture(event.pointerId);
               }
@@ -263,23 +311,28 @@ export default function PlaybackWindow({
             }
             if (!drag.current) return;
             setPosition({
-              x: Math.max(
-                0,
-                Math.min(
-                  window.innerWidth - 160,
-                  drag.current.left + event.clientX - drag.current.x,
+              x: Math.round(
+                Math.max(
+                  0,
+                  Math.min(
+                    window.innerWidth - 160,
+                    drag.current.left + event.clientX - drag.current.x,
+                  ),
                 ),
               ),
-              y: Math.max(
-                34,
-                Math.min(
-                  window.innerHeight - 80,
-                  drag.current.top + event.clientY - drag.current.y,
+              y: Math.round(
+                Math.max(
+                  34,
+                  Math.min(
+                    window.innerHeight - 80,
+                    drag.current.top + event.clientY - drag.current.y,
+                  ),
                 ),
               ),
             });
           }}
           onPointerUp={() => {
+            if (!native && drag.current) report(preferences.update({ position }).then(() => {}));
             nativeDrag.current?.finish();
             nativeDrag.current = undefined;
             drag.current = null;
@@ -299,10 +352,12 @@ export default function PlaybackWindow({
             }[event.key];
             if (!expanded && step) {
               event.preventDefault();
-              setPosition((old) => ({
-                x: Math.max(0, Math.min(innerWidth - 160, old.x + step[0]!)),
-                y: Math.max(34, Math.min(innerHeight - 80, old.y + step[1]!)),
-              }));
+              const next = {
+                x: Math.max(0, Math.min(innerWidth - 160, position.x + step[0]!)),
+                y: Math.max(34, Math.min(innerHeight - 80, position.y + step[1]!)),
+              };
+              setPosition(next);
+              report(preferences.update({ position: next }).then(() => {}));
             }
           }}
         >
@@ -342,14 +397,23 @@ export default function PlaybackWindow({
           <UnstyledButton
             className="window-button close"
             aria-label={t("关闭播放器")}
-            onClick={() => report(onClose ? onClose() : service.close())}
+            onClick={() =>
+              report(
+                onClose
+                  ? onClose()
+                  : preferences
+                      .flush()
+                      .catch((error: unknown) => notice(playbackError(error)))
+                      .then(() => service.close()),
+              )
+            }
           >
             <Icon name="close" size={16} />
           </UnstyledButton>
         </Group>
       </header>
       {snapshot.media ? (
-        <Media key={snapshot.revision} media={snapshot.media} />
+        <Media key={snapshot.revision} media={snapshot.media} preferences={preferences} />
       ) : (
         <Stack
           className="playback-placeholder"

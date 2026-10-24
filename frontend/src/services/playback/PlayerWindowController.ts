@@ -7,6 +7,8 @@ import { playerChannelName } from "./windowChannel";
 import type { PlayerCommand, PlayerWindowMessage } from "./windowChannel";
 import type { PlaybackHistoryStore } from "./PlaybackHistory";
 import { servePlaybackHistory } from "./historyChannel";
+import { servePlayerPreferences } from "./preferencesChannel";
+import type { PlayerPreferencesPort } from "./PlayerPreferences";
 import { logEvent } from "../logging/events";
 import {
   assertPlaybackAllowed,
@@ -31,6 +33,7 @@ interface Session {
   heartbeat: ReturnType<typeof setInterval>;
   snapshot: PlaybackSnapshot;
   closeHistory?: () => void;
+  closePreferences?: () => void;
 }
 
 /** 主窗口只发送播放指令；媒体、挂载与传输进程全部属于播放器子窗口。 */
@@ -47,6 +50,7 @@ export class PlayerWindowController implements PlaybackController {
     private launch: (id: string) => Promise<void>,
     private windowMode: () => PlaybackWindowMode = () => "reuse",
     private historyStore?: PlaybackHistoryStore,
+    private preferences?: PlayerPreferencesPort,
   ) {
     this.unsubscribePrivacy = subscribePrivacySession(() => {
       for (const session of this.sessions)
@@ -82,6 +86,7 @@ export class PlayerWindowController implements PlaybackController {
     clearInterval(session.heartbeat);
     session.channel.close();
     session.closeHistory?.();
+    session.closePreferences?.();
     for (const pending of session.pending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error("播放器窗口已关闭。"));
@@ -114,6 +119,7 @@ export class PlayerWindowController implements PlaybackController {
       failed: (error) => failed(error),
       snapshot,
       closeHistory: this.historyStore ? servePlaybackHistory(id, this.historyStore) : undefined,
+      closePreferences: this.preferences ? servePlayerPreferences(id, this.preferences) : undefined,
       // 不传文件地址、令牌或任何大数据；最小化时也维持窗口归属。
       heartbeat: setInterval(() => {
         const now = performance.now();

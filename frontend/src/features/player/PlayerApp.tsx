@@ -6,6 +6,10 @@ import type { Runtime } from "../../platform/neutralino/bootstrap";
 import { createPlaybackService } from "../../platform/neutralino/playback";
 import { connectPlayerWindow } from "../../platform/neutralino/playerWindow";
 import { logEvent } from "../../services/logging/events";
+import {
+  createPlayerPreferences,
+  trackPlayerWindowPosition,
+} from "../../platform/neutralino/playerPreferences";
 
 export function createPlayerView(id: string, runtime: Runtime) {
   document.documentElement.dataset.windowKind = "player";
@@ -24,7 +28,15 @@ export function createPlayerView(id: string, runtime: Runtime) {
     };
   };
   const getMessage = () => message;
-  const close = connectPlayerWindow(id, service, notice);
+  const preferences = createPlayerPreferences(runtime);
+  const savePosition = trackPlayerWindowPosition(preferences, notice);
+  const close = connectPlayerWindow(id, service, notice, async () => {
+    try {
+      await savePosition();
+    } finally {
+      await preferences.flush();
+    }
+  });
   function PlayerView() {
     useLocale();
     const snapshot = useSyncExternalStore(service.subscribe, service.getSnapshot);
@@ -37,6 +49,7 @@ export function createPlayerView(id: string, runtime: Runtime) {
           notice={notice}
           native
           onClose={close}
+          onMoveEnd={savePosition}
         />
         {error && (
           <Alert

@@ -6,6 +6,7 @@ export function startPlayerDrag(
   pointer: { screenX: number; screenY: number; clientX: number; clientY: number },
   maximized: boolean,
   report: (error: unknown) => void,
+  onMoved?: () => void,
 ) {
   const scale = window.devicePixelRatio;
   const initial = { x: pointer.screenX, y: pointer.screenY };
@@ -15,6 +16,13 @@ export function startPlayerDrag(
   let moving = false;
   let ended = false;
   let moved = false;
+  let reported = false;
+  const finished = () => {
+    if (ended && moved && !moving && !target && !reported) {
+      reported = true;
+      onMoved?.();
+    }
+  };
   const flush = async () => {
     if (moving) return;
     moving = true;
@@ -44,9 +52,11 @@ export function startPlayerDrag(
     } catch (error) {
       target = undefined;
       ended = true;
+      reported = true;
       report(error);
     } finally {
       moving = false;
+      finished();
     }
   };
   return {
@@ -59,10 +69,12 @@ export function startPlayerDrag(
     },
     finish() {
       ended = true;
+      finished();
     },
     cancel() {
       ended = true;
       target = undefined;
+      reported = true;
     },
   };
 }

@@ -7,6 +7,7 @@ import type { PlaybackWindowMode } from "../../services/playback/PlaybackSetting
 import { playerChannelName } from "../../services/playback/windowChannel";
 import type { PlayerWindowMessage } from "../../services/playback/windowChannel";
 import { createPlaybackHistoryStore } from "./playbackHistory";
+import { createPlayerPreferences, readPlayerWindowPosition } from "./playerPreferences";
 import { captureUnhandledErrors, setLogSink } from "../../services/logging/events";
 import {
   assertPlaybackAllowed,
@@ -20,11 +21,14 @@ export function createPlayerWindowController(windowMode: () => PlaybackWindowMod
   const controller = new PlayerWindowController(
     async (id) => {
       assertPlaybackAllowed();
+      const privacyVersion = privacyRevision();
       // 使用主页面 origin，以同源 BroadcastChannel 通信；每个窗口仍连接自己的官方原生 API。
       const url = new URL(location.pathname, location.origin);
       url.searchParams.set("javmPlayer", id);
       const args = (window as unknown as { NL_ARGS: string[] }).NL_ARGS;
       const resourceMode = args.find((arg) => /^--res-mode=(directory|bundle|embedded)$/.test(arg));
+      const position = await readPlayerWindowPosition();
+      assertPlaybackAllowed(privacyVersion);
       await nativeWindow.create(url.href, {
         title: t("JAVM 播放器"),
         hidden: true,
@@ -32,7 +36,8 @@ export function createPlayerWindowController(windowMode: () => PlaybackWindowMod
         height: 600,
         minWidth: 440,
         minHeight: 300,
-        center: true,
+        center: !position,
+        ...(position ?? {}),
         borderless: true,
         maximizable: true,
         resizable: true,
@@ -43,6 +48,7 @@ export function createPlayerWindowController(windowMode: () => PlaybackWindowMod
     },
     windowMode,
     createPlaybackHistoryStore(),
+    createPlayerPreferences("desktop"),
   );
   window.addEventListener("pagehide", () => {
     void controller.close().catch(() => {});
@@ -55,6 +61,7 @@ export function connectPlayerWindow(
   id: string,
   service: PlaybackController,
   notice: (message: string) => void,
+  beforeClose?: () => Promise<void>,
 ) {
   const channel = new BroadcastChannel(playerChannelName(id));
   const send = (message: PlayerWindowMessage) => channel.postMessage(message);
@@ -88,6 +95,7 @@ export function connectPlayerWindow(
     closing = (async () => {
       try {
         await service.close();
+        await beforeClose?.().catch((error: unknown) => notice(playbackError(error)));
         send({ type: "closed" });
         // 让同源消息先送达主窗口，再退出独立宿主。
         await new Promise((resolve) => setTimeout(resolve, 100));
