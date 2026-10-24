@@ -64,6 +64,11 @@ export function initializeStartup() {
       .then(async ({ createApplicationFeedback }) => {
         const service = createApplicationFeedback("NL_PORT" in window ? "desktop" : "browser");
         if (!service) throw new Error("启动诊断仅在桌面端可用。");
+        await service.initialize();
+        if (!service.getSnapshot().enabled) {
+          setStatus(service.getSnapshot().settingsError || "问题反馈已关闭，可在设置中重新开启。");
+          return;
+        }
         const id = service.capture({
           module: "app",
           title: "应用启动失败",

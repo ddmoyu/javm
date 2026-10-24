@@ -1,7 +1,7 @@
 import { filesystem, os } from "@neutralinojs/lib";
 import { LogService } from "../../services/logging/LogService";
 import { RotatingLogStore, isLogFile } from "../../services/logging/RotatingLogStore";
-import { captureUnhandledErrors, logEvent, setLogSink } from "../../services/logging/events";
+import { logEvent, setLogSink } from "../../services/logging/events";
 import type { Runtime } from "./bootstrap";
 import packageInfo from "../../../../package.json";
 
@@ -47,7 +47,6 @@ export function createApplicationLogs(runtime: Runtime) {
       service.flush,
       () => !service!.getSnapshot().error && !service!.getSnapshot().dropped,
     );
-    captureUnhandledErrors();
     service.initialize();
     logEvent("info", "app", "started", "应用已启动", { version: packageInfo.version });
   }

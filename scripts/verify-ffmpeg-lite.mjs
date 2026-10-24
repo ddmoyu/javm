@@ -6,6 +6,8 @@ import path from "node:path";
 
 // A release must never silently fall back to a full development FFmpeg build.
 export async function verifyFfmpegLite(directory, expected, env = process.env, buildReceipt) {
+  const sourceVersion = /^(\d+\.\d+\.\d+)-javm-lite-\d+$/.exec(expected.version)?.[1];
+  if (!sourceVersion) throw new Error("FFmpeg lite source version is invalid.");
   const receipt =
     buildReceipt ?? JSON.parse(await readFile(path.join(directory, "ffmpeg-lite.json"), "utf8"));
   if (receipt.profile !== expected.profile || receipt.source.sha256 !== expected.sha256)
@@ -37,7 +39,7 @@ export async function verifyFfmpegLite(directory, expected, env = process.env, b
     )
       throw new Error(`FFmpeg lite executable mismatch: ${name}`);
     const version = run(name, "-version");
-    if (!version.startsWith(`${name.slice(0, -4)} version 8.0.1 `))
+    if (!version.startsWith(`${name.slice(0, -4)} version ${sourceVersion} `))
       throw new Error(`Unexpected FFmpeg source version: ${name}`);
     for (const flag of [
       "--disable-everything",

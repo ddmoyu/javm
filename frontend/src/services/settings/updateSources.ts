@@ -1,9 +1,10 @@
-export type UpdateMirror = "auto" | "official" | "gh-proxy" | "ghfast" | "custom";
+export type UpdateMirror = "auto" | "official" | "gh-proxy" | "ghfast" | "ghproxy-net" | "custom";
 export const updateMirrorOptions = [
   { value: "auto", label: "自动（官方优先）" },
   { value: "official", label: "仅 GitHub 官方源" },
   { value: "gh-proxy", label: "GH-Proxy（社区镜像）" },
   { value: "ghfast", label: "GHFast（社区镜像）" },
+  { value: "ghproxy-net", label: "GHProxy.net（社区镜像）" },
   { value: "custom", label: "自定义镜像" },
 ] as const;
 export function isUpdateMirror(value: unknown): value is UpdateMirror {
@@ -27,9 +28,11 @@ export function updateSources(mirror: UpdateMirror, custom = ""): string[] {
       return ["https://gh-proxy.com/", ""];
     case "ghfast":
       return ["https://ghfast.top/", ""];
+    case "ghproxy-net":
+      return ["https://ghproxy.net/", ""];
     case "custom":
       return [normalizeUpdateMirror(custom), ""];
     default:
-      return ["", "https://gh-proxy.com/", "https://ghfast.top/"];
+      return ["", "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/"];
   }
 }

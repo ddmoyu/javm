@@ -3,7 +3,7 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { Alert, Button, Code, Group, Modal, ScrollArea, Select, Stack, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
 import type { LogEntry } from "../../services/logging/events";
-import { SettingCard, SettingRow } from "./SettingsPrimitives";
+import { SettingCard, SettingFields, SettingRow } from "./SettingsPrimitives";
 
 const levels = { debug: "调试", info: "信息", warn: "警告", error: "错误" };
 export function LogsPanel() {
@@ -55,15 +55,15 @@ export function LogsPanel() {
             {t("查看日志")}
           </Button>
         </SettingRow>
-        {current.error && (
-          <Alert color="red" mb="sm">
-            {t(current.error)}
-          </Alert>
-        )}
-        {!current.available && (
-          <Text size="xs" c="dimmed" pb="sm">
-            {t("请在桌面端查看日志。")}
-          </Text>
+        {(current.error || !current.available) && (
+          <SettingFields>
+            {current.error && <Alert color="red">{t(current.error)}</Alert>}
+            {!current.available && (
+              <Text size="xs" c="dimmed">
+                {t("请在桌面端查看日志。")}
+              </Text>
+            )}
+          </SettingFields>
         )}
       </SettingCard>
       <Modal

@@ -45,8 +45,12 @@ const emptyScrapes = {
 
 export function Downloads() {
   useLocale();
-  const { downloads, scraping, add, notice, page, playSource, go, showScrapeQueue } =
+  const { downloads, scraping, feedback, add, notice, page, playSource, go, showScrapeQueue } =
     useWorkspace();
+  const feedbackEnabled = useSyncExternalStore(
+    feedback?.subscribe ?? ignoreDownloadUpdates,
+    () => feedback?.getSnapshot().enabled ?? false,
+  );
   const scrapeState = useSyncExternalStore(
     page === "downloads" && scraping ? scraping.subscribe : ignoreDownloadUpdates,
     scraping?.getSnapshot ?? (() => emptyScrapes),
@@ -137,7 +141,7 @@ export function Downloads() {
   };
   const menuItems = (task: DownloadTask) => (
     <>
-      {task.status === "failed" && (
+      {task.status === "failed" && feedbackEnabled && (
         <Menu.Item
           leftSection={<Icon name="alert" />}
           onClick={() => reportDownloadFailure(task, true)}

@@ -1,7 +1,7 @@
 import { t, useLocale } from "../../i18n/index";
 import { useId } from "react";
 import type { ReactNode } from "react";
-import { Group, Paper, Text } from "@mantine/core";
+import { Group, Paper, Stack, Text } from "@mantine/core";
 import { Icon } from "../../components/icons";
 import type { IconName } from "../../components/icons";
 import classes from "./Settings.module.css";
@@ -59,6 +59,15 @@ export function SettingRow({
       </div>
       <div className={classes.rowControl}>{children}</div>
     </div>
+  );
+}
+
+// 表单、说明与操作区使用同一套留白；设置行已自带上下内边距。
+export function SettingFields({ children }: { children: ReactNode }) {
+  return (
+    <Stack className={classes.fields} gap="md">
+      {children}
+    </Stack>
   );
 }
 

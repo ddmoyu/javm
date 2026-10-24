@@ -7,10 +7,10 @@
     "sha256": "fa8397f7ed8bb3fe877245ed7a2063c8b03cc6234e9c40aa8cf177fbe9051bda"
   },
   "openssl": {
-    "version": "3.5.8",
-    "url": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz",
-    "file": "openssl-3.5.8.tar.gz",
-    "sha256": "a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+    "version": "4.1.0",
+    "url": "https://github.com/openssl/openssl/releases/download/openssl-4.1.0/openssl-4.1.0.tar.gz",
+    "file": "openssl-4.1.0.tar.gz",
+    "sha256": "50c17baf54cb008f6ce42d50deb4b28050a1aad711636cabd4b241c7e90cc2fd"
   },
   "appimagetool": {
     "version": "1.9.1",

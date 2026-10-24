@@ -51,6 +51,7 @@ vi.mock("../frontend/src/platform/neutralino/updateStartup", () => ({
 vi.mock("../frontend/src/platform/neutralino/lifecycle", () => ({ exitApplication: vi.fn() }));
 
 const latest = "https://github.com/ddmoyu/javm/releases/latest/download/JAVM-update.json";
+const beta = "https://github.com/ddmoyu/javm/releases/download/updates-beta/JAVM-update.json";
 const list = "https://api.github.com/repos/ddmoyu/javm/releases?per_page=30&page=";
 const manifest = (version: string) =>
   `https://github.com/ddmoyu/javm/releases/download/v${version}/JAVM-update.json`;
@@ -271,7 +272,7 @@ it("官方源限流后自动选择社区镜像，下载使用相同的来源顺�
   expect(native.rpc).toHaveBeenCalledWith(
     "update.download",
     expect.objectContaining({
-      sources: ["", "https://gh-proxy.com/", "https://ghfast.top/"],
+      sources: ["", "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/"],
       rollback: signed("1.0.5"),
     }),
   );
@@ -314,24 +315,108 @@ it("当前版本也必须验签，不能把未验签的响应当作无更新", a
   expect(value.getSnapshot().error).toBe("签名不匹配");
   expect(value.getSnapshot().checked).toBe(false);
 });
-it("Beta 保留分页及稳定版比较规则，忽略组件与 Alpha", async () => {
+it.each([
+  ["1.0.5", "1.0.6-beta.10", "1.0.6-beta.10"],
+  ["1.0.6-beta.2", "1.0.6", "1.0.6"],
+  ["1.0.6", "1.0.6-beta.99", undefined],
+  ["1.0.6-beta.10", "1.0.6-beta.2", undefined],
+  ["1.0.6-beta.10", "1.0.6-beta.10", undefined],
+])("Beta 静态清单从 %s 检查 %s，保留版本比较且不调用 API", async (current, next, expected) => {
+  native.current = current!;
   native.preferences.channel = "beta";
   native.http.mockImplementation(async (request: HttpRequest) => {
-    if (request.url === list + "1")
-      return respond(request, [
-        { tag_name: "deps-safe", assets: [] },
-        { tag_name: "v9.0.0-alpha.1", prerelease: true, assets: [{ name: "JAVM-update.json" }] },
-        { tag_name: "v1.0.6-beta.2", prerelease: true, assets: [{ name: "JAVM-update.json" }] },
-        { tag_name: "v1.0.6", assets: [{ name: "JAVM-update.json" }] },
-      ]);
-    if (request.url === manifest("1.0.6")) return respond(request, signed("1.0.6"));
+    if (request.url === beta) return respond(request, signed(next!));
     throw new Error("未声明的测试地址");
   });
   const value = await updater();
   await value.check();
-  expect(value.getSnapshot().release?.version).toBe("1.0.6");
+  expect(value.getSnapshot().error).toBe("");
+  expect(value.getSnapshot().release?.version).toBe(expected);
+  expect(native.http.mock.calls.map(([request]) => request.url)).toEqual([beta]);
+  expect(native.rpc).toHaveBeenCalledWith("update.verify", {
+    envelope: signed(next!),
+    version: next,
+    channel: "beta",
+  });
+});
+
+it("Beta 静态清单拒绝 Alpha，缺失入口也不回退 API 或伪装为无更新", async () => {
+  native.preferences.channel = "beta";
+  native.http.mockImplementation(async (request: HttpRequest) =>
+    respond(request, signed("9.0.0-alpha.1")),
+  );
+  const value = await updater();
+  await value.check();
+  expect(value.getSnapshot().error).toBe("更新版本或通道不匹配。");
+  expect(native.rpc.mock.calls.some(([method]) => method === "update.verify")).toBe(false);
+  native.http.mockImplementation(async (request: HttpRequest) => respond(request, {}, 404));
+  await value.check();
+  expect(value.getSnapshot().error).toBe("更新检查失败（HTTP 404）。");
+  expect(value.getSnapshot().checked).toBe(false);
+  expect(native.http.mock.calls.every(([request]) => request.url === beta)).toBe(true);
+});
+
+it("Beta 静态镜像验签失败回退官方，缓存命中仍验证官方签名", async () => {
+  native.preferences.channel = "beta";
+  native.preferences.mirror = "ghproxy-net";
+  native.http.mockImplementation(async (request: HttpRequest) =>
+    respond(request, {
+      ...signed("1.0.6-beta.2"),
+      signature: request.url.startsWith("https://ghproxy.net/") ? "invalid" : "fixture",
+    }),
+  );
+  native.rpc.mockImplementation(
+    async (method: string, params: { envelope?: { signature: string } }) => {
+      if (method === "update.verify") {
+        if (params.envelope?.signature === "invalid") throw new Error("签名不匹配");
+        return asset;
+      }
+      return { phase: "idle" };
+    },
+  );
+  const value = await updater();
+  await value.check();
+  await value.check();
+  expect(value.getSnapshot().error).toBe("");
+  expect(value.getSnapshot().release?.version).toBe("1.0.6-beta.2");
   expect(native.http.mock.calls.map(([request]) => request.url)).toEqual([
-    list + "1",
-    manifest("1.0.6"),
+    "https://ghproxy.net/" + beta,
+    beta,
+    "https://ghproxy.net/" + beta,
   ]);
+  expect(native.rpc.mock.calls.filter(([method]) => method === "update.verify")).toHaveLength(4);
+  expect(JSON.stringify(native.cache)).not.toContain("invalid");
+});
+
+it("GHProxy.net 在前三个来源失败后承担 Beta 检查、更新包和回退包", async () => {
+  native.preferences.channel = "beta";
+  native.preferences.mirror = "auto";
+  native.http.mockImplementation(async (request: HttpRequest) => {
+    if (request.url === "https://ghproxy.net/" + beta)
+      return respond(request, signed("1.0.6-beta.2"));
+    if (request.url === "https://ghproxy.net/" + manifest("1.0.5"))
+      return respond(request, signed("1.0.5"));
+    return respond(request, {}, 429, { "retry-after": "600" });
+  });
+  const value = await updater();
+  await value.check();
+  await value.download();
+  expect(value.getSnapshot().error).toBe("");
+  expect(native.http.mock.calls.map(([request]) => request.url)).toEqual([
+    beta,
+    "https://gh-proxy.com/" + beta,
+    "https://ghfast.top/" + beta,
+    "https://ghproxy.net/" + beta,
+    "https://ghproxy.net/" + manifest("1.0.5"),
+  ]);
+  expect(native.rpc).toHaveBeenCalledWith(
+    "update.download",
+    expect.objectContaining({
+      channel: "beta",
+      envelope: signed("1.0.6-beta.2"),
+      rollback: signed("1.0.5"),
+      sources: ["", "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/"],
+    }),
+  );
+  expect(native.http.mock.calls.every(([request]) => request.timeoutMs === 20_000)).toBe(true);
 });

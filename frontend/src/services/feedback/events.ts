@@ -13,7 +13,7 @@ export interface FailureInput {
   reproduction?: ReproductionContext;
 }
 
-let sink: ((failure: FailureInput, open?: boolean) => string) | undefined;
+let sink: ((failure: FailureInput, open?: boolean) => string | undefined) | undefined;
 export function setFailureSink(next?: typeof sink) {
   sink = next;
 }

@@ -2,14 +2,15 @@ packages:
   - .
 
 overrides:
-  vite@*: npm:@voidzero-dev/vite-plus-core@1.1.0
-  vitest@*: 5.0.3
+  vite@*: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vitest@*: 5.0.5
 
-# Vite+ core 的包版本为 1.1.0，提供 Vite 8 API。仅放行这组已锁定的别名版本。
+# Vite+ core 的包版本为 1.4.0，提供 Vite 8 API。仅放行这组已锁定的别名版本。
 peerDependencyRules:
   allowedVersions:
-    "@vitejs/plugin-react@6.1.2>vite": 1.1.0
-    "vitest@5.0.3>vite": 1.1.0
+    "@vitejs/plugin-react@6.1.2>vite": 1.4.0
+    "vitest@5.0.5>vite": 1.4.0
+    "@vitest/mocker@5.0.5>vite": 1.4.0
 
 # CLI 的可选 WebSocket 加速器使用 JS 回退；es5-ext 的安装提示无需运行。
 allowBuilds:

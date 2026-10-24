@@ -10,12 +10,12 @@
     "disabledFeatures": ["LIBCURL", "LIBMMS", "EXPORT", "GRAPHVIZ", "TRACE"]
   },
   "ffmpeg": {
-    "version": "8.0.1-javm-lite-3",
+    "version": "9.0.2-javm-lite-3",
     "profile": "javm-lite-3",
-    "file": "ffmpeg-8.0.1.tar.xz",
-    "url": "https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz",
-    "sha256": "05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41",
-    "directory": "ffmpeg-8.0.1"
+    "file": "ffmpeg-9.0.2.tar.xz",
+    "url": "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz",
+    "sha256": "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e",
+    "directory": "ffmpeg-9.0.2"
   },
   "ffmpegReference": {
     "version": "javm-ffmpeg-n8.0.1-20260315-153157",
@@ -37,17 +37,17 @@
     "directory": "usr/bin"
   },
   "curl": {
-    "version": "8.22.0-msvc-unicode-schannel",
-    "file": "curl-8.22.0.tar.xz",
-    "url": "https://curl.se/download/curl-8.22.0.tar.xz",
-    "sha256": "f7ef3ae8a22e521f289803fe93543eb64c329b58aa73a9e224dfd915a2a5f4f7",
-    "directory": "curl-8.22.0"
+    "version": "8.23.0-msvc-unicode-schannel",
+    "file": "curl-8.23.0.tar.xz",
+    "url": "https://curl.se/download/curl-8.23.0.tar.xz",
+    "sha256": "8dadd7d2536a314f982ad05a651b713f426bf7d02cc2c76cffb9796f2218e6c5",
+    "directory": "curl-8.23.0"
   },
   "metatube": {
     "version": "v1.4.0",
     "profile": "javm-lite-1",
     "sourceCommit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
-    "toolchain": "go1.25.0",
+    "toolchain": "go1.27.3",
     "file": "metatube-server-v1.4.0-windows-amd64.zip",
     "url": "https://github.com/metatube-community/metatube-server-releases/releases/download/v1.4.0/metatube-server-windows-amd64.zip",
     "sha256": "2c08b0cec781030504c4cd70ececd3618dbf18847ed488ab5e12783dd1d267e6",

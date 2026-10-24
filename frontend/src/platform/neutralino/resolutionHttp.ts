@@ -26,7 +26,7 @@ async function readBounded(path: string, max: number, signal: AbortSignal) {
   check(signal);
   return bytes.buffer;
 }
-export function createResolutionHttp(): ResolutionHttpPort {
+export function createResolutionHttp(maxRequestMs = bounds.requestMs): ResolutionHttpPort {
   return async (request, signal) => {
     check(signal);
     const normalized = normalizeRequest({
@@ -44,7 +44,7 @@ export function createResolutionHttp(): ResolutionHttpPort {
       request.maxBytes > bounds.pageBytes ||
       !Number.isFinite(request.timeoutMs) ||
       request.timeoutMs <= 0 ||
-      request.timeoutMs > bounds.requestMs
+      request.timeoutMs > maxRequestMs
     )
       throw new ResolutionError("invalid_input");
     const range = request.range;

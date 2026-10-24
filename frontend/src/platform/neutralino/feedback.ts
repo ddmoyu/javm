@@ -3,8 +3,10 @@ import type { Runtime } from "./bootstrap";
 import { createApplicationLogs } from "./logging";
 import { copyText } from "./clipboard";
 import { waitForUpdateStartup } from "./updateGate";
+import { nativeSettingsStorage } from "./settingsStorage";
 import { FeedbackService, deadline } from "../../services/feedback/FeedbackService";
 import { setFailureSink } from "../../services/feedback/events";
+import { captureUnhandledErrors } from "../../services/logging/events";
 import type { SystemDetails } from "../../services/feedback/report";
 import { FeedbackJournal, feedbackFileLimit } from "../../services/feedback/persistence";
 import packageInfo from "../../../../package.json";
@@ -125,9 +127,12 @@ export function createApplicationFeedback(runtime: Runtime) {
   if (service) return service;
   const journal = createFeedbackJournal();
   service = new FeedbackService(createApplicationLogs(runtime), {
+    settings: nativeSettingsStorage<{ enabled: boolean }>("javm-feedback-settings-v1"),
     startup: waitForUpdateStartup,
+    listen: captureUnhandledErrors,
     read: journal.read,
     begin: journal.begin,
+    end: journal.end,
     warning: journal.warning,
     write: journal.write,
     system: systemInformation,

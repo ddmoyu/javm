@@ -3,7 +3,6 @@ import {
   UpdateRestartRequiredError,
   type UpdatePreferences,
 } from "../../services/settings/UpdateService";
-import { updateReleases } from "../../services/settings/updateDiscovery";
 import {
   acceptsVersion,
   compareVersions,
@@ -12,6 +11,7 @@ import {
 import {
   UpdateHttp,
   UpdateCheckDeferredError,
+  updateRequestMs,
   type UpdateHttpState,
 } from "../../services/settings/updateHttp";
 import { updateSources } from "../../services/settings/updateSources";
@@ -41,9 +41,9 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
   if (updater) return updater;
   const desktop = runtime === "desktop";
   let installation: UpdateInstallation;
+  const transport = createResolutionHttp(updateRequestMs);
   const http = new UpdateHttp(
-    async (request, signal) =>
-      createResolutionHttp()({ ...request, proxy: await network.getProxy() }, signal),
+    async (request, signal) => transport({ ...request, proxy: await network.getProxy() }, signal),
     desktop
       ? nativeSettingsStorage<UpdateHttpState>("application-update-cache-v1")
       : { read: async () => null, write: async () => {} },
@@ -136,44 +136,20 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
           : { available: false, reason: "请在桌面安装版中检查更新。" });
       },
       async find(channel, signal) {
-        if (channel === "stable") {
-          const result = await fromSources(
-            "https://github.com/ddmoyu/javm/releases/latest/download/JAVM-update.json",
-            signal,
-            (value) => verified(value, channel),
-          );
-          if (!result.asset || compareVersions(result.version, packageInfo.version) <= 0)
-            return null;
-          return {
-            ...result,
-            asset: result.asset,
-            url: `https://github.com/ddmoyu/javm/releases/tag/v${result.version}`,
-            notes: "",
-          };
-        }
-        const releases: unknown[] = [];
-        for (let page = 1; page <= 20; page++) {
-          const items = await fromSources(
-            `https://api.github.com/repos/ddmoyu/javm/releases?per_page=30&page=${page}`,
-            signal,
-            async (value) => {
-              if (!Array.isArray(value)) throw new Error("官方发布列表格式无效。");
-              return value as unknown[];
-            },
-          );
-          releases.push(...items);
-          if (items.length < 30) break;
-          if (page === 20) throw new Error("发布记录过多，请前往官方发布页面检查更新。");
-        }
-        for (const release of updateReleases(releases, packageInfo.version, channel)) {
-          const result = await fromSources(
-            `https://github.com/ddmoyu/javm/releases/download/v${release.version}/JAVM-update.json`,
-            signal,
-            (value) => verified(value, channel, release.version),
-          );
-          if (result.asset) return { ...release, envelope: result.envelope, asset: result.asset };
-        }
-        return null;
+        const result = await fromSources(
+          channel === "stable"
+            ? "https://github.com/ddmoyu/javm/releases/latest/download/JAVM-update.json"
+            : "https://github.com/ddmoyu/javm/releases/download/updates-beta/JAVM-update.json",
+          signal,
+          (value) => verified(value, channel),
+        );
+        if (!result.asset || compareVersions(result.version, packageInfo.version) <= 0) return null;
+        return {
+          ...result,
+          asset: result.asset,
+          url: `https://github.com/ddmoyu/javm/releases/tag/v${result.version}`,
+          notes: "",
+        };
       },
       async download(candidate, signal, progress) {
         const rollback =

@@ -39,6 +39,9 @@ export class FeedbackJournal {
   warning = () => this.message;
   read = async (): Promise<FeedbackState | null> => {
     const names = await this.files.list();
+    this.valid = [];
+    this.incomplete = [];
+    this.message = "";
     const snapshots = names
       .filter((name) => reportName.test(name))
       .sort()
@@ -103,6 +106,15 @@ export class FeedbackJournal {
       JSON.stringify({ schema: 1, session: { ...session, clean: false }, reports: [] }),
     );
     this.marker = name;
+  };
+  end = async () => {
+    const markers = new Set(this.previousMarkers);
+    if (this.marker) markers.add(this.marker);
+    for (const name of markers) {
+      await this.files.remove(name);
+      if (name === this.marker) this.marker = undefined;
+      this.previousMarkers = this.previousMarkers.filter((item) => item !== name);
+    }
   };
   write = async (state: FeedbackState) => {
     if (!state.session.clean) await this.begin(state.session);

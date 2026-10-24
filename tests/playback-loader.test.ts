@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import Hls from "hls.js";
-import type { LoaderCallbacks, LoaderConfiguration, LoaderContext } from "hls.js";
+import { Hls } from "@videojs/hlsjs-video";
+import type {
+  LoaderCallbacks,
+  LoaderConfiguration,
+  LoaderContext,
+} from "../frontend/src/services/playback/hlsLoader";
 import { createHlsLoader } from "../frontend/src/services/playback/hlsLoader";
 
 const config: LoaderConfiguration = {
@@ -16,7 +20,7 @@ const context: LoaderContext = {
   rangeStart: 0,
   rangeEnd: 0,
 };
-const callbacks = (): LoaderCallbacks<LoaderContext> => ({
+const callbacks = (): LoaderCallbacks => ({
   onSuccess: vi.fn(),
   onError: vi.fn(),
   onTimeout: vi.fn(),

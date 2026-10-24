@@ -2,7 +2,7 @@ import "@mantine/core/styles.css";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Button, MantineProvider, Paper, Text } from "@mantine/core";
-import Hls from "hls.js";
+import { Hls } from "@videojs/hlsjs-video";
 import {
   app,
   events,

@@ -5,6 +5,7 @@ import { useWorkspace } from "../../app/state";
 import { createApplicationUpdater } from "../../platform/neutralino/applicationUpdates";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
 import { UpdateMirrorSettings } from "./UpdateMirrorSettings";
+import { SettingFields, SettingRow } from "./SettingsPrimitives";
 export function ApplicationUpdatePanel() {
   useLocale();
   const { runtime, network, notice } = useWorkspace(),
@@ -46,11 +47,17 @@ export function ApplicationUpdatePanel() {
     cancelled: "更新已取消，可继续下载",
   };
   return (
-    <Stack gap="xs">
-      <Text size="sm">{t("当前版本 {0}", service.current)}</Text>
-      <Group align="end">
+    <>
+      <SettingRow
+        title={t("更新通道")}
+        hint={
+          (state.channel === "beta" ? t("接收 Beta 和更新的正式版。") : t("仅接收正式版。")) +
+          " " +
+          t("切换通道不会降级。发现更新后由你下载并确认重启安装。")
+        }
+      >
         <Select
-          label={t("更新通道")}
+          aria-label={t("更新通道")}
           value={state.channel}
           data={localizeOptions([
             { value: "stable", label: "正式版" },
@@ -63,102 +70,104 @@ export function ApplicationUpdatePanel() {
               void service.configure(value, state.automatic).catch(report);
           }}
         />
+      </SettingRow>
+      <SettingRow
+        title={t("自动检查更新")}
+        hint={t("检查结果缓存 15 分钟，连续点击不会重复请求。")}
+      >
         <Switch
-          label={t("自动检查更新")}
+          aria-label={t("自动检查更新")}
           checked={state.automatic}
           disabled={busy || !state.available}
           onChange={(event) =>
             void service.configure(state.channel, event.currentTarget.checked).catch(report)
           }
         />
-      </Group>
-      <Text size="xs" c="dimmed">
-        {state.channel === "beta" ? t("接收 Beta 和更新的正式版。") : t("仅接收正式版。")}
-        {t("切换通道不会降级。发现更新后由你下载并确认重启安装。")}
-      </Text>
-      <UpdateMirrorSettings
-        mirror={state.mirror}
-        customMirror={state.customMirror}
-        disabled={busy || !state.available}
-        save={(mirror, custom) => service.configure(state.channel, state.automatic, mirror, custom)}
-      />
-      <Text size="xs" c="dimmed">
-        {t("检查结果缓存 15 分钟，连续点击不会重复请求。")}
-      </Text>
-      {!state.available && state.initialized && (
-        <Text size="sm" c="dimmed">
-          {state.reason || t("更新服务暂不可用。")}
-        </Text>
-      )}
-      {(state.error || state.status.error) && (
-        <Alert color={phase === "rolled-back" ? "yellow" : "red"}>
-          {t(state.error || state.status.error)}
-        </Alert>
-      )}
-      {state.retryAt > 0 && (
-        <Text component="output" size="xs">
-          {t("可重试时间：{0}", new Date(state.retryAt).toLocaleString())}
-        </Text>
-      )}
-      {phase !== "idle" && (
-        <Text size="sm" role="status">
-          {t(labels[phase])}
-          {version ? ` · ${version}` : ""}
-        </Text>
-      )}
-      {phase === "downloading" && <Progress value={progress} aria-label={t("更新下载进度")} />}
-      {phase === "downloading" && state.status.source && (
-        <Text component="output" size="xs" c="dimmed">
-          {t("下载来源：{0}", state.status.source)}
-        </Text>
-      )}
-      {state.release && phase === "idle" && (
-        <Text size="sm">{t("发现新版本 {0}", state.release.version)}</Text>
-      )}
-      {state.checked && !state.checking && !state.error && !state.release && phase === "idle" && (
-        <Text size="sm">{t("当前通道暂无可安装的更高版本。")}</Text>
-      )}
-      <Group>
-        <Button
-          size="xs"
-          variant="default"
-          disabled={!state.available || busy || phase === "ready"}
-          loading={state.checking}
-          onClick={() => {
-            void service.check().catch(report);
-          }}
-        >
-          {t("检查更新")}
-        </Button>
-        {state.release && !busy && phase !== "ready" && (
-          <Button size="xs" onClick={() => void service.download().catch(report)}>
-            {t("下载 {0}", state.release.version)}
-          </Button>
+      </SettingRow>
+      <SettingFields>
+        <UpdateMirrorSettings
+          mirror={state.mirror}
+          customMirror={state.customMirror}
+          disabled={busy || !state.available}
+          save={(mirror, custom) =>
+            service.configure(state.channel, state.automatic, mirror, custom)
+          }
+        />
+        {!state.available && state.initialized && (
+          <Text size="sm" c="dimmed">
+            {state.reason || t("更新服务暂不可用。")}
+          </Text>
         )}
-        {["downloading", "verifying"].includes(phase) && (
-          <Button size="xs" variant="default" onClick={() => void service.cancel().catch(report)}>
-            {t("取消更新")}
-          </Button>
+        {(state.error || state.status.error) && (
+          <Alert color={phase === "rolled-back" ? "yellow" : "red"}>
+            {t(state.error || state.status.error)}
+          </Alert>
         )}
-        {phase === "ready" && (
-          <Button size="xs" disabled={state.restartRequired} onClick={() => setConfirming(true)}>
-            {t("重启并安装 {0}", version)}
-          </Button>
+        {state.retryAt > 0 && (
+          <Text component="output" size="xs">
+            {t("可重试时间：{0}", new Date(state.retryAt).toLocaleString())}
+          </Text>
         )}
-        {state.release && (
+        {phase !== "idle" && (
+          <Text size="sm" role="status">
+            {t(labels[phase])}
+            {version ? ` · ${version}` : ""}
+          </Text>
+        )}
+        {phase === "downloading" && <Progress value={progress} aria-label={t("更新下载进度")} />}
+        {phase === "downloading" && state.status.source && (
+          <Text component="output" size="xs" c="dimmed">
+            {t("下载来源：{0}", state.status.source)}
+          </Text>
+        )}
+        {state.release && phase === "idle" && (
+          <Text size="sm">{t("发现新版本 {0}", state.release.version)}</Text>
+        )}
+        {state.checked && !state.checking && !state.error && !state.release && phase === "idle" && (
+          <Text size="sm">{t("当前通道暂无可安装的更高版本。")}</Text>
+        )}
+        <Group>
           <Button
             size="xs"
-            variant="subtle"
-            onClick={() =>
-              void openExternalLink(state.release!.url).catch((e) =>
-                notice(e instanceof Error ? e.message : "无法打开发布页面"),
-              )
-            }
+            variant="default"
+            disabled={!state.available || busy || phase === "ready"}
+            loading={state.checking}
+            onClick={() => {
+              void service.check().catch(report);
+            }}
           >
-            {t("查看更新日志")}
+            {t("检查更新")}
           </Button>
-        )}
-      </Group>
+          {state.release && !busy && phase !== "ready" && (
+            <Button size="xs" onClick={() => void service.download().catch(report)}>
+              {t("下载 {0}", state.release.version)}
+            </Button>
+          )}
+          {["downloading", "verifying"].includes(phase) && (
+            <Button size="xs" variant="default" onClick={() => void service.cancel().catch(report)}>
+              {t("取消更新")}
+            </Button>
+          )}
+          {phase === "ready" && (
+            <Button size="xs" disabled={state.restartRequired} onClick={() => setConfirming(true)}>
+              {t("重启并安装 {0}", version)}
+            </Button>
+          )}
+          {state.release && (
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() =>
+                void openExternalLink(state.release!.url).catch((e) =>
+                  notice(e instanceof Error ? e.message : "无法打开发布页面"),
+                )
+              }
+            >
+              {t("查看更新日志")}
+            </Button>
+          )}
+        </Group>
+      </SettingFields>
       <Modal
         opened={confirming}
         onClose={() => setConfirming(false)}
@@ -192,6 +201,6 @@ export function ApplicationUpdatePanel() {
           </Group>
         </Stack>
       </Modal>
-    </Stack>
+    </>
   );
 }

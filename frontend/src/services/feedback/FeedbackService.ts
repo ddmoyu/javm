@@ -29,9 +29,15 @@ export interface FeedbackState {
   reports: FailureReport[];
 }
 export interface FeedbackPort {
+  settings?: {
+    read(): Promise<unknown>;
+    write(value: { enabled: boolean }): Promise<void>;
+  };
   startup?(): Promise<void>;
+  listen?(): () => void;
   read(): Promise<unknown>;
   begin?(session: FeedbackSession): Promise<void>;
+  end?(): Promise<void>;
   warning?(): string;
   write(state: FeedbackState): Promise<void>;
   system(): Promise<SystemDetails>;
@@ -143,15 +149,34 @@ export function restoreFeedbackState(raw: unknown): FeedbackState | null {
 }
 
 export class FeedbackService {
-  private snapshot: { reports: FailureReport[]; activeId?: string; error: string; busy: boolean } =
-    {
-      reports: [],
-      error: "",
-      busy: false,
-    };
+  private snapshot: {
+    reports: FailureReport[];
+    activeId?: string;
+    historyOpened: boolean;
+    error: string;
+    busy: boolean;
+    enabled: boolean;
+    settingsReady: boolean;
+    savingSettings: boolean;
+    settingsError: string;
+  } = {
+    reports: [],
+    historyOpened: false,
+    error: "",
+    busy: false,
+    enabled: true,
+    settingsReady: false,
+    savingSettings: false,
+    settingsError: "",
+  };
   private listeners = new Set<() => void>();
   private session: FeedbackSession;
   private initialized?: Promise<void>;
+  private started?: Promise<void>;
+  private settingsWork?: Promise<void>;
+  private beginning?: Promise<void>;
+  private generation = 0;
+  private disposed = false;
   private ready = false;
   private persistence = true;
   private stopping = false;
@@ -163,7 +188,8 @@ export class FeedbackService {
   private systemWork?: Promise<SystemDetails>;
   private systemAt = 0;
   private lastPrompt = -Infinity;
-  private unobserve: () => void;
+  private unobserve?: () => void;
+  private unlisten?: () => void;
   constructor(
     private logs: LogService,
     private port: FeedbackPort,
@@ -175,7 +201,10 @@ export class FeedbackService {
       clean: false,
       system: {},
     };
-    this.unobserve = logs.observeEntries(this.onLog);
+    // 持久化开关尚未读取时不订阅诊断，也不接受启动期间的反馈。
+    this.snapshot.enabled = !port.settings;
+    this.snapshot.settingsReady = !port.settings;
+    if (!port.settings) this.unobserve = logs.observeEntries(this.onLog);
   }
   getSnapshot = () => this.snapshot;
   subscribe = (listener: () => void) => {
@@ -205,22 +234,113 @@ export class FeedbackService {
   }
   initialize() {
     return (this.initialized ??= (async () => {
+      if (this.port.settings) {
+        try {
+          const saved = await this.port.settings.read();
+          if (
+            saved !== null &&
+            (typeof saved !== "object" ||
+              !("enabled" in saved) ||
+              typeof saved.enabled !== "boolean")
+          )
+            throw new Error("反馈设置格式无效");
+          if (this.disposed) return;
+          this.publish({ enabled: saved === null || saved.enabled === true, settingsReady: true });
+        } catch {
+          this.publish({
+            enabled: false,
+            settingsReady: true,
+            settingsError: "无法读取反馈设置，反馈与崩溃记录暂未启用；请重新设置。",
+          });
+        }
+      }
+      if (this.snapshot.enabled && !this.disposed) await this.start();
+    })());
+  }
+  async setEnabled(enabled: boolean) {
+    if (this.settingsWork) throw new Error("正在保存反馈设置，请稍候。");
+    this.publish({ savingSettings: true });
+    this.settingsWork = (async () => {
+      try {
+        await this.initialize();
+        if (this.disposed) return;
+        try {
+          await this.port.settings?.write({ enabled });
+        } catch (error) {
+          this.publish({ settingsError: "反馈设置保存失败，仍使用原设置，请重试。" });
+          throw error;
+        }
+        const changed = enabled !== this.snapshot.enabled;
+        this.publish({
+          enabled,
+          settingsError: "",
+          ...(!enabled ? { activeId: undefined, historyOpened: false } : {}),
+        });
+        if (!changed) return;
+        if (enabled) {
+          // 重新开启从当前时刻开始，不追报关闭期间或遗留标记对应的异常退出。
+          await this.start(false);
+        } else {
+          this.stopCollecting();
+          this.started = undefined;
+          this.systemWork = undefined;
+          this.publish({
+            reports: this.snapshot.reports.map((item) => ({ ...item, complete: true })),
+          });
+          try {
+            // 已发出的写入可能仍会建立标记，必须等它结束后再清理。
+            await this.beginning?.catch(() => {});
+            await this.writing;
+            await this.port.end?.();
+          } catch {
+            this.publish({
+              settingsError: "反馈已关闭，但运行标记清理失败；重新开启时不会补报旧的异常退出。",
+            });
+          }
+        }
+      } finally {
+        this.settingsWork = undefined;
+        this.publish({ savingSettings: false });
+      }
+    })();
+    return this.settingsWork;
+  }
+  private isActive(generation: number) {
+    return !this.disposed && this.snapshot.enabled && this.generation === generation;
+  }
+  private start(recoverPrevious = true) {
+    if (this.started) return this.started;
+    const generation = ++this.generation;
+    this.persistence = true;
+    this.lastPrompt = -Infinity;
+    this.session = { ...this.session, startedAt: new Date(this.now()).toISOString(), clean: false };
+    return (this.started = (async () => {
       // 更新试运行的门闩不是 I/O 故障，不能按诊断超时禁用本次持久化。
       await this.port.startup?.();
+      if (!this.isActive(generation)) return;
+      this.unobserve ??= this.logs.observeEntries(this.onLog);
+      this.unlisten ??= this.port.listen?.();
       try {
         const saved = restoreFeedbackState(await deadline(this.port.read()));
+        if (!this.isActive(generation)) return;
         // 在采集系统信息、旧日志之前留下独立标记，初始化期间退出也可恢复。
         try {
-          await deadline(this.port.begin?.(this.session) ?? Promise.resolve());
+          this.beginning = this.port.begin?.(this.session) ?? Promise.resolve();
+          await deadline(this.beginning);
         } catch {
           // 标记写入暂时失败不代表历史不可读；下一次快照写入会重试建立标记。
           this.publish({ error: "运行标记保存失败，本次反馈仍可复制；保存诊断时将重试。" });
         }
+        if (!this.isActive(generation)) return;
         if (this.port.warning?.()) this.publish({ error: this.port.warning() });
         if (saved) {
-          this.publish({ reports: this.prune([...this.snapshot.reports, ...saved.reports]) });
-          if (!saved.session.clean) {
+          const reports = new Map(
+            [...saved.reports, ...this.snapshot.reports].map((item) => [item.id, item]),
+          );
+          this.publish({ reports: this.prune([...reports.values()]) });
+          if (recoverPrevious && !saved.session.clean) {
             const recent = await deadline(this.logs.recent()).catch(() => []);
+            if (!this.isActive(generation)) return;
             const previous = recent
               .filter((entry) => entry.session === saved.session.id)
               .sort((a, b) => a.sequence - b.sequence);
@@ -229,13 +349,15 @@ export class FeedbackService {
               title: "上次未正常退出",
               message: `上次会话开始于 ${saved.session.startedAt}，没有留下正常退出标记。可能是程序崩溃、强制结束或断电；仅凭该标记无法确定原因。${previous.at(-1) ? `最后可用日志时间：${previous.at(-1)!.time}。` : "没有找到上次会话日志。"}`,
             });
-            this.finish(id);
-            this.update(id, {
-              session: saved.session.id,
-              system: saved.session.system,
-              before: logExcerpt(previous),
-              after: "",
-            });
+            if (id) {
+              this.finish(id);
+              this.update(id, {
+                session: saved.session.id,
+                system: saved.session.system,
+                before: logExcerpt(previous),
+                after: "",
+              });
+            }
           }
         }
       } catch {
@@ -245,7 +367,10 @@ export class FeedbackService {
           error: "历史反馈无法读取，原文件已保留。本次反馈仍可复制，但无法保存到下次启动。",
         });
       }
-      this.session.system = await this.system();
+      if (!this.isActive(generation)) return;
+      const system = await this.system();
+      if (!this.isActive(generation)) return;
+      this.session.system = system;
       this.ready = true;
       this.scheduleSave();
       this.maintenance = setInterval(() => {
@@ -268,7 +393,9 @@ export class FeedbackService {
       .sort((a, b) => b.time.localeCompare(a.time))
       .slice(0, feedbackPolicy.reports);
   }
-  capture = (input: FailureInput, open = false): string => {
+  capture = (input: FailureInput, open = false): string | undefined => {
+    if (!this.snapshot.enabled || this.disposed) return undefined;
+    const generation = this.generation;
     const failure = cleanInput(input);
     const previous = this.snapshot.reports.find(
       (item) =>
@@ -325,7 +452,11 @@ export class FeedbackService {
       }
     }
     const shouldOpen =
-      open || (!this.stopping && !this.snapshot.activeId && this.now() - this.lastPrompt >= 30000);
+      open ||
+      (!this.stopping &&
+        !this.snapshot.historyOpened &&
+        !this.snapshot.activeId &&
+        this.now() - this.lastPrompt >= 30000);
     if (shouldOpen) this.lastPrompt = this.now();
     this.publish({ reports, ...(shouldOpen ? { activeId: report.id } : {}) });
     if (!historical)
@@ -334,6 +465,7 @@ export class FeedbackService {
         setTimeout(() => this.finish(report.id), feedbackPolicy.followMs),
       );
     void this.system().then((system) => {
+      if (!this.isActive(generation)) return;
       const current = this.snapshot.reports.find((item) => item.id === report.id);
       if (current?.session === this.session.id)
         this.update(report.id, { system: { ...report.system, ...system } });
@@ -342,6 +474,7 @@ export class FeedbackService {
     return report.id;
   };
   private onLog = (entry: LogEntry) => {
+    if (!this.snapshot.enabled || this.disposed) return;
     for (const id of this.collecting.keys()) {
       const report = this.snapshot.reports.find((item) => item.id === id);
       if (!report || !relatedLog(entry, report.taskId, report.metadata?.queryId)) continue;
@@ -358,18 +491,26 @@ export class FeedbackService {
     this.collecting.delete(id);
     this.update(id, { complete: true });
   }
-  open = (id: string) => {
+  open = (id: string | undefined) => {
+    if (!this.snapshot.enabled || this.disposed || !id) return;
     this.publish({ activeId: id });
+  };
+  openHistory = () => {
+    if (!this.snapshot.enabled || this.disposed || this.snapshot.savingSettings) return;
+    this.publish({ historyOpened: true, activeId: undefined });
+  };
+  closeHistory = () => {
+    this.publish({ historyOpened: false, activeId: undefined });
   };
   dismiss = () => {
     this.publish({ activeId: undefined });
   };
-  preview(id: string) {
+  preview(id: string | undefined) {
     const report = this.snapshot.reports.find((item) => item.id === id);
     return report ? formatReport(report) : "";
   }
-  async submit(id: string, openIssue = true) {
-    if (this.snapshot.busy) return "";
+  async submit(id: string | undefined, openIssue = true) {
+    if (this.snapshot.busy || !this.snapshot.enabled || this.disposed) return "";
     this.publish({ busy: true });
     try {
       const text = this.preview(id);
@@ -379,6 +520,7 @@ export class FeedbackService {
       } catch {
         throw new Error("复制失败，未打开 GitHub。请重试，或从下方预览手动复制。");
       }
+      if (!this.snapshot.enabled || this.disposed) return "";
       if (openIssue) {
         try {
           await deadline(this.port.open(issuesUrl));
@@ -394,6 +536,7 @@ export class FeedbackService {
     }
   }
   private scheduleSave() {
+    if (!this.snapshot.enabled || this.disposed) return;
     this.dirty = true;
     if (!this.ready || !this.persistence || this.saveTimer || this.writing) return;
     this.saveTimer = setTimeout(() => {
@@ -423,9 +566,12 @@ export class FeedbackService {
     return this.writing;
   }
   async prepareExit() {
+    await this.settingsWork?.catch(() => {});
     this.stopping = true;
+    if (this.snapshot.settingsReady && !this.snapshot.enabled) return;
     for (const id of [...this.collecting.keys()]) this.finish(id);
     await deadline(this.initialize()).catch(() => {});
+    if (!this.snapshot.enabled) return;
     this.session.clean = true;
     this.dirty = true;
     clearTimeout(this.saveTimer);
@@ -440,6 +586,7 @@ export class FeedbackService {
   }
   async resumeAfterFailedExit() {
     this.stopping = false;
+    if (!this.snapshot.enabled || this.disposed) return;
     this.session.clean = false;
     this.dirty = true;
     clearTimeout(this.saveTimer);
@@ -452,12 +599,23 @@ export class FeedbackService {
       })(),
     ).catch(() => {});
   }
-  dispose() {
+  private stopCollecting() {
+    ++this.generation;
     this.ready = false;
-    this.unobserve();
+    this.dirty = false;
+    this.unobserve?.();
+    this.unobserve = undefined;
+    this.unlisten?.();
+    this.unlisten = undefined;
     clearInterval(this.maintenance);
+    this.maintenance = undefined;
     clearTimeout(this.saveTimer);
+    this.saveTimer = undefined;
     for (const timer of this.collecting.values()) clearTimeout(timer);
     this.collecting.clear();
+  }
+  dispose() {
+    this.disposed = true;
+    this.stopCollecting();
   }
 }

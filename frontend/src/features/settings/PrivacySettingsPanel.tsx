@@ -6,7 +6,7 @@ import { createPrivacyService } from "../../platform/neutralino/privacy";
 import { defaultPrivacySettings } from "../../services/privacy/PrivacyService";
 import type { PrivacySettings } from "../../services/privacy/PrivacyService";
 import type { PrivacyShortcut } from "../../services/privacy/shortcuts";
-import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
+import { SettingCard, SettingFields, SettingNote, SettingRow } from "./SettingsPrimitives";
 
 function ShortcutEditor({
   label,
@@ -152,40 +152,38 @@ export function PrivacySettingsPanel() {
             onChange={(globalShortcut) => setDraft({ ...draft, globalShortcut })}
           />
         </SettingRow>
-        <Group justify="flex-end" mt="sm">
-          <Button
-            variant="default"
-            disabled={snapshot.busy}
-            onClick={() =>
-              setDraft({
-                ...draft,
-                localShortcut: defaultPrivacySettings.localShortcut,
-                globalShortcut: defaultPrivacySettings.globalShortcut,
-              })
-            }
-          >
-            {t("恢复默认快捷键")}
-          </Button>
-          <Button
-            loading={snapshot.busy}
-            onClick={() => perform(() => service.saveSettings(draft))}
-          >
-            {t("检测冲突并保存")}
-          </Button>
-        </Group>
-        <SettingNote>
-          {t(
-            "最多两个按键。检测本应用保留快捷键及系统全局热键占用；其他软件自己的窗口内快捷键无法由系统统一查询。冲突时保留原设置。",
-          )}
-        </SettingNote>
-        {snapshot.shortcutError && (
-          <Alert color="red" mt="sm">
-            {t(snapshot.shortcutError)}
-          </Alert>
-        )}
+        <SettingFields>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              disabled={snapshot.busy}
+              onClick={() =>
+                setDraft({
+                  ...draft,
+                  localShortcut: defaultPrivacySettings.localShortcut,
+                  globalShortcut: defaultPrivacySettings.globalShortcut,
+                })
+              }
+            >
+              {t("恢复默认快捷键")}
+            </Button>
+            <Button
+              loading={snapshot.busy}
+              onClick={() => perform(() => service.saveSettings(draft))}
+            >
+              {t("检测冲突并保存")}
+            </Button>
+          </Group>
+          <SettingNote>
+            {t(
+              "最多两个按键。检测本应用保留快捷键及系统全局热键占用；其他软件自己的窗口内快捷键无法由系统统一查询。冲突时保留原设置。",
+            )}
+          </SettingNote>
+          {snapshot.shortcutError && <Alert color="red">{t(snapshot.shortcutError)}</Alert>}
+        </SettingFields>
       </SettingCard>
       <SettingCard title={t("密码与锁屏")} icon="lock">
-        <Stack gap="sm" py="sm">
+        <SettingFields>
           {snapshot.hasPassword && (
             <PasswordInput
               label={t("当前密码")}
@@ -235,7 +233,7 @@ export function PrivacySettingsPanel() {
               {t(snapshot.hasPassword ? "修改密码" : "设置密码")}
             </Button>
           </Group>
-        </Stack>
+        </SettingFields>
         <SettingRow title={t("启动时需要密码")}>
           <Switch
             aria-label={t("启动时需要密码")}
@@ -261,11 +259,13 @@ export function PrivacySettingsPanel() {
             {t("锁定应用")}
           </Button>
         </SettingRow>
-        <SettingNote>
-          {t(
-            "请先设置密码，再分别选择启动锁和老板键恢复锁。此功能保护应用界面，不加密磁盘中的媒体文件和数据库。",
-          )}
-        </SettingNote>
+        <SettingFields>
+          <SettingNote>
+            {t(
+              "请先设置密码，再分别选择启动锁和老板键恢复锁。此功能保护应用界面，不加密磁盘中的媒体文件和数据库。",
+            )}
+          </SettingNote>
+        </SettingFields>
       </SettingCard>
       <SettingCard title={t("图片与最近文件")} icon="eyeSlash">
         <SettingRow
@@ -292,11 +292,13 @@ export function PrivacySettingsPanel() {
             onChange={(event) => update({ protectRecentFiles: event.currentTarget.checked })}
           />
         </SettingRow>
-        <SettingNote>
-          {t(
-            "老板键仅控制 JAVM 和内置播放器。外部播放器、资源管理器及浏览器可能自行记录历史；已有系统记录不会被清空。",
-          )}
-        </SettingNote>
+        <SettingFields>
+          <SettingNote>
+            {t(
+              "老板键仅控制 JAVM 和内置播放器。外部播放器、资源管理器及浏览器可能自行记录历史；已有系统记录不会被清空。",
+            )}
+          </SettingNote>
+        </SettingFields>
       </SettingCard>
       {error && (
         <Alert color="red" role="alert">

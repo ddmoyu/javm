@@ -2,7 +2,7 @@ import { t, useLocale } from "../../i18n/index";
 import { useSyncExternalStore } from "react";
 import { Alert, Switch, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
-import { SettingCard, SettingRow } from "./SettingsPrimitives";
+import { SettingCard, SettingFields, SettingRow } from "./SettingsPrimitives";
 
 export function BackgroundSettingsPanel() {
   useLocale();
@@ -28,16 +28,18 @@ export function BackgroundSettingsPanel() {
           }}
         />
       </SettingRow>
-      <Text component="output" display="block" size="xs" c="dimmed" py="sm">
-        {!current.available
-          ? t("请在桌面端设置后台运行。")
-          : !current.ready
-            ? t("正在读取设置…")
-            : current.saving
-              ? t("正在保存…")
-              : t("修改后自动保存，即时生效；通过托盘菜单可随时退出。")}
-      </Text>
-      {current.error && <Alert color="red">{t(current.error)}</Alert>}
+      <SettingFields>
+        <Text component="output" display="block" size="xs" c="dimmed">
+          {!current.available
+            ? t("请在桌面端设置后台运行。")
+            : !current.ready
+              ? t("正在读取设置…")
+              : current.saving
+                ? t("正在保存…")
+                : t("修改后自动保存，即时生效；通过托盘菜单可随时退出。")}
+        </Text>
+        {current.error && <Alert color="red">{t(current.error)}</Alert>}
+      </SettingFields>
     </SettingCard>
   );
 }

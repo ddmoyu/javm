@@ -99,7 +99,7 @@ TransferResult transferHttp(const std::string &url, const fs::path &file,
 } // namespace
 std::vector<std::string> updateDownloadSources(const Json &request) {
   const auto sources = request.value("sources", Json::array({""}));
-  if (!sources.is_array() || sources.empty() || sources.size() > 3)
+  if (!sources.is_array() || sources.empty() || sources.size() > 4)
     throw std::runtime_error("更新镜像数量无效");
   std::vector<std::string> result;
   std::set<std::string> seen;
@@ -130,7 +130,7 @@ void fetchUpdateFile(const fs::path &file, const Json &asset,
   const auto hash = asset.at("sha256").get<std::string>();
   if (!expected || expected > 2ull * 1024 * 1024 * 1024 ||
       !std::regex_match(hash, std::regex("[a-f0-9]{64}")) || urls.empty() ||
-      urls.size() > 3)
+      urls.size() > 4)
     throw std::runtime_error("更新附件校验信息无效");
   auto checkCancel = [&] {
     if (cancel)

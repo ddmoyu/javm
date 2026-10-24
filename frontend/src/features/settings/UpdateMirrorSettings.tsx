@@ -56,11 +56,10 @@ export function UpdateMirrorSettings({
         }}
       />
       {(editing || mirror === "custom") && (
-        <Group align="start">
+        <Stack gap="xs">
           <TextInput
             label={t("自定义镜像地址")}
             placeholder="https://mirror.example.com/"
-            style={{ flex: 1 }}
             value={editing ? draft : customMirror}
             disabled={disabled || saving}
             onChange={(event) => {
@@ -72,16 +71,17 @@ export function UpdateMirrorSettings({
             description={t("填写镜像服务的 HTTPS 前缀，例如 https://gh-proxy.com/。")}
             error={error ? t(error) : undefined}
           />
-          <Button
-            variant="default"
-            mt="lg"
-            loading={saving}
-            disabled={disabled || !editing}
-            onClick={() => void commit("custom", draft)}
-          >
-            {t("保存镜像")}
-          </Button>
-        </Group>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              loading={saving}
+              disabled={disabled || !editing}
+              onClick={() => void commit("custom", draft)}
+            >
+              {t("保存镜像")}
+            </Button>
+          </Group>
+        </Stack>
       )}
       <Text size="xs" c="dimmed">
         {t(

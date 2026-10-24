@@ -78,7 +78,16 @@ export async function verifyRuntime(directory, spec) {
         await new Promise((resolve) => server.close(resolve));
       }
     } else if (spec.component === "ffmpeg") {
-      assert.match(await run(binary, ["-version"], parent, true), /ffmpeg version 8\.0\.1/);
+      const sourceVersion = /^(\d+\.\d+\.\d+)-javm-lite-\d+$/.exec(
+        spec.inputs.sources.ffmpeg.version,
+      )?.[1];
+      assert.ok(sourceVersion, "FFmpeg 锁定版本无效");
+      assert.ok(
+        (await run(binary, ["-version"], parent, true)).startsWith(
+          `ffmpeg version ${sourceVersion} `,
+        ),
+        "FFmpeg 源码版本不匹配",
+      );
       const protocols = await run(binary, ["-hide_banner", "-protocols"], parent, true);
       assert.ok(!/\bhttps?\b/.test(protocols), "FFmpeg 网络由 curl 统一管理");
       // 只生成安全纯色帧，验证解码、缩放与封面编码实际可运行。

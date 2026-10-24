@@ -1,7 +1,7 @@
 {
   "repository": "metatube-community/metatube-sdk-go",
   "commit": "c0e053f8c4ac58ebfb2794d52ed90640d9b1509b",
-  "toolchain": "go1.25.0",
+  "toolchain": "go1.27.3",
   "userAgentCount": 846,
   "userAgentSequenceSha256": "b63789178b470d7f8e97b06d36b2658aa846786d1c41d781c1023d4ca9e93358",
   "files": [

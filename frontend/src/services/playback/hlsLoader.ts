@@ -1,19 +1,19 @@
-import Hls from "hls.js";
-import type { LoaderCallbacks, LoaderConfiguration, LoaderContext } from "hls.js";
+import { Hls } from "@videojs/hlsjs-video";
 import type { NativeMediaFetch } from "./PlaybackService";
+
+type Loader = InstanceType<typeof Hls.DefaultConfig.loader>;
+export type LoaderContext = Parameters<Loader["load"]>[0];
+export type LoaderConfiguration = Parameters<Loader["load"]>[1];
+export type LoaderCallbacks = Parameters<Loader["load"]>[2];
 
 export function createHlsLoader(nativeFetch: NativeMediaFetch, forceNative: boolean) {
   const nativeOrigins = new Set<string>();
   return class extends Hls.DefaultConfig.loader {
     private controller = new AbortController();
     private fallingBack = false;
-    private nativeCallbacks?: LoaderCallbacks<LoaderContext>;
+    private nativeCallbacks?: LoaderCallbacks;
     private timer?: ReturnType<typeof setTimeout>;
-    override load(
-      context: LoaderContext,
-      config: LoaderConfiguration,
-      callbacks: LoaderCallbacks<LoaderContext>,
-    ) {
+    override load(context: LoaderContext, config: LoaderConfiguration, callbacks: LoaderCallbacks) {
       const fallback = () => {
         if (this.controller.signal.aborted || this.fallingBack) return;
         this.fallingBack = true;

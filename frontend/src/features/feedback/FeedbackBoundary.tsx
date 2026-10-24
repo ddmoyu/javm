@@ -15,11 +15,20 @@ export class FeedbackBoundary extends Component<
   private failure?: FailureInput;
   private reportId?: string;
   private unsubscribeLocale?: () => void;
+  private unsubscribeFeedback?: () => void;
   componentDidMount() {
     this.unsubscribeLocale = subscribeLocale(() => this.forceUpdate());
+    let enabled = this.props.service?.getSnapshot().enabled;
+    this.unsubscribeFeedback = this.props.service?.subscribe(() => {
+      const next = this.props.service?.getSnapshot().enabled;
+      if (next === enabled) return;
+      enabled = next;
+      this.forceUpdate();
+    });
   }
   componentWillUnmount() {
     this.unsubscribeLocale?.();
+    this.unsubscribeFeedback?.();
   }
   static getDerivedStateFromError() {
     return { failed: true };
@@ -48,17 +57,22 @@ export class FeedbackBoundary extends Component<
   };
   render() {
     if (!this.state.failed) return this.props.children;
+    const enabled = this.props.service?.getSnapshot().enabled ?? false;
     return (
       <Center h="100vh" p="xl">
         <Stack maw={560}>
           <Alert title={t("界面发生异常")} color="red" role="alert">
-            {t("界面无法继续显示，诊断信息已记录。")}
+            {t(enabled ? "界面无法继续显示，诊断信息已记录。" : "界面无法继续显示，请重新加载。")}
           </Alert>
           <Text size="sm">
-            {t("可以复制反馈信息，或重新加载界面。重新加载会中断当前界面操作。")}
+            {t(
+              enabled
+                ? "可以复制反馈信息，或重新加载界面。重新加载会中断当前界面操作。"
+                : "重新加载会中断当前界面操作。",
+            )}
           </Text>
           <Group>
-            {this.props.service && <Button onClick={this.openFeedback}>{t("反馈问题")}</Button>}
+            {enabled && <Button onClick={this.openFeedback}>{t("反馈问题")}</Button>}
             <Button
               variant="default"
               onClick={() =>

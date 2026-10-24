@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
 import { systemIntegration } from "../../platform/neutralino/systemIntegration";
-import { SettingCard } from "./SettingsPrimitives";
+import { SettingCard, SettingFields } from "./SettingsPrimitives";
 
 export function SystemIntegrationPanel() {
   useLocale();
@@ -13,7 +13,7 @@ export function SystemIntegrationPanel() {
   const [replace, setReplace] = useState<string>();
   return (
     <SettingCard title={t("系统链接")} icon="link">
-      <Stack gap="sm">
+      <SettingFields>
         <Text size="sm">
           {t("让浏览器中的 javm:// 链接打开此份 JAVM。移动便携版目录后，请在新位置重新注册。")}
         </Text>
@@ -99,7 +99,7 @@ export function SystemIntegrationPanel() {
             </Group>
           </Stack>
         </Modal>
-      </Stack>
+      </SettingFields>
     </SettingCard>
   );
 }

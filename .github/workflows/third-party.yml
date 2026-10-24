@@ -84,7 +84,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: matrix.component == 'metatube'
         with:
-          go-version: "1.25.0"
+          go-version: "1.27.3"
           cache: false
       - name: 安装 FFmpeg 汇编工具
         if: matrix.component == 'ffmpeg'
@@ -178,7 +178,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         if: matrix.component == 'metatube'
         with:
-          go-version: "1.25.0"
+          go-version: "1.27.3"
           cache: false
       - name: 准备 Linux 组件构建依赖
         if: runner.os == 'Linux'

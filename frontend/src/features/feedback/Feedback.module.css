@@ -1,0 +1,51 @@
+.content {
+  --mantine-color-dimmed: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-2));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.header {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+}
+.title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-sm);
+  font-size: var(--mantine-font-size-lg);
+  font-weight: 600;
+  line-height: 1.5;
+}
+/* Mantine 默认清除正文顶部内边距；提高局部优先级以避免构建后的样式顺序覆盖。 */
+.content .body {
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--mantine-spacing-xl);
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+.record {
+  width: 100%;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--mantine-radius-md);
+  background: var(--surface);
+}
+.record:hover:not(:disabled) {
+  border-color: var(--mantine-primary-color-filled);
+  background: var(--mantine-primary-color-light);
+}
+.record:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.recordText {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.empty {
+  padding-block: 64px;
+  text-align: center;
+}

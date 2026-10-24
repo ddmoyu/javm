@@ -46,6 +46,22 @@ const privateKey = createPrivateKey({
 }).export({ type: "pkcs8", format: "pem" });
 const json = async (file) => JSON.parse(await readFile(file, "utf8"));
 const save = (file, value) => writeFile(file, JSON.stringify(value));
+void test("新增第四更新来源保持哈希校验、跨来源清理与数量上限", async () => {
+  await mkdir(".tmp", { recursive: true });
+  const directory = await mkdtemp(path.resolve(".tmp", "update-four-sources-safe-"));
+  try {
+    await run(
+      path.resolve(build, "javm_update_download_fixture" + suffix),
+      [directory, "four-sources"],
+      {
+        windowsHide: true,
+        timeout: 30000,
+      },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 void test("镜像下载验证、来源回退、断点续传与取消使用隔离传输", async () => {
   await mkdir(".tmp", { recursive: true });
   const directory = await mkdtemp(path.resolve(".tmp", "update-download-safe-"));

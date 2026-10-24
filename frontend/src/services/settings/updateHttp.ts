@@ -1,9 +1,10 @@
 import type { Store } from "../metadata/shared";
 import type { ResolutionHttpPort } from "../streamResolution/ports";
-import { bounds, ResolutionError } from "../streamResolution/shared";
+import { ResolutionError } from "../streamResolution/shared";
 import { logEvent } from "../logging/events";
 
 export const updateCacheMs = 15 * 60 * 1000;
+export const updateRequestMs = 20_000;
 const maxEntries = 24,
   maxCacheBytes = 3 * 1024 * 1024;
 type Entry = { url: string; body: string; fetchedAt: number; etag?: string; modified?: string };
@@ -171,7 +172,7 @@ export class UpdateHttp {
             ...(cached?.modified ? { "If-Modified-Since": cached.modified } : {}),
           },
           maxBytes: 1024 * 1024,
-          timeoutMs: bounds.requestMs,
+          timeoutMs: updateRequestMs,
         },
         signal,
       ).catch(async (error: unknown) => {

@@ -49,6 +49,8 @@ jobs:
       - run: pnpm check
       - name: 验证更新日志和下载表格
         run: node --test scripts/release-notes.test.mjs
+      - name: 验证 Beta 静态通道发布
+        run: node --test scripts/update-channel.test.mjs
       - name: 验证旧版兼容签名和安装交接
         run: node --test scripts/legacy-update.test.mjs scripts/legacy-installer.test.mjs
       - name: 执行默认测试集
@@ -161,3 +163,31 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/release-alpha.mjs publish
+
+  update-channel:
+    name: 同步 Beta 静态更新清单
+    needs: publish
+    if: ${{ !contains(github.ref, '-alpha.') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    concurrency:
+      group: application-beta-update-channel
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+        with:
+          install: "false"
+          cache: "false"
+      - name: 核对版本标签和 main 源码
+        run: node scripts/release-alpha.mjs verify-source
+      - name: 回读已发布清单并同步固定 Beta 地址
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/update-channel.mjs

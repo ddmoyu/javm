@@ -3,7 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Progress, Stack, Text } from "@mantine/core";
 import * as os from "../../platform/neutralino/privateDialogs";
 import type { LibraryBackupService } from "../../services/library/LibraryBackupService";
-import { SettingCard } from "./SettingsPrimitives";
+import { SettingCard, SettingFields } from "./SettingsPrimitives";
 
 const phases: Record<string, string> = {
   preparing: "正在准备",
@@ -41,7 +41,7 @@ export function LibraryBackupPanel({ service }: { service: LibraryBackupService 
   };
   return (
     <SettingCard title={t("片库备份与恢复")} icon="folder">
-      <Stack gap="sm">
+      <SettingFields>
         <Text size="sm">
           {t(
             "备份作品资料、收藏、关联路径、别名和播放进度。视频、图片、NFO 文件、下载任务与应用设置不包含在数据库备份中，请保留原文件。",
@@ -111,7 +111,7 @@ export function LibraryBackupPanel({ service }: { service: LibraryBackupService 
             {t("恢复已校验的备份")}
           </Button>
         )}
-      </Stack>
+      </SettingFields>
       <Modal
         opened={confirming && !busy}
         onClose={() => setConfirming(false)}

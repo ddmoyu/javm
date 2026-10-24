@@ -24,7 +24,10 @@ void append(const fs::path &file, const std::string &data) {
 }
 int main(int argc, char **argv) {
   try {
-    require(argc == 2, "temporary fixture directory required");
+    const bool fourSourcesOnly =
+        argc == 3 && std::string(argv[2]) == "four-sources";
+    require(argc == 2 || fourSourcesOnly,
+            "temporary fixture directory required");
     const auto root = fromUtf8(argv[1]);
     fs::create_directories(root);
     const std::string body = "safe fictional update bytes";
@@ -40,6 +43,40 @@ int main(int argc, char **argv) {
                                          const std::string &, bool) {
       require(bytes <= total, "progress exceeds file size");
     };
+    if (fourSourcesOnly) {
+      const auto sources = updateDownloadSources(
+          {{"sources",
+            {"", "https://gh-proxy.com/", "https://ghfast.top/",
+             "https://ghproxy.net/"}}});
+      require(sources.size() == 4, "four sources accepted");
+      std::vector<std::string> urls;
+      for (const auto &prefix : sources)
+        urls.push_back(prefix + official);
+      int calls = 0;
+      const auto file = root / "four-sources";
+      fetchUpdateFile(
+          file, asset, urls, "", cancel, progress,
+          [&](const std::string &url, const fs::path &output, uint64_t offset,
+              uint64_t, const std::string &, const std::atomic<bool> &,
+              const TransferProgress &) {
+            require(offset == 0, "source switch clears corrupt bytes");
+            ++calls;
+            append(output,
+                   url == urls.back() ? body : std::string(body.size(), 'x'));
+            return TransferResult{true, false};
+          });
+      require(calls == 4 &&
+                  hashFile(file) == asset.at("sha256").get<std::string>(),
+              "fourth source is verified before acceptance");
+      rejects(
+          [&] { updateDownloadSources({{"sources", {"", "", "", "", ""}}}); });
+      urls.push_back(official);
+      rejects(
+          [&] { fetchUpdateFile(file, asset, urls, "", cancel, progress); });
+      std::cout << "four update sources passed: fallback, hash, partial "
+                   "cleanup, limit\n";
+      return 0;
+    }
     require(updateDownloadSources(Json::object()) ==
                 std::vector<std::string>{""},
             "legacy official source");
@@ -53,7 +90,14 @@ int main(int argc, char **argv) {
           "https://mirror.example.com/../", "https://mirror.example.com:443/",
           "https://mirror.example.com/#fragment"})
       rejects([&] { updateDownloadSources({{"sources", {prefix}}}); });
-    rejects([&] { updateDownloadSources({{"sources", {"", "", "", ""}}}); });
+    require(updateDownloadSources(
+                {{"sources",
+                  {"", "https://gh-proxy.com/", "https://ghfast.top/",
+                   "https://ghproxy.net/"}}})
+                    .size() == 4,
+            "official and three community sources");
+    rejects(
+        [&] { updateDownloadSources({{"sources", {"", "", "", "", ""}}}); });
     int calls = 0;
     auto file = root / "fallback";
     fetchUpdateFile(file, asset, {official, mirror}, "", cancel, progress,

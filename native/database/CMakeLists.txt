@@ -2,8 +2,8 @@ include(FetchContent)
 
 # 只编译官方 SQLite amalgamation，不引入数据库 CLI 或 Node 原生插件。
 FetchContent_Declare(sqlite
-    URL "https://sqlite.org/2026/sqlite-amalgamation-3530400.zip"
-    URL_HASH SHA3_256=628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e
+    URL "https://sqlite.org/2026/sqlite-amalgamation-3540100.zip"
+    URL_HASH SHA3_256=92281c86e2957f9b9305890f9ac04204caa7b677cc868dc326d942689df28e30
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 FetchContent_MakeAvailable(sqlite)

@@ -7,7 +7,7 @@ import { I18nProvider } from "@videojs/react/i18n";
 import "@videojs/react/i18n/locales/zh-CN/register";
 import "@videojs/react/i18n/locales/zh-TW/register";
 import "@videojs/react/i18n/locales/ja/register";
-import workerUrl from "hls.js/dist/hls.worker.js?url";
+import workerUrl from "#hls-worker?url";
 import "@videojs/react/video/skin.css";
 import "./player.css";
 import type {
