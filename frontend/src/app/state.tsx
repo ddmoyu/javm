@@ -41,6 +41,7 @@ export interface WorkspaceState {
   openFilm: (film: Film, view?: FilmDetailView) => void;
   play: (film: Film) => void;
   playSource: (source: string, options?: PlaybackOptions) => void;
+  playbackOverlayOpened: boolean;
   scrape: (film: Film) => void;
   browseFacet: (facet: FilmFacet, value: string) => void;
   notice: (message: string) => void;

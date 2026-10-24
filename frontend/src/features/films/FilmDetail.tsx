@@ -62,6 +62,7 @@ function FilmDetailContent({
   const {
     play,
     playSource,
+    playbackOverlayOpened,
     scrape,
     browseFacet,
     notice,
@@ -121,7 +122,6 @@ function FilmDetailContent({
       : [];
   const gallery: MediaImage[] = [...covers, ...(film.screenshots ?? [])];
   const playTrailer = (trailer: MediaTrailer) => {
-    onClose();
     playSource(trailer.src, {
       title: `${film.code || film.title} · 预览片`,
       format: trailer.format,
@@ -130,6 +130,7 @@ function FilmDetailContent({
   };
   const overlay =
     opened ||
+    playbackOverlayOpened ||
     editing ||
     artwork !== null ||
     !!deletingVideo ||

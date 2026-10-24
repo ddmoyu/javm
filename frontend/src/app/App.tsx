@@ -208,7 +208,6 @@ export function App({
     );
   }, [runtime, libraryState.ready, library, resourceSearch, setPage]);
   const playSource = (source: string, options?: PlaybackOptions) => {
-    library.selectFilm(null);
     void playback.play(source, options).catch((error: unknown) => notice(playbackError(error)));
   };
   const unavailable = (feature: string) => notice(`${feature}暂未接入`);
@@ -313,6 +312,7 @@ export function App({
           else notice("这部影片尚未关联可播放的视频文件。");
         },
         playSource,
+        playbackOverlayOpened: runtime === "browser" && playbackState.opened,
         scrape: (film) => {
           if (scraping)
             void scraping
