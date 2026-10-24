@@ -2,11 +2,18 @@ if(JAVM_USE_PREBUILT_DEPENDENCIES)
     if(NOT WIN32)
         set(OPENSSL_ROOT_DIR "${JAVM_PREBUILT_CURL}/sdk/openssl")
         set(OPENSSL_USE_STATIC_LIBS TRUE)
+        # 避免混用构建机头文件与已验证组件中的 OpenSSL 静态库。
+        set(OPENSSL_INCLUDE_DIR "${OPENSSL_ROOT_DIR}/include" CACHE PATH "Verified OpenSSL headers" FORCE)
+        set(OPENSSL_SSL_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libssl.a" CACHE FILEPATH "Verified OpenSSL SSL library" FORCE)
+        set(OPENSSL_CRYPTO_LIBRARY "${OPENSSL_ROOT_DIR}/lib/libcrypto.a" CACHE FILEPATH "Verified OpenSSL crypto library" FORCE)
     endif()
     # A new component fingerprint must replace a cached SDK from an older release.
     set(CURL_DIR "${JAVM_PREBUILT_CURL}/sdk/lib/cmake/CURL" CACHE PATH "Verified CURL component SDK" FORCE)
     # The database's official WebSocket transport lives in a sibling directory.
     find_package(CURL CONFIG REQUIRED GLOBAL PATHS "${JAVM_PREBUILT_CURL}/sdk/lib/cmake/CURL" NO_DEFAULT_PATH)
+    if(NOT WIN32)
+        set_target_properties(OpenSSL::SSL OpenSSL::Crypto PROPERTIES SYSTEM FALSE)
+    endif()
     set(JAVM_CURL_LICENSE "${JAVM_PREBUILT_CURL}/licenses/curl.txt")
 else()
 include(FetchContent)
