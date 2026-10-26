@@ -7,8 +7,10 @@
     "scripts/metatube-lite/diagnostics.mjs",
     "scripts/metatube-lite/diagnostics/engine.go",
     "scripts/metatube-lite/diagnostics/route.go",
+    "scripts/metatube-lite/diagnostics/provider.go",
     "tests/fixtures/metatube-diagnostics/engine_test.go",
     "tests/fixtures/metatube-diagnostics/route_test.go",
+    "tests/fixtures/metatube-diagnostics/search_test.go",
     "scripts/verify-metatube-lite.mjs"
   ]
 }

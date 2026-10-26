@@ -215,7 +215,16 @@ async function run(command, args, extraEnv = {}) {
 }
 const goVersion = await run("go", ["version"]);
 if (!goVersion.includes(` ${lock.toolchain} `)) throw new Error(`Go 工具链不匹配：${goVersion}`);
-await run("go", ["fmt", "./route", "./engine", "./database", "./common/random"]);
+await run("go", [
+  "fmt",
+  "./route",
+  "./engine",
+  "./database",
+  "./common/random",
+  "./provider",
+  "./provider/javbus",
+  "./provider/fanza",
+]);
 await run("go", ["mod", "tidy"]);
 // 只运行自有安全夹具，不运行上游联网测试；各平台构建均验证诊断分类和请求隔离。
 for (const target of ["engine", "route"])
@@ -223,6 +232,10 @@ for (const target of ["engine", "route"])
     path.join(root, "tests/fixtures/metatube-diagnostics", `${target}_test.go`),
     path.join(source, target, "javm_diagnostics_test.go"),
   );
+await copyFile(
+  path.join(root, "tests/fixtures/metatube-diagnostics/search_test.go"),
+  path.join(source, "engine/javm_search_test.go"),
+);
 console.log(
   await run(
     "go",
@@ -368,7 +381,8 @@ await writeFile(
     "Narrowed GORM datatypes to upstream Date and JSON types with SQLite behavior; removed MySQL-specific branches.\n" +
     "Generated the unchanged upstream desktop User-Agent pool; built Gin without MessagePack.\n" +
     "Added opt-in request-local movie diagnostics with error categories, result counts and missing field names; omitted raw search summaries.\n" +
-    "All provider implementations, SQLite cache schema, image comparison/decoding and JavaScript parsing are preserved.\n",
+    "Propagated asynchronous JavBus search errors and added bounded FANZA response/parse diagnostics.\n" +
+    "Preserved valid partial search results, SQLite cache schema, image comparison/decoding and the upstream JavaScript parser.\n",
 );
 await verifyMetatubeLite(output, dependency);
 if (options.has("--install")) {

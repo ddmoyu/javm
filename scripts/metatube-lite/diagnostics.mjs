@@ -93,7 +93,97 @@ export async function applyMovieDiagnostics(source) {
       'type responseMessage struct {\n\tDiagnostics any `json:"diagnostics,omitempty"`',
     ],
   ]);
-  for (const target of ["engine", "route"])
+  await patch("provider/javbus/javbus.go", [
+    ['\t"fmt"\n', '\t"errors"\n\t"fmt"\n'],
+    [
+      "\tc.Async = true /* ASYNC */\n\n\tvar mu sync.Mutex",
+      `\tc.Async = true /* ASYNC */
+
+\tvar mu sync.Mutex
+\tvar requestErrors []error
+\trecordError := func(err error) {
+\t\tmu.Lock()
+\t\tdefer mu.Unlock()
+\t\trequestErrors = append(requestErrors, err)
+\t}
+\tc.OnError(func(r *colly.Response, err error) {
+\t\trecordError(provider.MovieRequestError(r, err))
+\t})
+\tc.OnResponse(func(r *colly.Response) {
+\t\tif failure := provider.MovieResponseError(r); failure != nil {
+\t\t\trecordError(failure)
+\t\t\tr.Ctx.Put("javm.invalidResponse", true)
+\t\t}
+\t})`,
+    ],
+    [
+      '\tc.OnXML(`//a[@class="movie-box"]`, func(e *colly.XMLElement) {',
+      '\tc.OnXML(`//a[@class="movie-box"]`, func(e *colly.XMLElement) {\n\t\tif e.Response.Ctx.GetAny("javm.invalidResponse") == true {\n\t\t\treturn\n\t\t}',
+    ],
+    [
+      "\t\tif err = c.Visit(u); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t}\n\tc.Wait()\n\treturn",
+      `\t\tif visitErr := c.Visit(u); visitErr != nil {
+\t\t\trecordError(provider.MovieRequestError(nil, visitErr))
+\t\t}
+\t}
+\tc.Wait()
+\t// A failed branch must not discard valid results from the other branch.
+\tfor _, result := range results {
+\t\tif result != nil && result.IsValid() {
+\t\t\treturn results, nil
+\t\t}
+\t}
+\treturn results, errors.Join(requestErrors...)`,
+    ],
+  ]);
+  await patch("provider/fanza/fanza.go", [
+    [
+      '\tp := searchparse.NewSearchPageParser()\n\n\tc.OnXML("//script", func(e *colly.XMLElement) {\n\t\t_ = p.LoadJSCode(e.Text)\n\t})\n\n\tif err = c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(keyword))); err != nil {\n\t\treturn\n\t}\n\n\tresp := &searchparse.ResponseWrapper{}\n\tif err = p.Parse(resp); err != nil {\n\t\treturn\n\t}',
+      `\tp := searchparse.NewSearchPageParser()
+\tvar responseErr error
+\tvar status int
+\tvar hasNextData, scriptFailed bool
+\tc.OnResponse(func(r *colly.Response) {
+\t\tstatus = r.StatusCode
+\t\tif failure := provider.MovieResponseError(r); failure != nil {
+\t\t\tresponseErr = failure
+\t\t} else if isRegionError(r) {
+\t\t\tresponseErr = &provider.MovieSourceError{Stage: "response", Reason: "region_restricted", HTTPStatus: status}
+\t\t}
+\t})
+\tc.OnError(func(r *colly.Response, err error) {
+\t\tresponseErr = provider.MovieRequestError(r, err)
+\t})
+\tc.OnXML("//script", func(e *colly.XMLElement) {
+\t\tif responseErr != nil {
+\t\t\treturn
+\t\t}
+\t\tnextData := strings.Contains(e.Text, "__next_f")
+\t\thasNextData = hasNextData || nextData
+\t\tif loadErr := p.LoadJSCode(e.Text); loadErr != nil && nextData {
+\t\t\tscriptFailed = true
+\t\t}
+\t})
+
+\tif visitErr := c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(keyword))); visitErr != nil && responseErr == nil {
+\t\tresponseErr = provider.MovieRequestError(nil, visitErr)
+\t}
+\tif responseErr != nil {
+\t\treturn nil, responseErr
+\t}
+\tresp := &searchparse.ResponseWrapper{}
+\tif parseErr := p.Parse(resp); parseErr != nil {
+\t\treason := "invalid_page_data"
+\t\tif !hasNextData {
+\t\t\treason = "missing_page_data"
+\t\t} else if scriptFailed {
+\t\t\treason = "page_script_failed"
+\t\t}
+\t\treturn nil, &provider.MovieSourceError{Stage: "parse", Reason: reason, HTTPStatus: status, Cause: parseErr}
+\t}`,
+    ],
+  ]);
+  for (const target of ["engine", "route", "provider"])
     await copyFile(
       path.join(directory, "diagnostics", `${target}.go`),
       path.join(source, target, "javm_diagnostics.go"),

@@ -14,6 +14,7 @@ import {
 import { useWorkspace } from "../../app/state";
 import type { MovieCandidate, MovieDetails } from "../../services/metadata/MetaTubeService";
 import { serviceError } from "../../services/metadata/shared";
+import { isMetadataNotice, MetadataQueryError } from "../../services/metadata/diagnostics";
 import type { MovieSearchGroup } from "../../services/metadata/mergeMovieCandidates";
 import { normalizeCode } from "../../services/streamResolution/sources";
 import { requireMovieDetails, searchMovieMetadata } from "../../services/metadata/movieSearch";
@@ -54,6 +55,11 @@ export function MetaTubeSearch({
   const state = useSyncExternalStore(metatube.subscribe, metatube.getSnapshot);
   const [query, setQuery] = useState(initialQuery),
     [error, setError] = useState("");
+  const [hint, setHint] = useState("");
+  const showFailure = (reason: unknown) => {
+    setHint(isMetadataNotice(reason) ? reason.message : "");
+    setError(isMetadataNotice(reason) ? "" : serviceError(reason));
+  };
   const [results, setResults] = useState<MovieSearchGroup[]>([]),
     [searched, setSearched] = useState(false);
   const [page, setPage] = useState(1);
@@ -93,6 +99,7 @@ export function MetaTubeSearch({
     operation.current = abort;
     const current = ++revision.current;
     setError("");
+    setHint("");
     setResourceCode(undefined);
     setResults([]);
     setSearched(false);
@@ -110,6 +117,7 @@ export function MetaTubeSearch({
       const result = separateCandidates(found.candidates);
       if (found.details) remember(found.candidates[0]!, found.details);
       setError(found.error);
+      setHint(found.notice ?? "");
       setResourceCode(found.resourceCode);
       setResults(result);
       setPage(1);
@@ -117,7 +125,7 @@ export function MetaTubeSearch({
     } catch (reason) {
       if (current === revision.current) {
         if (cancelled.current && !(reason instanceof StopUnconfirmedError)) notice("已取消搜索。");
-        else setError(serviceError(reason));
+        else showFailure(reason);
       }
     } finally {
       searching.current = false;
@@ -136,6 +144,7 @@ export function MetaTubeSearch({
     operation.current = abort;
     const current = revision.current;
     setError("");
+    setHint("");
     setResourceCode(undefined);
     setOpening(group);
     try {
@@ -162,6 +171,7 @@ export function MetaTubeSearch({
           return;
         } catch (reason) {
           if (reason instanceof StopUnconfirmedError) throw reason;
+          if (reason instanceof MetadataQueryError && reason.networkUnavailable) throw reason;
           last = reason;
         }
       }
@@ -179,7 +189,7 @@ export function MetaTubeSearch({
       if (current === revision.current) {
         if (cancelled.current && !(reason instanceof StopUnconfirmedError))
           notice("已取消获取详情。");
-        else setError(serviceError(reason));
+        else showFailure(reason);
       }
     } finally {
       selecting.current = false;
@@ -233,6 +243,11 @@ export function MetaTubeSearch({
           {t(error)}
         </Alert>
       )}
+      {hint && (
+        <Text size="sm" component="output" aria-live="polite">
+          {t(hint)}
+        </Text>
+      )}
       {(pending || state.querying) && (
         <Text size="sm" component="output" aria-live="polite">
           {state.status === "starting"
@@ -243,7 +258,7 @@ export function MetaTubeSearch({
         </Text>
       )}
       {/* 出错时只显示上方的错误提示，不再重复一行说明。 */}
-      {!pending && !state.querying && searched && !results.length && !error && (
+      {!pending && !state.querying && searched && !results.length && !error && !hint && (
         <Text size="sm">{t("没有找到匹配结果。")}</Text>
       )}
       {!pending && resourceCode && onLookupResources && (
@@ -311,7 +326,7 @@ export function MetaTubeSearch({
                       ? onApply(item)
                       : onCollect!(item, detailsCache.current.get(candidateKey(item)))
                   )
-                    .catch((reason: unknown) => setError(serviceError(reason)))
+                    .catch(showFailure)
                     .finally(() => setSaving(null));
                 }}
               >

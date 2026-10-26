@@ -13,8 +13,10 @@ export async function metatubeRecipeHash() {
     "metatube-lite/diagnostics.mjs",
     "metatube-lite/diagnostics/engine.go",
     "metatube-lite/diagnostics/route.go",
+    "metatube-lite/diagnostics/provider.go",
     "../tests/fixtures/metatube-diagnostics/engine_test.go",
     "../tests/fixtures/metatube-diagnostics/route_test.go",
+    "../tests/fixtures/metatube-diagnostics/search_test.go",
   ]) {
     hash.update(name).update("\0");
     hash.update(

@@ -10,6 +10,7 @@ import { StopUnconfirmedError } from "../downloads/ports";
 import type { MetadataPipeline } from "./MetadataPipeline";
 import type { ResolvedMovie } from "../metadata/MovieMetadataResolver";
 import { MetadataQueryError } from "../metadata/diagnostics";
+import { metadataQueueNotice } from "../metadata/MetadataConnectivity";
 import type { MetadataDiagnostics, MetadataQueryOptions } from "../metadata/diagnostics";
 import { reportFailure } from "../feedback/events";
 
@@ -66,6 +67,7 @@ export class ScrapeService extends Observable<{
   available: boolean;
   paused: boolean;
   error: string;
+  networkNotice: string;
 }> {
   pipeline?: MetadataPipeline;
   private serial: Promise<unknown> = Promise.resolve();
@@ -105,7 +107,7 @@ export class ScrapeService extends Observable<{
       signal: AbortSignal,
     ) => Promise<string | undefined>,
   ) {
-    super({ tasks: [], ready: false, available, paused: false, error: "" });
+    super({ tasks: [], ready: false, available, paused: false, error: "", networkNotice: "" });
   }
   private exclusive<T>(operation: () => Promise<T>) {
     const pending = this.serial.then(operation);
@@ -442,6 +444,18 @@ export class ScrapeService extends Observable<{
         await this.write({ ...task, status: warning ? "partial" : "completed", error: warning });
       });
     } catch (error) {
+      if (!signal.aborted && error instanceof MetadataQueryError && error.networkUnavailable) {
+        // 保留为待执行任务；暂停整个队列，避免每部影片重复请求、提示或生成故障报告。
+        await this.exclusive(async () => {
+          this.publish({ paused: true, networkNotice: metadataQueueNotice });
+          await this.write({ ...this.find(id), status: "queued", error: error.message });
+        });
+        logEvent("info", "scraping", "network_unavailable", metadataQueueNotice, {
+          taskId: id,
+          ...(error.diagnostics ? { queryId: error.diagnostics.queryId } : {}),
+        });
+        return;
+      }
       if (error instanceof StopUnconfirmedError) {
         this.uncertainStop = { id, error };
         this.publish({
@@ -510,7 +524,7 @@ export class ScrapeService extends Observable<{
       });
   }
   pauseQueue(paused: boolean) {
-    this.publish({ paused });
+    this.publish({ paused, networkNotice: "" });
     if (!paused) this.pump();
   }
   async remove(id: string, onlyFailed = false) {

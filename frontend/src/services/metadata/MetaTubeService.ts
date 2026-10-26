@@ -3,7 +3,9 @@ import type { JsonHttp, Store } from "./shared";
 import type { EditableMetadata } from "../../contracts/metadata";
 import { StopUnconfirmedError } from "../downloads/ports";
 import { recordUsage } from "../analytics/events";
-import { withMetadataTrace } from "./diagnostics";
+import { isMetadataNotice, MetadataQueryError, withMetadataTrace } from "./diagnostics";
+import { metadataNetworkNotice, needsMetadataConnectivity } from "./MetadataConnectivity";
+import type { MetadataConnectivity } from "./MetadataConnectivity";
 import type { MetadataNetwork, MetadataQueryOptions, MetadataTrace } from "./diagnostics";
 
 export interface MetaTubeSettings {
@@ -23,6 +25,7 @@ export interface ManagedMetaTube {
   endpoint: string;
   token: string;
   network?: MetadataNetwork;
+  connectivity?: MetadataConnectivity;
   exited: Promise<void>;
   isNetworkCurrent?(): Promise<boolean>;
   stop(): Promise<void>;
@@ -139,6 +142,7 @@ export class MetaTubeService extends Observable<{
     providers: string[];
     network: MetadataNetwork;
     version: string;
+    connectivity?: MetadataConnectivity;
   };
   private initialized?: Promise<void>;
   private stopped = false;
@@ -295,6 +299,7 @@ export class MetaTubeService extends Observable<{
         providers: settings.providers,
         network: managed.network ?? "unknown",
         version: bundled.version,
+        connectivity: managed.connectivity,
       };
       this.publish({ status: "ready", providers, error: "" });
     } catch (error) {
@@ -346,6 +351,7 @@ export class MetaTubeService extends Observable<{
       signal: AbortSignal,
     ) => Promise<T>,
     externalSignal?: AbortSignal,
+    trace?: MetadataTrace,
   ) {
     if (this.stopped) throw new Error("应用正在退出。");
     const lane = externalSignal ? "backgroundTask" : "queryTask";
@@ -361,7 +367,30 @@ export class MetaTubeService extends Observable<{
       const connection =
         other && this.connection ? this.connection : await this.ready(abort.signal);
       abort.signal.throwIfAborted();
-      return operation(connection, abort.signal);
+      try {
+        return await operation(connection, abort.signal);
+      } catch (error) {
+        if (error instanceof StopUnconfirmedError) throw error;
+        abort.signal.throwIfAborted();
+        if (
+          error instanceof MetadataQueryError &&
+          trace &&
+          connection.connectivity &&
+          needsMetadataConnectivity(trace.snapshot("failed"))
+        ) {
+          let status = "unknown";
+          try {
+            status = await connection.connectivity.check(abort.signal);
+          } catch (probeError) {
+            if (probeError instanceof StopUnconfirmedError) throw probeError;
+            // 检测设施异常不能覆盖原始来源故障或被当成网络不可达。
+          }
+          abort.signal.throwIfAborted();
+          if (status === "unreachable")
+            throw new MetadataQueryError(error.status, metadataNetworkNotice, false, false, true);
+        }
+        throw error;
+      }
     });
     this[lane] = { abort, done };
     if (!externalSignal) this.publish({ querying: true, error: "" });
@@ -370,7 +399,8 @@ export class MetaTubeService extends Observable<{
       abort.signal.throwIfAborted();
       return value;
     } catch (error) {
-      if (!externalSignal) this.publish({ error: serviceError(error) });
+      if (!externalSignal)
+        this.publish({ error: isMetadataNotice(error) ? "" : serviceError(error) });
       throw error;
     } finally {
       externalSignal?.removeEventListener("abort", cancel);
@@ -425,47 +455,51 @@ export class MetaTubeService extends Observable<{
       options,
       signal,
       ({ trace }) =>
-        this.query(async (connection, signal) => {
-          recordUsage("search_designation_count");
-          const data: unknown[] = [];
-          let failure: unknown;
-          // v1.4.0 的 provider 只接受单个名称；按用户配置顺序查询，限制放大请求。
-          const providers = connection.providers.length ? connection.providers : [""];
-          for (const provider of providers) {
-            signal.throwIfAborted();
-            const params = new URLSearchParams({ q, fallback: "true" });
-            if (provider) params.set("provider", provider);
-            try {
-              const result = await this.get(
-                `movies/search?${params}`,
-                connection,
-                signal,
-                trace,
-                provider || "MetaTube",
-              );
-              if (!Array.isArray(result) || result.length > 500)
-                throw new Error("MetaTube 搜索结果格式无效。");
-              data.push(...result.slice(0, 500 - data.length));
-            } catch (error) {
-              if (error instanceof StopUnconfirmedError) throw error;
+        this.query(
+          async (connection, signal) => {
+            recordUsage("search_designation_count");
+            const data: unknown[] = [];
+            let failure: unknown;
+            // v1.4.0 的 provider 只接受单个名称；按用户配置顺序查询，限制放大请求。
+            const providers = connection.providers.length ? connection.providers : [""];
+            for (const provider of providers) {
               signal.throwIfAborted();
-              if (providers.length === 1) throw error;
-              failure = error;
+              const params = new URLSearchParams({ q, fallback: "true" });
+              if (provider) params.set("provider", provider);
+              try {
+                const result = await this.get(
+                  `movies/search?${params}`,
+                  connection,
+                  signal,
+                  trace,
+                  provider || "MetaTube",
+                );
+                if (!Array.isArray(result) || result.length > 500)
+                  throw new Error("MetaTube 搜索结果格式无效。");
+                data.push(...result.slice(0, 500 - data.length));
+              } catch (error) {
+                if (error instanceof StopUnconfirmedError) throw error;
+                signal.throwIfAborted();
+                if (providers.length === 1) throw error;
+                failure = error;
+              }
+              if (data.length >= 500) break;
             }
-            if (data.length >= 500) break;
-          }
-          if (!data.length && failure)
-            throw trace.error(failure instanceof JsonHttpError ? failure.status : 500);
-          return data.map((item) => {
-            const row = record(item);
-            return {
-              provider: text(row.provider, 100),
-              id: text(row.id, 200),
-              code: text(row.number ?? "", 80),
-              title: text(row.title ?? "", 2048),
-            };
-          });
-        }, signal),
+            if (!data.length && failure)
+              throw trace.error(failure instanceof JsonHttpError ? failure.status : 500);
+            return data.map((item) => {
+              const row = record(item);
+              return {
+                provider: text(row.provider, 100),
+                id: text(row.id, 200),
+                code: text(row.number ?? "", 80),
+                title: text(row.title ?? "", 2048),
+              };
+            });
+          },
+          signal,
+          trace,
+        ),
       { action: "metadata_search", query: q, source: "MetaTube" },
     );
   }
@@ -487,6 +521,7 @@ export class MetaTubeService extends Observable<{
               ),
             ),
           signal,
+          trace,
         ),
       {
         action: "metadata_details",

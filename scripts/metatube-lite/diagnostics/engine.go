@@ -1,4 +1,4 @@
-// JAVM: bounded, content-free diagnostics; provider behavior and cache data stay upstream.
+// JAVM: bounded, content-free diagnostics; never return raw provider errors.
 package engine
 
 import (
@@ -20,6 +20,9 @@ type MovieDiagnostic struct {
 	ElapsedMs     int64    `json:"elapsedMs"`
 	Results       *int     `json:"results,omitempty"`
 	MissingFields []string `json:"missingFields,omitempty"`
+	Stage         string   `json:"stage,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
+	HTTPStatus    int      `json:"httpStatus,omitempty"`
 }
 
 type incompleteMovieMetadata struct{ fields []string }
@@ -54,7 +57,19 @@ func movieDiagnosticCategory(err error) string {
 	if errors.Is(err, mt.ErrInfoNotFound) {
 		return "empty"
 	}
+	var source *mt.MovieSourceError
+	if errors.As(err, &source) {
+		switch source.Reason {
+		case "challenge_page", "region_restricted":
+			return "denied"
+		case "unexpected_content_type", "missing_page_data", "page_script_failed", "invalid_page_data":
+			return "parse"
+		}
+	}
 	message := strings.ToLower(err.Error())
+	if source != nil && source.Cause != nil {
+		message = strings.ToLower(source.Cause.Error())
+	}
 	if strings.Contains(message, "x509:") || strings.Contains(message, "tls:") || strings.Contains(message, "certificate") {
 		return "tls"
 	}
@@ -96,9 +111,33 @@ func movieDiagnosticCategory(err error) string {
 	return "unknown"
 }
 
+func movieSourceDiagnostic(err error, category string) *mt.MovieSourceError {
+	if source, ok := err.(*mt.MovieSourceError); ok && movieDiagnosticCategory(source) == category {
+		return source
+	}
+	// Joined asynchronous failures can have different categories. Do not attach
+	// a 403 status/reason to a timeout selected from the other request.
+	switch wrapped := err.(type) {
+	case interface{ Unwrap() []error }:
+		for _, inner := range wrapped.Unwrap() {
+			if source := movieSourceDiagnostic(inner, category); source != nil {
+				return source
+			}
+		}
+	case interface{ Unwrap() error }:
+		return movieSourceDiagnostic(wrapped.Unwrap(), category)
+	}
+	return nil
+}
+
 // No query, URL, title, description, raw exception, or credential is returned here.
 func NewMovieDiagnostic(provider string, result any, err error, elapsed time.Duration) MovieDiagnostic {
 	diagnostic := MovieDiagnostic{Provider: provider, Category: movieDiagnosticCategory(err), ElapsedMs: elapsed.Milliseconds()}
+	if source := movieSourceDiagnostic(err, diagnostic.Category); source != nil {
+		diagnostic.Stage = source.Stage
+		diagnostic.Reason = source.Reason
+		diagnostic.HTTPStatus = source.HTTPStatus
+	}
 	var incomplete *incompleteMovieMetadata
 	if errors.As(err, &incomplete) {
 		diagnostic.MissingFields = incomplete.fields

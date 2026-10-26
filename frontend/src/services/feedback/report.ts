@@ -137,7 +137,7 @@ function metadataBlock(report: FailureReport) {
           .filter((item) => item.category !== "skipped")
           .map(
             (item) =>
-              `${item.provider}: ${item.category}；次数=${item.count}；耗时=${item.elapsedMs} ms；结果=${item.results ?? "未知"}${item.missingFields?.length ? `；缺少字段=${item.missingFields.join(",")}` : ""}`,
+              `${item.provider}: ${item.category}；次数=${item.count}；耗时=${item.elapsedMs} ms；结果=${item.results ?? "未知"}${item.stage ? `；失败阶段=${item.stage}` : ""}${item.reason ? `；原因=${item.reason}` : ""}${item.httpStatus === undefined ? "" : `；HTTP=${item.httpStatus}`}${item.missingFields?.length ? `；缺少字段=${item.missingFields.join(",")}` : ""}`,
           ),
       ].join("\n"),
     ),

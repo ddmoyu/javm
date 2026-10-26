@@ -22,6 +22,19 @@ export const metadataCategories = [
   "unknown",
 ] as const;
 export type MetadataCategory = (typeof metadataCategories)[number];
+const metadataStages = ["request", "response", "parse"] as const;
+const metadataReasons = [
+  "request_failed",
+  "http_status",
+  "challenge_page",
+  "region_restricted",
+  "unexpected_content_type",
+  "missing_page_data",
+  "page_script_failed",
+  "invalid_page_data",
+] as const;
+type MetadataStage = (typeof metadataStages)[number];
+type MetadataReason = (typeof metadataReasons)[number];
 export type MetadataNetwork =
   | "direct"
   | "proxy/http"
@@ -35,6 +48,9 @@ export interface MetadataSourceDiagnostic {
   elapsedMs: number;
   results?: number;
   missingFields?: string[];
+  stage?: MetadataStage;
+  reason?: MetadataReason;
+  httpStatus?: number;
   count: number;
 }
 export interface MetadataDiagnostics {
@@ -84,6 +100,15 @@ function source(value: unknown): MetadataSourceDiagnostic | undefined {
     provider: row.provider,
     category: row.category as MetadataCategory,
     elapsedMs: row.elapsedMs as number,
+    ...(metadataStages.includes(row.stage as MetadataStage)
+      ? { stage: row.stage as MetadataStage }
+      : {}),
+    ...(metadataReasons.includes(row.reason as MetadataReason)
+      ? { reason: row.reason as MetadataReason }
+      : {}),
+    ...(integer(row.httpStatus, 599) && (row.httpStatus as number) >= 100
+      ? { httpStatus: row.httpStatus as number }
+      : {}),
     ...(integer(row.results, 1000000) ? { results: row.results as number } : {}),
     ...(Array.isArray(row.missingFields)
       ? {
@@ -180,11 +205,14 @@ export class MetadataQueryError extends JsonHttpError {
     message: string,
     readonly retryable: boolean,
     readonly noResults = false,
+    readonly networkUnavailable = false,
   ) {
     super(status, message);
     this.name = "MetadataQueryError";
   }
 }
+export const isMetadataNotice = (error: unknown): error is MetadataQueryError =>
+  error instanceof MetadataQueryError && (error.networkUnavailable || error.noResults);
 export class MetadataTrace {
   reproduction?: ReproductionContext;
   identify(value?: ReproductionContext) {
@@ -257,7 +285,7 @@ export class MetadataTrace {
     });
   }
   private add(row: MetadataSourceDiagnostic) {
-    const key = `${row.provider}:${row.category}:${row.missingFields?.join(",") ?? ""}`;
+    const key = `${row.provider}:${row.category}:${row.stage ?? ""}:${row.reason ?? ""}:${row.httpStatus ?? ""}:${row.missingFields?.join(",") ?? ""}`;
     const old = this.rows.get(key);
     if (old) {
       old.count = Math.min(10000, old.count + 1);
@@ -321,11 +349,12 @@ export class MetadataTrace {
         failed(row.category) ? "warn" : "info",
         "metatube",
         "source_result",
-        `资料来源 ${row.provider}：${row.category}${row.missingFields?.length ? `；缺少字段 ${row.missingFields.join(", ")}` : ""}`,
+        `资料来源 ${row.provider}：${row.category}${row.stage ? `；失败阶段=${row.stage}` : ""}${row.reason ? `；原因=${row.reason}` : ""}${row.httpStatus === undefined ? "" : `；HTTP=${row.httpStatus}`}${row.missingFields?.length ? `；缺少字段 ${row.missingFields.join(", ")}` : ""}`,
         {
           ...context,
           provider: row.provider,
           category: row.category,
+          ...(row.reason ? { reason: row.reason } : {}),
           elapsedMs: row.elapsedMs,
           attempts: row.count,
           ...(row.results === undefined ? {} : { results: row.results }),
@@ -392,7 +421,8 @@ export async function withMetadataTrace<T>(
         !options?.taskId &&
         outcome === "failed" &&
         failure instanceof MetadataQueryError &&
-        !failure.noResults
+        !failure.noResults &&
+        !failure.networkUnavailable
       )
         reportFailure({
           module: "metatube",

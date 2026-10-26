@@ -3,6 +3,7 @@ import { serviceError } from "./shared";
 import { normalizeCode as identityCode } from "../scraping/identity";
 import { normalizeCode } from "../streamResolution/sources";
 import { StopUnconfirmedError } from "../downloads/ports";
+import { isMetadataNotice } from "./diagnostics";
 
 export interface MovieSearchPort {
   search(query: string): Promise<MovieCandidate[]>;
@@ -13,6 +14,7 @@ export interface MovieSearchResult {
   details?: MovieDetails;
   resourceCode?: string;
   error: string;
+  notice?: string;
 }
 export function requireMovieDetails(value: MovieDetails, candidate: MovieCandidate) {
   const { fields } = value;
@@ -53,6 +55,7 @@ export async function searchMovieMetadata(
 ): Promise<MovieSearchResult> {
   signal.throwIfAborted();
   let error = "";
+  let notice = "";
   try {
     const candidates = (await port.search(query)).filter(
       (item) => item.provider.trim() && item.id.trim(),
@@ -62,7 +65,8 @@ export async function searchMovieMetadata(
   } catch (reason) {
     if (reason instanceof StopUnconfirmedError) throw reason;
     signal.throwIfAborted();
-    error = serviceError(reason);
+    if (isMetadataNotice(reason)) notice = reason.message;
+    else error = serviceError(reason);
   }
   let code: string | undefined;
   try {
@@ -85,8 +89,14 @@ export async function searchMovieMetadata(
     } catch (reason) {
       if (reason instanceof StopUnconfirmedError) throw reason;
       signal.throwIfAborted();
-      error = serviceError(reason);
+      notice = isMetadataNotice(reason) ? reason.message : "";
+      error = notice ? "" : serviceError(reason);
     }
   }
-  return { candidates: [], resourceCode: allowResourceLookup ? code : undefined, error };
+  return {
+    candidates: [],
+    resourceCode: allowResourceLookup ? code : undefined,
+    error,
+    ...(notice ? { notice } : {}),
+  };
 }

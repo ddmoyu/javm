@@ -8,6 +8,7 @@ import { NativeLibraryPort } from "./library";
 import { logEvent } from "../../services/logging/events";
 import { OutputLines } from "../../services/downloads/progress";
 import { metadataNetwork } from "../../services/metadata/diagnostics";
+import { createMetadataConnectivity } from "./metadataConnectivity";
 import {
   applicationToolPath,
   applicationResourcePath,
@@ -80,6 +81,7 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
       const token = crypto.randomUUID() + crypto.randomUUID(),
         abort = new AbortController();
       const proxy = await network.getProxy();
+      const connectivity = createMetadataConnectivity(proxy);
       signal.throwIfAborted();
       const lines = new OutputLines();
       // 记录本次启动是否走代理（不记录代理地址与凭据），对照来源请求结果。
@@ -121,11 +123,12 @@ export function createMetaTubeHost(network: NetworkSettingsService): MetaTubeHos
         endpoint: `http://127.0.0.1:${port}`,
         token,
         network: metadataNetwork(proxy),
+        connectivity,
         exited,
         isNetworkCurrent: async () => proxy === (await network.getProxy()),
         async stop() {
           abort.abort();
-          await exited;
+          await Promise.all([exited, connectivity.dispose()]);
         },
       };
     },

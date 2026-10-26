@@ -27,6 +27,7 @@ const empty = {
   available: false,
   paused: false,
   error: "",
+  networkNotice: "",
 };
 const ignore = () => () => {};
 
@@ -157,6 +158,11 @@ export function BatchScraper({ onMatch }: { onMatch?: (task: ScrapeTask) => void
         <Alert color="red" role="alert" mb="sm">
           {t(publicMessage(state.error))}
         </Alert>
+      )}
+      {state.networkNotice && (
+        <Text size="sm" component="output" aria-live="polite" mb="sm">
+          {t(state.networkNotice)}
+        </Text>
       )}
       <Group justify="space-between" gap="xs" mb="sm">
         <Group gap="xs">
