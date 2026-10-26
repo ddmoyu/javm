@@ -225,6 +225,24 @@ await run("go", [
   "./provider/javbus",
   "./provider/fanza",
 ]);
+// 上游来源仍逐文件校验；仅记录本次确定性补丁和 Go 格式化后的三个文件。
+// 在测试和编译结束后再次核对，不能把已授权补丁简单排除在完整性检查之外。
+const patchedProviderSources = await Promise.all(
+  ["provider/javbus/javbus.go", "provider/fanza/fanza.go", "provider/javm_diagnostics.go"].map(
+    async (file) => ({ path: file, sha: blobHash(await readFile(inside(source, file))) }),
+  ),
+);
+const providerSources = lock.files.filter(
+  (entry) => entry.path.startsWith("provider/") || entry.path.startsWith("engine/register"),
+);
+const providerSourceHashes = new Map(
+  [...providerSources, ...patchedProviderSources].map((file) => [file.path, file.sha]),
+);
+const unchangedProviderCount = providerSources.filter(
+  (file) =>
+    file.path.startsWith("provider/") &&
+    !patchedProviderSources.some((patched) => patched.path === file.path),
+).length;
 await run("go", ["mod", "tidy"]);
 // 只运行自有安全夹具，不运行上游联网测试；各平台构建均验证诊断分类和请求隔离。
 for (const target of ["engine", "route"])
@@ -283,11 +301,9 @@ for (const required of [
   "modernc.org/sqlite",
 ])
   if (!buildInfo.includes(required)) throw new Error(`必需依赖缺失：${required}`);
-for (const file of lock.files.filter(
-  (entry) => entry.path.startsWith("provider/") || entry.path.startsWith("engine/register"),
-))
-  if (blobHash(await readFile(inside(source, file.path))) !== file.sha)
-    throw new Error(`来源实现被修改：${file.path}`);
+for (const [file, expected] of providerSourceHashes)
+  if (blobHash(await readFile(inside(source, file))) !== expected)
+    throw new Error(`来源实现与已验证补丁不一致：${file}`);
 
 const officialArchive = path.join(cache, dependency.file);
 if (process.platform === "win32") {
@@ -321,6 +337,10 @@ const receipt = {
   sourceSha256: dependency.sha256,
   toolchain: lock.toolchain,
   recipeSha256: await metatubeRecipeHash(),
+  providerSourceIntegrity: {
+    unchangedFiles: unchangedProviderCount,
+    patchedFiles: patchedProviderSources,
+  },
   sha256: sha256(await readFile(binary)),
   bytes: (await stat(binary)).size,
 };
@@ -352,8 +372,8 @@ const comparison =
         zipReductionPercent: Number(((1 - liteZipBytes / officialZipBytes) * 100).toFixed(2)),
         officialDownloadZipBytes: (await stat(officialArchive)).size,
         userAgentEntries: pool.length,
-        providerSourceFilesUnchanged: lock.files.filter((file) => file.path.startsWith("provider/"))
-          .length,
+        providerSourceFilesUnchanged: unchangedProviderCount,
+        providerSourceFilesPatched: patchedProviderSources.map((file) => file.path),
       }
     : {
         platform: target,
