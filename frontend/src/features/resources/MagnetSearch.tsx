@@ -16,7 +16,7 @@ import {
 import { Icon } from "../../components/icons";
 import { Empty } from "../../components/ui";
 import type { MagnetSearchService } from "../../services/magnets/MagnetSearchService";
-import { magnetLimits } from "../../services/magnets/types";
+import { magnetLimits, magnetSources } from "../../services/magnets/types";
 import { copyText } from "../../platform/neutralino/clipboard";
 import { logEvent } from "../../services/logging/events";
 
@@ -165,7 +165,11 @@ export function MagnetSearchPanel({
       {!!failures.length && (
         <Alert color="yellow" role="alert">
           {t("{0} 个搜索服务未完成。", failures.length)}
-          {[...new Set(failures.map((source) => source.error))].join(" ")}
+          {failures.map((source) => (
+            <Text key={source.id} size="sm">
+              {magnetSources.find((item) => item.id === source.id)?.name}: {t(source.error)}
+            </Text>
+          ))}
           <Button ml="sm" size="xs" variant="default" disabled={busy} onClick={service.retryFailed}>
             {t("重试失败项")}
           </Button>

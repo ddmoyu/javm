@@ -67,7 +67,7 @@ export function createResolutionHttp(maxRequestMs = bounds.requestMs): Resolutio
         await filesystem.remove(directory);
       } catch (error) {
         if ((error as { code?: string }).code !== "NE_FS_NOPATHE")
-          throw new StopUnconfirmedError(cleanup);
+          throw new StopUnconfirmedError(cleanup, "网络请求临时文件清理失败，请重试清理。");
       }
     };
     try {
@@ -108,6 +108,7 @@ export function createResolutionHttp(maxRequestMs = bounds.requestMs): Resolutio
             "content-range",
             "content-length",
             "content-encoding",
+            "cf-mitigated",
             "etag",
             "last-modified",
             "retry-after",
@@ -121,10 +122,18 @@ export function createResolutionHttp(maxRequestMs = bounds.requestMs): Resolutio
     } catch (error) {
       if (error instanceof StopUnconfirmedError) {
         deferred = true;
-        throw new StopUnconfirmedError(async () => {
-          await error.retry();
+        let pending = error.retry;
+        const retry = async () => {
+          try {
+            await pending();
+          } catch (failure) {
+            if (failure instanceof StopUnconfirmedError) pending = failure.retry;
+            // 下层更新重试句柄时，仍需保留当前请求目录的清理责任。
+            throw new StopUnconfirmedError(retry, error.message);
+          }
           await cleanup();
-        });
+        };
+        throw new StopUnconfirmedError(retry, error.message);
       }
       throw error;
     } finally {

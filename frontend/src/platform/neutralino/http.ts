@@ -69,6 +69,22 @@ class HttpRpc {
 const rpc = new HttpRpc();
 let directory: Promise<string> | undefined;
 const pendingStops = new Set<() => Promise<void>>();
+const stopPendingMessage = "仍有网络请求尚未确认停止，请重试清理；仍失败时请退出应用后重试。";
+let recovering: Promise<void> | undefined;
+function retryPendingStops(): Promise<void> {
+  if (recovering) return recovering;
+  if (!pendingStops.size) return Promise.resolve();
+  // 共用一次有界恢复，不能让两个搜索来源或其他业务同时重复取消同一传输。
+  recovering = Promise.allSettled([...pendingStops].map((retry) => retry()))
+    .then((results) => {
+      if (pendingStops.size || results.some((result) => result.status === "rejected"))
+        throw new StopUnconfirmedError(retryPendingStops, stopPendingMessage);
+    })
+    .finally(() => {
+      recovering = undefined;
+    });
+  return recovering;
+}
 async function root() {
   return (directory ??= (async () => {
     const path = `${await os.getPath("temp")}/javm-http-${crypto.randomUUID()}`;
@@ -88,13 +104,17 @@ async function remove(path: string) {
 }
 const service = new HttpService({
   async execute(request, signal) {
+    const deadline = Date.now() + request.timeoutMs;
     await waitForUpdateStartup();
-    if (pendingStops.size) throw new Error("仍有网络请求尚未确认停止，请退出应用后重试。");
+    signal.throwIfAborted();
     await rpc.ready();
     signal.throwIfAborted();
     const id = crypto.randomUUID();
     const path = `${await root()}/${id}.part`;
+    await retryPendingStops();
     signal.throwIfAborted();
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error("网络请求等待恢复超时。");
     let cancellation: Promise<unknown> | undefined;
     const stop = async () => {
       const result = await rpc.request<{ stopped: boolean }>("http.cancel", { id }, 5000);
@@ -105,11 +125,21 @@ const service = new HttpService({
       void cancellation.catch(() => {});
     };
     const { output: _output, cacheTtlMs: _cache, purpose, ...options } = request;
-    logEvent("debug", "network", "http_started", "常驻 HTTP 请求已开始", { purpose, id });
+    logEvent("debug", "network", "http_started", "常驻 HTTP 请求已开始", {
+      purpose,
+      id,
+      proxyEnabled: !!request.proxy,
+    });
     const running = rpc.request<HttpResponse>(
       "http.request",
-      { ...options, id, output: path },
-      request.timeoutMs + 6000,
+      {
+        ...options,
+        id,
+        output: path,
+        timeoutMs: remaining,
+        connectTimeoutMs: Math.min(request.connectTimeoutMs ?? 5000, remaining),
+      },
+      remaining + 6000,
     );
     signal.addEventListener("abort", cancel, { once: true });
     let deferred = false;
@@ -136,17 +166,50 @@ const service = new HttpService({
       );
       return { ...response, path };
     } catch (error) {
+      logEvent(
+        "warn",
+        "network",
+        "http_failed",
+        "常驻 HTTP 请求失败，正在确认停止",
+        {
+          purpose,
+          id,
+          proxyEnabled: !!request.proxy,
+          error: error instanceof Error ? error.message : "未知错误",
+        },
+        { action: request.method ?? "GET", requestUrl: request.url },
+      );
       try {
         await (cancellation ?? stop());
-      } catch {
+      } catch (stopError) {
         deferred = true;
-        const retry = async () => {
-          await stop();
-          await remove(path);
-          pendingStops.delete(retry);
+        let retrying: Promise<void> | undefined;
+        let recovered = false;
+        const retry = (): Promise<void> => {
+          if (recovered) return Promise.resolve();
+          return (retrying ??= (async () => {
+            await stop();
+            await remove(path);
+            pendingStops.delete(retry);
+            recovered = true;
+            logEvent("info", "network", "http_recovered", "网络请求已确认停止并完成清理", {
+              purpose,
+              id,
+            });
+          })().finally(() => {
+            retrying = undefined;
+          }));
         };
         pendingStops.add(retry);
-        throw new StopUnconfirmedError(retry);
+        logEvent(
+          "warn",
+          "network",
+          "http_stop_unconfirmed",
+          stopPendingMessage,
+          { purpose, id, error: stopError instanceof Error ? stopError.message : "未知错误" },
+          { action: request.method ?? "GET", requestUrl: request.url },
+        );
+        throw new StopUnconfirmedError(retry, stopPendingMessage);
       }
       await remove(path);
       throw error;
@@ -162,7 +225,7 @@ export const requestHttp = (request: HttpRequest, signal: AbortSignal) =>
   service.request({ ...request, headers: browserHeaders(request, navigator) }, signal);
 export async function shutdownHttp() {
   await service.shutdown();
-  for (const retry of pendingStops) await retry();
+  await retryPendingStops();
   if (directory) await remove(await directory);
   await rpc.close();
 }

@@ -57,6 +57,8 @@ function searchError(error: unknown) {
       return "搜索服务需要验证，暂时无法自动查询。";
     if (error.code === "parse_failed") return "搜索页面无法解析，可能需要验证或适配已失效。";
     if (error.code === "limit_exceeded") return "搜索结果超过本次处理上限。";
+    if (error.code === "not_found") return "搜索服务地址不存在，可能已迁移或停用。";
+    if (error.code === "unavailable") return "当前环境无法使用磁力搜索服务。";
   }
   return "搜索服务请求失败，请检查网络或代理后重试。";
 }
@@ -174,6 +176,7 @@ export class MagnetSearchService {
         done: Promise.resolve(),
       };
       const query = this.snapshot.query;
+      const started = Date.now();
       this.active.add(job);
       this.updateSource(source, { state: "running", error: "" });
       const timeout = setTimeout(
@@ -234,9 +237,16 @@ export class MagnetSearchService {
               ),
             });
           } else if (job.revision === this.revision && !this.stopped) {
+            const problem = job.abort.signal.reason ?? error;
+            logEvent("warn", "magnets", "source_failed", searchError(problem), {
+              source,
+              page,
+              code: problem instanceof ResolutionError ? problem.code : "unexpected_error",
+              elapsedMs: Date.now() - started,
+            });
             this.updateSource(source, {
               state: "failed",
-              error: searchError(job.abort.signal.reason ?? error),
+              error: searchError(problem),
             });
           }
         } finally {

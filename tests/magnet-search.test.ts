@@ -161,6 +161,33 @@ describe("磁力规范化与安全网页解析", () => {
 });
 
 describe("磁力搜索应用服务（全部使用 mock）", () => {
+  it("Issue12 来源失效和验证拦截分别显示，公共清理错误保留恢复入口", async () => {
+    const { service, jobs } = fixture();
+    service.search("SAFE-001");
+    jobs[0]!.fail(new ResolutionError("not_found"));
+    jobs[1]!.fail(new ResolutionError("interaction_required"));
+    await settled();
+    expect(service.getSnapshot().sources.map((source) => source.error)).toEqual([
+      "搜索服务地址不存在，可能已迁移或停用。",
+      "搜索服务需要验证，暂时无法自动查询。",
+    ]);
+    service.search("SAFE-002");
+    const retry = vi.fn(async () => {});
+    jobs[2]!.fail(new StopUnconfirmedError(retry, "网络请求尚未确认停止。"));
+    await settled();
+    expect(service.getSnapshot()).toMatchObject({ cleanupPending: true, searching: false });
+    expect(service.getSnapshot().error).toContain("重试清理");
+    expect(service.getSnapshot().error).not.toContain("检查网络或代理");
+    await service.retryCleanup();
+    expect(retry).toHaveBeenCalledOnce();
+    expect(service.getSnapshot().cleanupPending).toBe(false);
+    service.search("SAFE-003");
+    jobs[4]!.finish(page());
+    jobs[5]!.finish(empty);
+    await settled();
+    expect(service.getSnapshot().rows).toHaveLength(1);
+    await service.shutdown();
+  });
   it("首批补足20条：立即展示前10条，自动取第二页，之后仍可手动加载", async () => {
     const { service, jobs } = fixture();
     service.search("SAFE-001");

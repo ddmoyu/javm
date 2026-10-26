@@ -68,6 +68,8 @@ export class ResolutionHttpSession {
         Object.entries(response.headers).map(([key, value]) => [key.toLowerCase(), value]),
       );
       if (response.body.byteLength > maxBytes) throw new ResolutionError("limit_exceeded");
+      if (headers["cf-mitigated"]?.trim().toLowerCase() === "challenge")
+        throw new ResolutionError("interaction_required", true);
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         if (!headers.location || ++redirects > bounds.redirects)
           throw new ResolutionError("limit_exceeded");

@@ -7,6 +7,7 @@ import {
   type UpdatePort,
 } from "../frontend/src/services/settings/UpdateService";
 import type { NativeUpdateStatus, UpdateCandidate } from "../frontend/src/contracts/updates";
+import { StopUnconfirmedError } from "../frontend/src/services/downloads/ports";
 
 const candidate: UpdateCandidate = {
   version: "1.2.0-beta.10",
@@ -47,6 +48,56 @@ function fixture(initial: NativeUpdateStatus = { phase: "idle" }) {
   return { service, port };
 }
 afterEach(() => vi.useRealTimers());
+describe("Issue12 更新检查清理", () => {
+  it("保留失败清理，先重试停止与目录清理，再执行下一次检查", async () => {
+    const { service, port } = fixture();
+    const retry = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("安全 mock 停止失败"))
+      .mockResolvedValue(undefined);
+    const pending = new StopUnconfirmedError(retry, "网络请求尚未确认停止。");
+    const find = vi
+      .fn<UpdatePort["find"]>()
+      .mockRejectedValueOnce(pending)
+      .mockResolvedValue(candidate);
+    port.find = find;
+    await service.check();
+    expect(service.getSnapshot().error).toBe(pending.message);
+    await service.check();
+    expect(find).toHaveBeenCalledTimes(1);
+    expect(service.getSnapshot().error).toBe(pending.message);
+    await service.check();
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(find).toHaveBeenCalledTimes(2);
+    expect(service.getSnapshot().release).toEqual(candidate);
+    expect(service.getSnapshot().error).toBe("");
+    await service.shutdown();
+    expect(retry).toHaveBeenCalledTimes(2);
+  });
+
+  it("退出中取消检查仍接管清理，清理失败允许再次退出重试", async () => {
+    const { service, port } = fixture();
+    const retry = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("安全 mock 清理失败"))
+      .mockResolvedValue(undefined);
+    const pending = new StopUnconfirmedError(retry, "网络请求尚未确认停止。");
+    const find = vi.fn<UpdatePort["find"]>(
+      (_channel, signal) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(pending), { once: true });
+        }),
+    );
+    port.find = find;
+    const work = service.check();
+    await vi.waitFor(() => expect(find).toHaveBeenCalledOnce());
+    await expect(service.shutdown()).rejects.toBe(pending);
+    await work;
+    expect(service.getSnapshot().error).toBe(pending.message);
+    await service.shutdown();
+    expect(retry).toHaveBeenCalledTimes(2);
+  });
+});
 describe("双通道自动更新", () => {
   it("按数值比较 Beta，正式版本高于同版 Beta，忽略 Alpha", () => {
     expect(compareVersions("1.2.0-beta.10", "1.2.0-beta.2")).toBeGreaterThan(0);

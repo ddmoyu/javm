@@ -240,9 +240,10 @@ export function createMainView(runtime: Runtime) {
       state: value.searching ? "磁力搜索中" : "磁力搜索结束",
       error:
         !value.searching && !value.cancelled
-          ? value.sources
+          ? value.error ||
+            value.sources
               .filter((source) => source.state === "failed")
-              .map((source) => source.error)
+              .map((source) => `${source.id}: ${source.error}`)
               .join("；")
           : "",
     }));

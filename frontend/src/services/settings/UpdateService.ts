@@ -8,6 +8,7 @@ import type {
 import { defaultUpdateChannel } from "./updateVersions";
 import { isUpdateMirror, normalizeUpdateMirror, type UpdateMirror } from "./updateSources";
 import { UpdateCheckDeferredError } from "./updateHttp";
+import { StopUnconfirmedError } from "../downloads/ports";
 
 export interface UpdatePort {
   installation(): Promise<UpdateInstallation>;
@@ -54,6 +55,8 @@ export class UpdateService extends Observable<{
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
   private failedVersion = "";
+  private cleanup?: StopUnconfirmedError;
+  private cleaning?: Promise<void>;
   constructor(
     readonly current: string,
     private port: UpdatePort,
@@ -203,12 +206,15 @@ export class UpdateService extends Observable<{
     this.publish({ checking: true, error: "", retryAt: 0 });
     const work = (async () => {
       try {
+        await this.retryCleanup();
+        controller.signal.throwIfAborted();
         let release = await this.port.find(this.preferences.channel, controller.signal);
         controller.signal.throwIfAborted();
         if (!manual && release?.version === this.failedVersion) release = null;
         this.publish({ release, checked: true });
       } catch (error) {
-        if (!controller.signal.aborted)
+        if (error instanceof StopUnconfirmedError) this.cleanup = error;
+        if (!controller.signal.aborted || error instanceof StopUnconfirmedError)
           this.publish({
             error: message(error),
             retryAt: error instanceof UpdateCheckDeferredError ? error.retryAt : 0,
@@ -227,6 +233,24 @@ export class UpdateService extends Observable<{
     })();
     this.work = work;
     await work;
+  }
+  private retryCleanup(): Promise<void> {
+    if (this.cleaning) return this.cleaning;
+    const pending = this.cleanup;
+    if (!pending) return Promise.resolve();
+    this.cleaning = pending
+      .retry()
+      .then(() => {
+        if (this.cleanup === pending) this.cleanup = undefined;
+      })
+      .catch((error: unknown) => {
+        if (error instanceof StopUnconfirmedError) this.cleanup = error;
+        throw this.cleanup;
+      })
+      .finally(() => {
+        this.cleaning = undefined;
+      });
+    return this.cleaning;
   }
   async download() {
     const release = this.snapshot.release;
@@ -274,6 +298,7 @@ export class UpdateService extends Observable<{
     this.controller?.abort();
     await this.port.cancel();
     await this.work;
+    await this.retryCleanup();
     this.publish({ status: { phase: "cancelled" } });
   }
   async install() {
@@ -300,6 +325,7 @@ export class UpdateService extends Observable<{
     if (this.timer) clearTimeout(this.timer);
     this.controller?.abort();
     await this.work;
+    await this.retryCleanup();
   }
 }
 function message(error: unknown) {

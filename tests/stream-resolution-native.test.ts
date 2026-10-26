@@ -59,6 +59,44 @@ beforeEach(() => {
   native.run.mockImplementation(async (request: HttpRequest) => output(request));
 });
 describe("原生 HTTP 端口的 mock 验证", () => {
+  it("Issue12 清理重试再次失败时仍保留当前请求目录的清理责任", async () => {
+    const lastRetry = vi.fn(async () => {});
+    const firstRetry = vi.fn(async () => {
+      throw new StopUnconfirmedError(lastRetry, "网络请求尚未确认停止。");
+    });
+    native.run.mockRejectedValue(new StopUnconfirmedError(firstRetry, "网络请求尚未确认停止。"));
+    const pending = (await createResolutionHttp()(request, new AbortController().signal).catch(
+      (error: unknown) => error,
+    )) as StopUnconfirmedError;
+    const again = (await pending.retry().catch((error: unknown) => error)) as StopUnconfirmedError;
+    expect(again).toBeInstanceOf(StopUnconfirmedError);
+    expect(native.remove).not.toHaveBeenCalled();
+    await again.retry();
+    expect(firstRetry).toHaveBeenCalledOnce();
+    expect(lastRetry).toHaveBeenCalledOnce();
+    expect(native.remove).toHaveBeenCalledOnce();
+  });
+  it("Issue12 保留验证响应头，并透传网络清理原因与重试句柄", async () => {
+    native.run.mockImplementation(async (request: HttpRequest) => ({
+      ...output(request),
+      status: 403,
+      headers: { "cf-mitigated": "challenge" },
+    }));
+    const value = await createResolutionHttp()(request, new AbortController().signal);
+    expect(value.headers["cf-mitigated"]).toBe("challenge");
+    native.remove.mockClear();
+    const retry = vi.fn(async () => {});
+    native.run.mockRejectedValue(new StopUnconfirmedError(retry, "网络请求尚未确认停止。"));
+    const failure = (await createResolutionHttp()(request, new AbortController().signal).catch(
+      (error: unknown) => error,
+    )) as StopUnconfirmedError;
+    expect(failure).toBeInstanceOf(StopUnconfirmedError);
+    expect(failure.message).toBe("网络请求尚未确认停止。");
+    expect(native.remove).not.toHaveBeenCalled();
+    await failure.retry();
+    expect(retry).toHaveBeenCalledOnce();
+    expect(native.remove).toHaveBeenCalledOnce();
+  });
   it("取消句柄、字节上限、Range 和直连策略传给常驻模块；无自动跟随或重试", async () => {
     const signal = new AbortController().signal;
     await createResolutionHttp()({ ...request, range: { start: 4, length: 8 } }, signal);

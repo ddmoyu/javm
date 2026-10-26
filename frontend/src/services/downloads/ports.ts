@@ -2,8 +2,11 @@ import type { DownloadSettings, DownloadTask } from "../../contracts/downloads";
 
 // A failed kill must not be presented as a paused task or free a process slot.
 export class StopUnconfirmedError extends Error {
-  constructor(readonly retry: () => Promise<void>) {
-    super("未能确认下载进程已停止，请重试停止任务后再继续或退出。");
+  constructor(
+    readonly retry: () => Promise<void>,
+    message = "未能确认下载进程已停止，请重试停止任务后再继续或退出。",
+  ) {
+    super(message);
     this.name = "StopUnconfirmedError";
   }
 }

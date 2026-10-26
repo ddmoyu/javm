@@ -76,6 +76,13 @@ function session(port: ResolutionHttpPort, headers = {}, proxy = "") {
     () => {},
   );
 }
+it.each([200, 403])("Issue12 验证拦截 HTTP %i 保留独立错误类别", async (status) => {
+  const http = session(async () => response("", status, { "Cf-Mitigated": "challenge" }));
+  await expect(http.get(`${root}/page`, 1024)).rejects.toMatchObject({
+    code: "interaction_required",
+    fallbackEligible: true,
+  });
+});
 const submit = (value: ResolutionService, url = `${root}/master.m3u8`) =>
   value.submit({ url, provider: "direct-hls" });
 async function turns() {
