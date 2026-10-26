@@ -5,10 +5,6 @@ import {
   updateCacheMs,
   type UpdateHttpState,
 } from "../frontend/src/services/settings/updateHttp";
-import {
-  normalizeUpdateMirror,
-  updateSources,
-} from "../frontend/src/services/settings/updateSources";
 
 const url = "https://github.com/safe/fixture/JAVM-update.json";
 const response = (status: number, body: unknown = {}, headers: Record<string, string> = {}) => ({
@@ -106,26 +102,6 @@ it("镜像来源独立退避，取消不启动网络请求", async () => {
   controller.abort();
   await expect(f.client.json(url, controller.signal)).rejects.toThrow();
   expect(f.http).toHaveBeenCalledTimes(2);
-});
-it("镜像前缀限制 HTTPS 且保留原始 GitHub 地址，不接受凭据与模板", () => {
-  expect(normalizeUpdateMirror(" https://mirror.example.com/prefix ")).toBe(
-    "https://mirror.example.com/prefix/",
-  );
-  expect(updateSources("custom", "https://mirror.example.com/")).toEqual([
-    "https://mirror.example.com/",
-    "",
-  ]);
-  expect(updateSources("official")).toEqual([""]);
-  for (const invalid of [
-    "http://mirror.example.com/",
-    "https://user:pass@mirror.example.com/",
-    "https://mirror.example.com/?token=x",
-    "https://mirror.example.com:443/",
-    "https://mirror.example.com/../",
-    "https://mirror.example.com/#x",
-    "https://mirror.example.com/{url}",
-  ])
-    expect(() => normalizeUpdateMirror(invalid)).toThrow();
 });
 it("损坏的缓存响应不会使已保存的限流退避失效", async () => {
   const f = fixture();

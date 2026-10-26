@@ -2,9 +2,10 @@ import { t, localizeOptions, useLocale } from "../../i18n/index";
 import { useState, useSyncExternalStore } from "react";
 import { Alert, Button, Group, Modal, Progress, Select, Stack, Switch, Text } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
+import { Icon } from "../../components/icons";
 import { createApplicationUpdater } from "../../platform/neutralino/applicationUpdates";
 import { openExternalLink } from "../../platform/neutralino/externalLinks";
-import { UpdateMirrorSettings } from "./UpdateMirrorSettings";
+import { parseVersion } from "../../services/settings/updateVersions";
 import { SettingFields, SettingRow } from "./SettingsPrimitives";
 export function ApplicationUpdatePanel() {
   useLocale();
@@ -27,6 +28,17 @@ export function ApplicationUpdatePanel() {
       "rolling-back",
     ].includes(phase);
   const version = state.status.version || state.release?.version;
+  const releasePage =
+    state.release?.url ||
+    (version && parseVersion(version)
+      ? `https://github.com/ddmoyu/javm/releases/tag/v${version.replace(/^v/, "")}`
+      : "https://github.com/ddmoyu/javm/releases");
+  const canUpdateManually =
+    !!state.release ||
+    !!state.error ||
+    !!state.status.error ||
+    phase === "failed" ||
+    phase === "rolled-back";
   const progress = state.status.total
     ? Math.min(100, ((state.status.bytes ?? 0) / state.status.total) * 100)
     : 0;
@@ -85,14 +97,6 @@ export function ApplicationUpdatePanel() {
         />
       </SettingRow>
       <SettingFields>
-        <UpdateMirrorSettings
-          mirror={state.mirror}
-          customMirror={state.customMirror}
-          disabled={busy || !state.available}
-          save={(mirror, custom) =>
-            service.configure(state.channel, state.automatic, mirror, custom)
-          }
-        />
         {!state.available && state.initialized && (
           <Text size="sm" c="dimmed">
             {state.reason || t("更新服务暂不可用。")}
@@ -115,11 +119,6 @@ export function ApplicationUpdatePanel() {
           </Text>
         )}
         {phase === "downloading" && <Progress value={progress} aria-label={t("更新下载进度")} />}
-        {phase === "downloading" && state.status.source && (
-          <Text component="output" size="xs" c="dimmed">
-            {t("下载来源：{0}", state.status.source)}
-          </Text>
-        )}
         {state.release && phase === "idle" && (
           <Text size="sm">{t("发现新版本 {0}", state.release.version)}</Text>
         )}
@@ -151,6 +150,27 @@ export function ApplicationUpdatePanel() {
           {phase === "ready" && (
             <Button size="xs" disabled={state.restartRequired} onClick={() => setConfirming(true)}>
               {t("重启并安装 {0}", version)}
+            </Button>
+          )}
+          {canUpdateManually && (
+            <Button
+              component="a"
+              href={releasePage}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="xs"
+              variant="default"
+              rightSection={<Icon name="external" size={14} />}
+              aria-label={t("前往 Release 手动更新（在浏览器中打开）")}
+              onClick={(event) => {
+                if (runtime !== "desktop") return;
+                event.preventDefault();
+                void openExternalLink(releasePage).catch(() =>
+                  notice("打开链接失败，请检查默认浏览器后重试。"),
+                );
+              }}
+            >
+              {t("前往 Release 手动更新")}
             </Button>
           )}
           {state.release && (

@@ -48,8 +48,6 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
       ? nativeSettingsStorage<UpdateHttpState>("application-update-cache-v1")
       : { read: async () => null, write: async () => {} },
   );
-  const sources = () =>
-    updateSources(updater!.getSnapshot().mirror, updater!.getSnapshot().customMirror);
   const fromSources = async <T>(
     url: string,
     signal: AbortSignal,
@@ -57,7 +55,7 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
   ): Promise<T> => {
     let failure: unknown;
     let deferred: UpdateCheckDeferredError | undefined;
-    for (const prefix of sources()) {
+    for (const prefix of updateSources()) {
       signal.throwIfAborted();
       const target = prefix + url;
       try {
@@ -162,7 +160,7 @@ export function createApplicationUpdater(runtime: Runtime, network: NetworkSetti
           rollback,
           channel: updater!.getSnapshot().channel,
           proxy: await network.getProxy(),
-          sources: sources(),
+          sources: updateSources(),
         });
         let cancelled = false;
         for (;;) {

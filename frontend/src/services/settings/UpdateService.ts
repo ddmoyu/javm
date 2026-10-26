@@ -6,7 +6,6 @@ import type {
   UpdateInstallation,
 } from "../../contracts/updates";
 import { defaultUpdateChannel } from "./updateVersions";
-import { isUpdateMirror, normalizeUpdateMirror, type UpdateMirror } from "./updateSources";
 import { UpdateCheckDeferredError } from "./updateHttp";
 import { StopUnconfirmedError } from "../downloads/ports";
 
@@ -26,8 +25,6 @@ export interface UpdatePreferences {
   channel: UpdateChannel;
   automatic: boolean;
   lastCheck: number;
-  mirror?: UpdateMirror;
-  customMirror?: string;
 }
 const interval = 24 * 60 * 60 * 1000;
 export class UpdateRestartRequiredError extends Error {}
@@ -36,8 +33,6 @@ export class UpdateService extends Observable<{
   initialized: boolean;
   channel: UpdateChannel;
   automatic: boolean;
-  mirror: UpdateMirror;
-  customMirror: string;
   retryAt: number;
   configuring: boolean;
   checking: boolean;
@@ -68,8 +63,6 @@ export class UpdateService extends Observable<{
       initialized: false,
       channel,
       automatic: true,
-      mirror: "auto",
-      customMirror: "",
       retryAt: 0,
       configuring: false,
       checking: false,
@@ -80,7 +73,7 @@ export class UpdateService extends Observable<{
       reason: "",
       restartRequired: false,
     });
-    this.preferences = { channel, automatic: true, lastCheck: 0, mirror: "auto", customMirror: "" };
+    this.preferences = { channel, automatic: true, lastCheck: 0 };
   }
   initialize() {
     return (this.loading ??= (async () => {
@@ -92,19 +85,13 @@ export class UpdateService extends Observable<{
             typeof saved !== "object" ||
             Array.isArray(saved) ||
             (saved.channel !== "stable" && saved.channel !== "beta") ||
-            typeof saved.automatic !== "boolean" ||
-            (saved.mirror !== undefined && !isUpdateMirror(saved.mirror)) ||
-            (saved.customMirror !== undefined && typeof saved.customMirror !== "string")
+            typeof saved.automatic !== "boolean"
           )
             throw new Error("更新设置格式无效，原配置已保留，请检查数据目录后重新打开应用。");
+          // 旧版 mirror/customMirror 不再参与更新，忽略它们并保留通道、自动检查与检查时间。
           this.preferences = {
             channel: saved.channel,
             automatic: saved.automatic,
-            mirror: saved.mirror ?? "auto",
-            customMirror:
-              saved.customMirror || saved.mirror === "custom"
-                ? normalizeUpdateMirror(saved.customMirror ?? "")
-                : "",
             lastCheck: Number.isFinite(saved.lastCheck)
               ? Math.max(0, Math.min(saved.lastCheck!, Date.now()))
               : 0,
@@ -117,8 +104,6 @@ export class UpdateService extends Observable<{
           reason: install.reason ?? "",
           channel: this.preferences.channel,
           automatic: this.preferences.automatic,
-          mirror: this.preferences.mirror ?? "auto",
-          customMirror: this.preferences.customMirror ?? "",
         });
         if (install.available) this.publish({ status: await this.port.status() });
       } catch (error) {
@@ -137,12 +122,7 @@ export class UpdateService extends Observable<{
       void this.check(false);
     }, delay);
   }
-  async configure(
-    channel: UpdateChannel,
-    automatic: boolean,
-    mirror: UpdateMirror = this.snapshot.mirror,
-    customMirror = this.snapshot.customMirror,
-  ) {
+  async configure(channel: UpdateChannel, automatic: boolean) {
     await this.initialize();
     if (this.snapshot.restartRequired) throw new Error("请重新打开应用后继续更新。");
     if (
@@ -152,20 +132,13 @@ export class UpdateService extends Observable<{
     )
       throw new Error("请先取消当前更新操作。");
     if (channel !== "stable" && channel !== "beta") throw new Error("更新通道无效。");
-    if (!isUpdateMirror(mirror)) throw new Error("更新镜像选项无效。");
-    customMirror = customMirror || mirror === "custom" ? normalizeUpdateMirror(customMirror) : "";
-    const changed =
-      channel !== this.snapshot.channel ||
-      mirror !== this.snapshot.mirror ||
-      customMirror !== this.snapshot.customMirror;
+    const changed = channel !== this.snapshot.channel;
     this.publish({ configuring: true });
     try {
       if (changed && this.snapshot.status.phase === "ready") await this.port.cancel();
       const next = {
         channel,
         automatic,
-        mirror,
-        customMirror,
         lastCheck: changed ? 0 : this.preferences.lastCheck,
       };
       await this.store.write(next);
@@ -176,8 +149,6 @@ export class UpdateService extends Observable<{
           : {
               channel,
               automatic,
-              mirror,
-              customMirror,
               retryAt: 0,
               release: null,
               checked: false,

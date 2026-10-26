@@ -148,7 +148,7 @@ void fetchUpdateFile(const fs::path &file, const Json &asset,
     } catch (...) {
     }
   }
-  std::string failure = "所有更新来源均下载失败，请检查网络或切换镜像后重试";
+  std::string failure = "更新下载失败，请检查网络后重试，或前往 Release 页面手动更新";
   auto ordered = urls;
   const auto resume = std::find(ordered.begin(), ordered.end(), previous);
   // 继续已选来源的有效残片；只有仍在当前允许列表中才可调整顺序。

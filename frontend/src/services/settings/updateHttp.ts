@@ -24,8 +24,8 @@ export class UpdateCheckDeferredError extends Error {
   ) {
     super(
       limited
-        ? "更新服务暂时限流，已暂停请求；可稍后重试或切换镜像。"
-        : "更新服务暂时不可用，已暂停请求；可稍后重试或切换镜像。",
+        ? "更新服务暂时限流，已暂停请求；可稍后重试或前往 Release 页面手动更新。"
+        : "更新服务暂时不可用，已暂停请求；可稍后重试或前往 Release 页面手动更新。",
     );
   }
 }
