@@ -2,6 +2,7 @@
   "sources": ["neutralino"],
   "files": [
     "scripts/third-party/posix/patch-neutralino.mjs",
-    "scripts/third-party/posix/verify-host.mjs"
+    "scripts/third-party/posix/verify-host.mjs",
+    "scripts/third-party/posix/window-geometry.test.mjs"
   ]
 }

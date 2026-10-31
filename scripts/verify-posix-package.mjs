@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { json, root, run, sha256, target, targets } from "./third-party/posix/common.mjs";
+import { verifyHostGlobals } from "./third-party/posix/verify-host.mjs";
 
 if (!targets.includes(target)) throw new Error("安装验证需要相应 POSIX 系统");
 const state = await json(path.join(root, `build/posix-package-${target}.json`));
@@ -47,6 +48,7 @@ const env = {
   XDG_CACHE_HOME: path.join(home, ".cache"),
 };
 const completed = [];
+const windowGeometry = [];
 async function until(read, timeout = 20000) {
   const end = Date.now() + timeout;
   while (Date.now() < end) {
@@ -202,6 +204,10 @@ try {
     extracted,
     process.platform === "darwin" ? "JAVM.app/Contents/MacOS/JAVM" : "JAVM/JAVM",
   );
+  if (process.platform === "darwin") {
+    const verification = await verifyHostGlobals(path.join(path.dirname(entry), "JAVM-host"));
+    windowGeometry.push({ kind: "portable", ...verification });
+  }
   await launch(entry, []);
   await launch(entry, [], true);
   if (process.platform === "darwin") {
@@ -221,6 +227,10 @@ try {
     const installedApp = path.join(directory, "Applications/JAVM.app");
     await run("ditto", [path.join(mounted, "JAVM.app"), installedApp]);
     await run("codesign", ["--verify", "--deep", "--strict", installedApp]);
+    const verification = await verifyHostGlobals(
+      path.join(installedApp, "Contents/MacOS/JAVM-host"),
+    );
+    windowGeometry.push({ kind: "dmg", ...verification });
     await launch(path.join(installedApp, "Contents/MacOS/JAVM"), [], true);
     await run("ditto", [path.join(mounted, "JAVM.app"), installedApp]);
     await run("codesign", ["--verify", "--deep", "--strict", installedApp]);
@@ -256,6 +266,7 @@ try {
     gui: !installationOnly,
     scope: installationOnly ? "installation-only" : "desktop-and-installation",
     desktop,
+    windowGeometry,
     manifestSha256: sha256(await readFile(state.manifest)),
     preservedUserData: true,
     verifiedAt: new Date().toISOString(),

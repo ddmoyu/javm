@@ -26,6 +26,16 @@ curl、MediaInfo、FFmpeg、MetaTube 和 Neutralino 各自记录系统、架构�
 
 ## 验证边界
 
+### 2026-10-31：Intel macOS 窗口结构体返回修复
+
+[Issue #14](https://github.com/ddmoyu/javm/issues/14) 报告 Intel macOS 启动时在 `window::getSize()` 崩溃。锁定的 Neutralino 6.10.0 在读取窗口 `frame` 及截图的 `contentRectForFrameRect:` 时，将返回 `CGRect` 的方法直接转为 `objc_msgSend` 调用；x86_64 的结构体返回需要 `objc_msgSend_stret`，否则隐藏返回指针会被误当作接收者。arm64 保留 `objc_msgSend`。
+
+修复并入既有 `patch-neutralino.mjs`，对两个调用位置做精确匹配；上游实现变更时立即终止补丁，要求重新审查。新增编译用例使用 Clang 的 macOS 双架构目标检查实际生成的调用及 Intel 隐藏返回参数，不依赖 macOS SDK。组件的 macOS 验证改用隔离的空白本地窗口，执行尺寸、位置、移动、居中和缩放调用；应用打包后再次对便携包和 DMG 的实际宿主执行同一验证，记录到发布附件。Linux 仍使用 cloud 模式，不加载业务数据或在线内容。
+
+只修改 Neutralino 专属配方输入，三个 POSIX Neutralino 指纹会更新，其余组件继续复用。后续分发必须先完成独立组件构建与验证，再由应用发布消费匹配产物；不修改固定迁移记录，不通过跳过前端窗口 API 隐藏故障。Windows 上的补丁和双架构编译检查不能替代 macOS 实机启动与窗口操作验收。
+
+Windows 上的双架构编译检查、补丁拒绝检查及组件隔离检查已通过；真实 macOS 宿主与发布产物的验收结果在版本发布验证文档中记录。结构体返回入口依据 [Apple 运行时说明](https://developer.apple.com/documentation/objectivec/1456730-objc_msgsend_stret)，架构差异另由实际目标代码生成及 macOS CI 验证。
+
 最低编译目标和 CI 运行系统分别记录。macOS 15 CI 不能证明 macOS 13 真机表现；Xvfb 不能证明所有 Linux 桌面环境的托盘与图形行为。未签名开发发行不等于已完成 Developer ID、公证或商店发行。
 
 参考：[锁定宿主源码](https://github.com/neutralinojs/neutralinojs/tree/v6.10.0)、[官方 Extension](https://neutralino.js.org/docs/how-to/extensions-overview/)、[WebKitGTK 临时会话](https://webkitgtk.org/reference/webkit2gtk/stable/property.WebView.is-ephemeral.html)、[Apple 临时数据存储](<https://developer.apple.com/documentation/webkit/wkwebsitedatastore/nonpersistent()>)。

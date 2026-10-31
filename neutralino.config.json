@@ -4,7 +4,7 @@
   "applicationName": "JAVM",
   "description": "JAVM",
   "applicationIcon": "resources/icon.png",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "defaultMode": "window",
   "port": 0,
   "documentRoot": "/dist/frontend/",

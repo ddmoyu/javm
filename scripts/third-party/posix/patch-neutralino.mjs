@@ -178,6 +178,30 @@ export function forwardCaptureMessages(source) {
 ${anchor}`,
   );
 }
+// CGRect is returned indirectly on Intel macOS. objc_msgSend would interpret
+// the hidden result pointer as self; arm64 must keep objc_msgSend (no stret API).
+export function fixCocoaRectReturns(source) {
+  const replace = (before, after) => {
+    assert.equal(source.split(before).length, 2, "macOS CGRect ABI 补丁的上游位置已变化");
+    source = source.replace(before, after);
+  };
+  replace(
+    "#if defined(__APPLE__)\nCGRect __getWindowRect() {",
+    `#if defined(__APPLE__)
+#if defined(__x86_64__)
+#define JAVM_OBJC_MSGSEND_CGRECT objc_msgSend_stret
+#else
+#define JAVM_OBJC_MSGSEND_CGRECT objc_msgSend
+#endif
+CGRect __getWindowRect() {`,
+  );
+  // Both window geometry and snapshot's contentRectForFrameRect: return CGRect.
+  for (const signature of ["CGRect (*)(id, SEL)", "CGRect (*)(id, SEL, CGRect)"]) {
+    replace(`((${signature})objc_msgSend)`, `((${signature})JAVM_OBJC_MSGSEND_CGRECT)`);
+  }
+  return source;
+}
+
 export async function patchNeutralino(source, commit) {
   assert.match(commit, /^[a-f0-9]{40}$/);
   const settings = path.join(source, "settings.cpp");
@@ -185,7 +209,10 @@ export async function patchNeutralino(source, commit) {
   const webview = path.join(source, "lib/webview/webview.h");
   await writeFile(webview, isolateWebview(await readFile(webview, "utf8")));
   const windowSource = path.join(source, "api/window/window.cpp");
-  await writeFile(windowSource, forwardCaptureMessages(await readFile(windowSource, "utf8")));
+  await writeFile(
+    windowSource,
+    fixCocoaRectReturns(forwardCaptureMessages(await readFile(windowSource, "utf8"))),
+  );
   const cmake = path.join(source, "CMakeLists.txt");
   const original = await readFile(cmake, "utf8");
   const patched = original.replace(
