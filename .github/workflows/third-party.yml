@@ -151,6 +151,8 @@ jobs:
         run: node --test scripts/third-party/fingerprint.test.mjs scripts/third-party/posix/artifact.test.mjs
       - name: 验证 macOS 窗口结构体返回 ABI
         run: node --test scripts/third-party/posix/window-geometry.test.mjs
+      - name: 验证 Cocoa 缺失协议注册保护
+        run: node --test scripts/third-party/posix/cocoa-protocols.test.mjs
       - name: 按组件和平台复用已有发布
         id: plan
         env:

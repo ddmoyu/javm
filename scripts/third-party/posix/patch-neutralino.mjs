@@ -202,12 +202,39 @@ CGRect __getWindowRect() {`,
   return source;
 }
 
+// objc_getProtocol can return nil for protocols not registered by the loaded
+// frameworks. class_addProtocol does not reject nil on all macOS runtimes and
+// can leave a null entry that crashes later conformsToProtocol: queries.
+export const cocoaProtocolHelper = `inline bool javmAddCocoaProtocol(Class cls, const char* name) {
+  if(!cls) return false;
+  Protocol* protocol = objc_getProtocol(name);
+  return protocol ? class_addProtocol(cls, protocol) : false;
+}
+`;
+
+export function guardCocoaProtocols(source) {
+  for (const [receiver, name] of [
+    ["cls", "NSTouchBarProvider"],
+    ["cls", "NSApplicationDelegate"],
+    ["cls", "WKScriptMessageHandler"],
+    ["navcls", "WKNavigationDelegate"],
+  ]) {
+    const before = `class_addProtocol(${receiver}, objc_getProtocol("${name}"));`;
+    assert.equal(source.split(before).length, 2, "macOS 协议注册补丁的上游位置已变化");
+    source = source.replace(before, `javmAddCocoaProtocol(${receiver}, "${name}");`);
+  }
+  assert.doesNotMatch(source, /class_addProtocol\([^;]*objc_getProtocol/, "存在未保护的协议注册");
+  const anchor = "class cocoa_wkwebview_engine {";
+  assert.equal(source.split(anchor).length, 2, "macOS 代理类位置已变化");
+  return source.replace(anchor, cocoaProtocolHelper + "\n" + anchor);
+}
+
 export async function patchNeutralino(source, commit) {
   assert.match(commit, /^[a-f0-9]{40}$/);
   const settings = path.join(source, "settings.cpp");
   await writeFile(settings, escapeGlobalStrings(await readFile(settings, "utf8")));
   const webview = path.join(source, "lib/webview/webview.h");
-  await writeFile(webview, isolateWebview(await readFile(webview, "utf8")));
+  await writeFile(webview, guardCocoaProtocols(isolateWebview(await readFile(webview, "utf8"))));
   const windowSource = path.join(source, "api/window/window.cpp");
   await writeFile(
     windowSource,

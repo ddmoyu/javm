@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import vm from "node:vm";
 import { setTimeout as delay } from "node:timers/promises";
+
+const execute = promisify(execFile);
 
 export async function verifyHostGlobals(binary) {
   // The cloud fixture cannot exercise Cocoa's CGRect return ABI (Issue #14).
@@ -14,6 +18,28 @@ export async function verifyHostGlobals(binary) {
   const mode = process.platform === "darwin" ? "window" : "cloud";
   const directory = await mkdtemp(path.join(tmpdir(), "javm-safe-host-"));
   const app = path.join(directory, "安全 ' 空格");
+  const probeFile = path.join(directory, "protocol-probe.json");
+  const environment = { ...process.env };
+  if (mode === "window") {
+    const library = path.join(directory, "protocol-probe.dylib");
+    await execute(
+      "xcrun",
+      [
+        "clang++",
+        "-std=c++17",
+        "-dynamiclib",
+        "-fvisibility=hidden",
+        fileURLToPath(new URL("./cocoa-protocol-probe.cpp", import.meta.url)),
+        "-lobjc",
+        "-o",
+        library,
+      ],
+      { timeout: 30000 },
+    );
+    await execute("codesign", ["--force", "--sign", "-", library], { timeout: 10000 });
+    environment.DYLD_INSERT_LIBRARIES = library;
+    environment.JAVM_PROTOCOL_PROBE_FILE = probeFile;
+  }
   await mkdir(path.join(app, ".tmp"), { recursive: true });
   await writeFile(path.join(app, "index.html"), "<!doctype html><title>Safe host fixture</title>");
   await writeFile(
@@ -44,7 +70,7 @@ export async function verifyHostGlobals(binary) {
           title: "Safe window geometry fixture",
           width: 640,
           height: 480,
-          hidden: true,
+          hidden: false,
           center: false,
           useSavedState: false,
           enableInspector: false,
@@ -57,10 +83,10 @@ export async function verifyHostGlobals(binary) {
   const child = spawn(
     binary,
     [`--mode=${mode}`, "--res-mode=directory", `--path=${app.replaceAll(path.sep, "/")}`],
-    { cwd: app, windowsHide: true, stdio: "ignore" },
+    { cwd: app, env: environment, windowsHide: true, stdio: "ignore" },
   );
   const exited = once(child, "exit");
-  let socket;
+  let socket, protocolConformance;
   try {
     let auth;
     for (let i = 0; i < 200; ++i) {
@@ -157,6 +183,23 @@ export async function verifyHostGlobals(binary) {
       const resized = await call("window.getSize");
       assert.equal(resized.width, 720);
       assert.equal(resized.height, 512);
+      for (let i = 0; i < 200; ++i) {
+        if (child.exitCode !== null || child.signalCode !== null)
+          throw new Error("Cocoa 协议查询期间宿主退出");
+        try {
+          protocolConformance = JSON.parse(await readFile(probeFile, "utf8"));
+          break;
+        } catch (error) {
+          if (error.code !== "ENOENT" && !(error instanceof SyntaxError)) throw error;
+        }
+        await delay(50);
+      }
+      assert.ok(protocolConformance, "Cocoa 协议探针未返回结果");
+      assert.equal(protocolConformance.ok, true, protocolConformance.reason);
+      assert.equal(protocolConformance.classes, 3);
+      assert.ok(protocolConformance.conformanceQueries >= 4);
+      // Keep the safe visible window alive across display/Touch Bar update cycles.
+      await delay(500);
     }
     socket.send(
       JSON.stringify({
@@ -178,7 +221,7 @@ export async function verifyHostGlobals(binary) {
       globals: true,
       windowGeometry: mode === "window",
       ...(mode === "window"
-        ? { methods: ["getSize", "getPosition", "move", "center", "setSize"] }
+        ? { methods: ["getSize", "getPosition", "move", "center", "setSize"], protocolConformance }
         : {}),
     };
     console.log(`安全宿主验证通过：${JSON.stringify(verification)}`);

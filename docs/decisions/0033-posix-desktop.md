@@ -36,6 +36,16 @@ curl、MediaInfo、FFmpeg、MetaTube 和 Neutralino 各自记录系统、架构�
 
 Windows 上的双架构编译检查、补丁拒绝检查及组件隔离检查已通过；真实 macOS 宿主与发布产物的验收结果在版本发布验证文档中记录。结构体返回入口依据 [Apple 运行时说明](https://developer.apple.com/documentation/objectivec/1456730-objc_msgsend_stret)，架构差异另由实际目标代码生成及 macOS CI 验证。
 
+### 2026-10-31：Cocoa 协议空值保护
+
+补充日志显示崩溃发生在 Touch Bar 枚举代理时的 `conformsToProtocol:` 查询。日志中的宿主 UUID 对应 1.0.16 的公开宿主，与 1.0.17 不同，因此不能据此认定 1.0.17 的窗口结构体修复失效；同时确认两版共有的协议注册风险仍需修复。
+
+`objc_getProtocol` 对尚未注册的协议可以返回空值，而 [Apple 运行时的 `class_addProtocol` 实现](https://github.com/apple-oss-distributions/objc4/blob/main/runtime/objc-runtime-new.mm) 没有对应的协议空值检查，可能将空条目保存在类协议列表。macOS 宿主的四处协议注册统一经过空类、空协议检查，保留有效协议及原有方法；补丁对新增、缺失或重复注册位置拒绝继续。
+
+新增专项编译运行实际注册辅助函数，验证空值与正常返回路径。macOS 组件及安装包验证在隔离空白窗口中加载仅用于测试的探针，检查三个代理类的协议列表，并主动执行完整协议遍历与可用的 Touch Bar 协议查询。探针避免使用 AppKit/WebKit 的 `@protocol` 引用，以免提前注册协议而掩盖故障；探针不随应用分发。该检查不等同于真实 Touch Bar 硬件验收，仍需报告者反馈。
+
+按用户要求，本次先使用手动 `macos-issue14-test.yml` 生成 Intel 专项测试包，不递增版本、不创建标签或 Release。独立宿主任务生成带指纹和哈希的 Actions 组件附件；打包任务校验后替换固定 SHA256 的 1.0.17 基础包宿主，记录源码提交和宿主 UUID，使用独立应用名称及 bundle ID，移除测试包的 URL 关联。仅存放 Actions 附件，不进入更新渠道。此流程是明确的诊断重打包，正式应用发布仍严格消费已验证的组件 Release，缺包立即失败。
+
 最低编译目标和 CI 运行系统分别记录。macOS 15 CI 不能证明 macOS 13 真机表现；Xvfb 不能证明所有 Linux 桌面环境的托盘与图形行为。未签名开发发行不等于已完成 Developer ID、公证或商店发行。
 
 参考：[锁定宿主源码](https://github.com/neutralinojs/neutralinojs/tree/v6.10.0)、[官方 Extension](https://neutralino.js.org/docs/how-to/extensions-overview/)、[WebKitGTK 临时会话](https://webkitgtk.org/reference/webkit2gtk/stable/property.WebView.is-ephemeral.html)、[Apple 临时数据存储](<https://developer.apple.com/documentation/webkit/wkwebsitedatastore/nonpersistent()>)。
