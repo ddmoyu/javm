@@ -2,6 +2,7 @@ import { Observable, Settings, record, serviceError, serviceUrl, text } from "./
 import type { JsonHttp, Store } from "./shared";
 import type { EditableMetadata } from "../../contracts/metadata";
 import { StopUnconfirmedError } from "../downloads/ports";
+import type { AiProtocol } from "./aiPresets";
 
 export interface AiProvider {
   id: string;
@@ -10,6 +11,7 @@ export interface AiProvider {
   endpoint: string;
   model: string;
   apiKey: string;
+  protocol?: AiProtocol;
 }
 
 export interface AiSettings {
@@ -33,7 +35,7 @@ export function validateAiSettings(value: unknown): AiSettings {
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > 5)
     throw new Error("请保留 1～5 个 AI 供应商。");
   const ids = new Set<string>();
-  const providers = raw.map((input) => {
+  const providers = raw.map((input): AiProvider => {
     const item = record(input),
       id = text(item.id, 80),
       name = text(item.name, 80);
@@ -46,7 +48,10 @@ export function validateAiSettings(value: unknown): AiSettings {
     if (/[\r\n]/.test(apiKey) || /\/(?:chat\/completions|responses)\/?$/.test(endpoint))
       throw new Error("请填写 API 基础地址（通常以 /v1 结尾），并检查 API Key。");
     if (data.enabled && item.enabled && !model) throw new Error(`请填写 ${name} 的模型名称。`);
-    return { id, name, enabled: item.enabled, endpoint, model, apiKey };
+    const protocol = item.protocol;
+    if (protocol !== undefined && protocol !== "openai" && protocol !== "anthropic")
+      throw new Error("不支持此 AI 接口协议，请选择对话补全或消息协议。");
+    return { id, name, enabled: item.enabled, endpoint, model, apiKey, protocol };
   });
   if (data.enabled && !providers.some((provider) => provider.enabled))
     throw new Error("请至少启用一个 AI 供应商。");
@@ -77,8 +82,20 @@ export function aiProviders(value: AiSettings): AiProvider[] {
   );
 }
 class AiRefusal extends Error {}
-export function parseAiObject(value: unknown) {
-  const envelope = record(value);
+export function parseAiObject(value: unknown, protocol?: AiProtocol) {
+  let envelope = record(value);
+  if (protocol === "anthropic") {
+    if (envelope.stop_reason === "max_tokens") throw new Error("AI 响应被截断，请更换模型后重试。");
+    if (envelope.stop_reason === "refusal")
+      throw new AiRefusal("AI 拒绝处理此请求，原资料未修改。");
+    if (!Array.isArray(envelope.content)) throw new Error("AI 未返回结果。");
+    const content = envelope.content
+      .map(record)
+      .filter((block) => block.type === "text")
+      .map((block) => text(block.text, 32000))
+      .join("");
+    envelope = { choices: [{ message: { content } }] };
+  }
   if (!Array.isArray(envelope.choices) || !envelope.choices.length)
     throw new Error("AI 未返回结果。");
   const choice = record(envelope.choices[0]);
@@ -86,6 +103,8 @@ export function parseAiObject(value: unknown) {
   const message = record(choice.message);
   if (message.refusal) throw new AiRefusal("AI 拒绝处理此请求，原资料未修改。");
   const content = text(message.content, 32000)
+    // 部分兼容接口把思考段放在正文开头；只剥离完整段，不从段内提取 JSON。
+    .replace(/^(?:<think>[\s\S]*?<\/think>\s*)+/, "")
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/, "");
   try {
@@ -154,25 +173,33 @@ export class AiService extends Observable<{
   }
   private async call(settings: AiProvider, system: string, input: unknown, signal: AbortSignal) {
     if (!settings.model) throw new Error("请先填写模型名称。");
+    const anthropic = settings.protocol === "anthropic";
     const body = {
       model: settings.model,
       stream: false,
+      ...(anthropic ? { system, max_tokens: 16384 } : {}),
       messages: [
-        { role: "system", content: system },
+        ...(!anthropic ? [{ role: "system", content: system }] : []),
         { role: "user", content: JSON.stringify(input) },
       ],
     };
+    const headers: Record<string, string> = anthropic ? { "anthropic-version": "2023-06-01" } : {};
+    if (settings.apiKey) {
+      if (anthropic) headers["x-api-key"] = settings.apiKey;
+      else headers.Authorization = `Bearer ${settings.apiKey}`;
+    }
     return parseAiObject(
       await this.http(
         {
-          url: `${settings.endpoint}/chat/completions`,
+          url: `${settings.endpoint}/${anthropic ? "messages" : "chat/completions"}`,
           method: "POST",
           timeout: 25,
-          headers: settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {},
+          headers,
           body,
         },
         signal,
       ),
+      settings.protocol,
     );
   }
   private async fallback<T>(

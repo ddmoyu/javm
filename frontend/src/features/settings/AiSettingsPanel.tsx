@@ -6,6 +6,7 @@ import {
   Group,
   Paper,
   PasswordInput,
+  Select,
   Stack,
   Switch,
   Text,
@@ -13,6 +14,13 @@ import {
 } from "@mantine/core";
 import { useWorkspace } from "../../app/state";
 import { aiProviders } from "../../services/metadata/AiService";
+import {
+  applyAiPreset,
+  applyAiProtocol,
+  minimaxPreset,
+  MINIMAX_MODELS,
+  MINIMAX_PRESETS,
+} from "../../services/metadata/aiPresets";
 import type { AiProvider, AiSettings } from "../../services/metadata/AiService";
 import { serviceError } from "../../services/metadata/shared";
 import { SettingCard, SettingNote, SettingRow } from "./SettingsPrimitives";
@@ -117,6 +125,33 @@ export function AiSettingsPanel() {
                       }
                     />
                   </Group>
+                  <Select
+                    label={t("应用服务预设")}
+                    placeholder={t("选择预设，快速填写配置")}
+                    value={null}
+                    disabled={busy}
+                    data={MINIMAX_PRESETS.map((preset) => ({
+                      value: preset.id,
+                      label:
+                        preset.protocol === "anthropic"
+                          ? t("{0}（消息）", t(preset.name))
+                          : t("{0}（对话补全）", t(preset.name)),
+                    }))}
+                    onChange={(value) => value && editProvider(provider.id, applyAiPreset(value))}
+                  />
+                  <Select
+                    label={t("接口协议")}
+                    value={provider.protocol ?? "openai"}
+                    disabled={busy}
+                    data={[
+                      { value: "openai", label: t("OpenAI 兼容（对话补全）") },
+                      { value: "anthropic", label: t("Anthropic 兼容（消息）") },
+                    ]}
+                    onChange={(value) => {
+                      if (value === "openai" || value === "anthropic")
+                        editProvider(provider.id, applyAiProtocol(provider.endpoint, value));
+                    }}
+                  />
                   <TextInput
                     label={t("服务名称")}
                     value={provider.name}
@@ -128,7 +163,11 @@ export function AiSettingsPanel() {
                   />
                   <TextInput
                     label={t("服务地址")}
-                    description={t("OpenAI 兼容的 API 基础地址，通常以 /v1 结尾。")}
+                    description={
+                      provider.protocol === "anthropic"
+                        ? t("Anthropic 兼容的 API 基础地址，需包含 /v1，不含 /messages。")
+                        : t("OpenAI 兼容的 API 基础地址，通常以 /v1 结尾。")
+                    }
                     value={provider.endpoint}
                     disabled={busy}
                     onChange={(event) =>
@@ -138,12 +177,24 @@ export function AiSettingsPanel() {
                   <TextInput
                     label={t("模型名称")}
                     placeholder={t("填写服务提供的模型标识")}
+                    list={
+                      minimaxPreset(provider.endpoint) ? `minimax-models-${provider.id}` : undefined
+                    }
                     value={provider.model}
                     disabled={busy}
                     onChange={(event) =>
                       editProvider(provider.id, { model: event.currentTarget.value })
                     }
                   />
+                  {minimaxPreset(provider.endpoint) && (
+                    <datalist id={`minimax-models-${provider.id}`}>
+                      {MINIMAX_MODELS.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </datalist>
+                  )}
                   <PasswordInput
                     label="API Key"
                     description={t("本机加密保存；无鉴权的本地模型可留空。")}
